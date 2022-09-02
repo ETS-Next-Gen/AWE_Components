@@ -57,8 +57,10 @@ class SyntaxAndDiscourseFeatDef(object):
         # We're using this component as a wrapper to add access
         # to the lexical features. There is no actual parsing of the
         # sentences, except for a scan to label transition terms.
+
         doc._.transition_word_profile = self.transitionProfile(doc)
         self.quotedText(doc)
+
         return doc
 
     ##########################################

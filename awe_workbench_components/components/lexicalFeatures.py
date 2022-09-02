@@ -35,9 +35,7 @@ from importlib import resources
 def LexicalFeatures(nlp, name):
     ldf = LexicalFeatureDef()
     ldf.set_nlp(nlp)
-    print('loading lexicon')
     ldf.load_lexicons()
-    print('lexicons loaded')
     ldf.add_extensions()
     return ldf
 
@@ -668,14 +666,17 @@ class LexicalFeatureDef(object):
             return None
 
     def rfqh2(self, token):
-        if (token.lemma_ is not None
-            and token.lemma_ in self.nlp.vocab.strings
-            and self.alphanum_word(token.lemma_)
-            and self.nlp.vocab.strings[token.lemma_]
-                in self.morpholex):
-            return self.morpholex[
-                self.nlp.vocab.strings[
-                    token.lemma_]]['ROOT2_Freq_HAL']
+        if token.lemma_ is not None \
+           and token.lemma_ in self.nlp.vocab.strings \
+           and self.alphanum_word(token.lemma_) \
+           and self.nlp.vocab.strings[token.lemma_] \
+                in self.morpholex \
+           and 'ROOT2_Freq_HAL' in \
+               self.morpholex[
+                   self.nlp.vocab.strings[token.lemma_]]:
+                return self.morpholex[
+                    self.nlp.vocab.strings[
+                        token.lemma_]]['ROOT2_Freq_HAL']
         else:
             return None
 
@@ -695,9 +696,13 @@ class LexicalFeatureDef(object):
             return None
 
     def rfsh(self, tokens):
-        return [self.min_root_freq(token)
-                if self.min_root_freq(token) is not None
-                else None for token in tokens]
+        retlist = []
+        for token in tokens:
+            if self.min_root_freq(token) is not None:
+                retlist.append(self.min_root_freq(token))
+            else:
+                retlist.append(None)
+        return retlist
 
     def mnfrh(self, tokens):
         return summarize(tokens._.root_freqs_HAL,
@@ -719,10 +724,15 @@ class LexicalFeatureDef(object):
         return summarize(tokens._.root_freqs_HAL,
                          summaryType=FType.STDEV)
 
-    def rfsh(self, tokens):
-        return [math.log(self.min_root_freq(token))
-                if self.min_root_freq(token) is not None
-                else None for token in tokens]
+    def rfshlg(self, tokens):
+        retlist = []
+        for token in tokens:
+            if self.min_root_freq(token) is not None \
+               and self.min_root_freq(token) > 0:
+                retlist.append(math.log(min_root_freq(token)))
+            else:
+                retlist.append(None)
+        return retlist
 
     def mnfrh(self, tokens):
         return summarize(tokens._.log_root_freqs_HAL,
@@ -1537,10 +1547,10 @@ class LexicalFeatureDef(object):
         if not Doc.has_extension("log_root_freqs_HAL") \
            or not Span.has_extension("log_root_freqs_HAL"):
             Span.set_extension("log_root_freqs_HAL",
-                               getter=self.rfsh,
+                               getter=self.rfshlg,
                                force=True)
             Doc.set_extension("log_root_freqs_HAL",
-                              getter=self.rfsh,
+                              getter=self.rfshlg,
                               force=True)
 
         # Document level measure: mean HAL root frequency
@@ -2970,6 +2980,8 @@ class LexicalFeatureDef(object):
         t1 = token._.root1_freq_HAL
         t2 = token._.root2_freq_HAL
         t3 = token._.root3_freq_HAL
+        if t1 is None and t2 is None and t3 is None:
+            return None
         if t1 is not None and t2 is None and t3 is None:
             return int(t1)
         if t1 is None and t2 is not None and t3 is None:
