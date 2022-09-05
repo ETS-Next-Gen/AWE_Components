@@ -14109,14 +14109,6 @@
       "happiness"
     ]
   },
-  "paranoid":{
-    "ADJ":[
-      "emotion",
-      "fear",
-      "character",
-      "disagreeableness"
-    ]
-  },
   "suspicious":{
     "ADJ":[
       "emotion",
@@ -17019,6 +17011,10 @@
     ]
   },
   "offended":{
+    "VERB":[
+      "emotion",
+      "anger"
+    ],
     "ADJ":[
       "emotion",
       "anger"
@@ -26424,6 +26420,12 @@
       "character",
       "disagreeableness",
       "conscientiousness"
+    ]
+  },
+  "paranoid":{
+    "ADJ":[
+      "character",
+      "disagreeableness"
     ]
   },
   "greedy":{

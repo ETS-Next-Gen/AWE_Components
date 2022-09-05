@@ -1295,6 +1295,44 @@ class ViewpointFeatureDef:
                                 grandchild._.vwp_cite = True
                             break
 
+    def markAddresseeRefs(self, target, tok, addressee_refs):
+        # Mark the addressee for the local domain,
+        # which will be the object of the preposition
+        # 'to' or the direct object
+        if isRoot(target):
+            target._.vwp_addressee = []
+        for child2 in target.children:
+            if child2.dep_ == 'dative' and child2._.animate:
+                target._.vwp_addressee = [child2.i]
+                tok._.vwp_addressee = [child2.i]
+                if child2.i not in addressee_refs:
+                    addressee_refs.append(child2.i)
+                break
+            if child2.dep_ == 'dobj' and child2._.animate:
+                target._.vwp_addressee = [child2.i]
+                tok._.vwp_addressee = [child2.i]
+                if child2.i not in addressee_refs:
+                    addressee_refs.append(child2.i)
+                break
+            if target._.vwp_addressee is not None:
+                dativeNoun = getPrepObject(target, ['to'])
+                if dativeNoun is not None \
+                   and dativeNoun._.animate:
+                    target._.vwp_addressee = [dativeNoun.i]
+                    dativeNoun._.vwp_addressee = [dativeNoun.i]
+                    if child2.i not in addressee_refs:
+                        addressee_refs.append(child2.i)
+                        break
+                dativeNoun = getPrepObject(target, ['at'])
+                if dativeNoun is not None \
+                   and dativeNoun._.animate:
+                    target._.vwp_addressee = [dativeNoun.i]
+                    dativeNoun._.vwp_addressee = [dativeNoun.i]
+                    if child2.i not in addressee_refs:
+                        addressee_refs.append(child2.i)
+                    break
+        return addressee_refs
+
     def directSpeech(self, hdoc):
         """
          Scan through the document and find verbs that control
@@ -1321,142 +1359,196 @@ class ViewpointFeatureDef:
                 if currentRoot != getRoot(tok):
                     lastRoot = currentRoot
                 currentRoot = getRoot(tok)
-            if (tok.dep_ in ['ccomp', 'csubjpass', 'acl', 'xcomp']
-                or (isRoot(tok.head)
-                    and tok.dep_ not in ['advcl', 'relcl', 'xcomp'])) \
-                and tok.head.pos_ in ['VERB', 'NOUN', 'ADJ', 'ADV'] \
-                and not tok.head._.vwp_quoted \
-                and (tok.head._.vwp_communication
-                     or tok.head._.vwp_cognitive
-                     or tok.head._.vwp_argument):
 
-                for child in tok.head.children:
-                    # Detect indirect speech
-                    # we need punctuation BETWEEN the head and
-                    # the complement for this to be indirect speech
-                    if child.dep_ == 'punct' \
-                        and (child.i < tok.i and child.i > tok.head.i
-                             or child.i > tok.i and child.i < tok.head.i):
+            # Special case: quote introduced by tag word at end of previous sentence
+            target = tok.head
+            if tok == currentRoot:
+                left = currentRoot.left_edge
+                start = currentRoot.left_edge
+                while left.i>0 and (left.tag_ == '_SP' or left.dep_ == 'punct'):
+                     left = left.nbor(-1)
+                while start.i+1<len(hdoc) and start.tag_ == '_SP':
+                     start = start.nbor()
+                target = left
 
-                        if isRoot(tok.head):
-                            speaker_refs = []
-                            addressee_refs = []
+            # If we match the special case with the taq word being a verb or speaking, 
+            # or else match the general case where the complement of a verb of speaking
+            # is a quote, then we mark direct speech
+            if (tok == currentRoot 
+                and quotationMark(start)
+                and not left._.vwp_plan
+                and not left.head._.vwp_plan
+                and (left._.vwp_communication
+                     or left._.vwp_cognitive
+                     or left._.vwp_argument
+                     or left.head._.vwp_communication
+                     or left.head._.vwp_cognitive
+                     or left.head._.vwp_argument)) \
+                or (tok.dep_ in ['ccomp', 'csubjpass', 'acl', 'xcomp', 'intj', 'nsubj'] \
+                    and tok.head.pos_ in ['VERB', 'NOUN', 'ADJ', 'ADV'] \
+                    and not tok.head._.vwp_quoted \
+                    and not tok.head._.vwp_plan \
+                    and (tok.head._.vwp_communication
+                         or tok.head._.vwp_cognitive
+                         or tok.head._.vwp_argument)):
 
-                        # Mark the speaker for the local domain, which will
-                        # be the subject or agent, if one is available, and
-                        # interpret first person pronouns within the local
-                        # domain as referring to the subject of the domain
-                        # predicate
-                        subj = getSubject(tok.head)
+               context = [child for child in target.children]
+               if len(context) > 0 and context[0].i > 0:
+                   leftnbor = context[0].nbor(-1)
+                   if quotationMark(leftnbor):
+                       context.append(leftnbor)
+               if len(context) > 0 and context[0].i + 1 < len(hdoc):
+                   rightnbor = context[0].nbor()
+                   if quotationMark(rightnbor):
+                       context.append(rightnbor)
 
-                        # TO-DO: add support for controlled subjects
-                        # ("This is wrong", Jenna wanted to say.")
+               for child in context:
 
-                        # Demoted subject of passive sentence
-                        if subj is None:
-                            subj = getPrepObject(tok, ['by'])
+                   # Detect direct speech
+                   
+                   # Reference to direct speech in previous sentence
+                   if (tok == currentRoot and target != tok.head):
+                       if target._.has_governing_subject:
+                           thisDom = target
+                       else:
+                           dom = target.head
+                           while not dom._.has_governing_subject:
+                               dom = dom.head
+                           thisDom = dom
+                       speaker_refs = []
+                       addressee_refs = []
+                       if thisDom._.has_governing_subject:
+                           for item in ResolveReference(hdoc[thisDom._.governing_subject], hdoc):
+                               speaker_refs.append(item)
+                           if thisDom in hdoc[thisDom._.governing_subject].subtree:
+                               thisDom = hdoc[thisDom._.governing_subject]
+                           thisDom._.vwp_speaker_refs = speaker_refs
+                           
+                           # Mark the addressee for the local domain,
+                           # which will be the object of the preposition
+                           # 'to' or the direct object
+                           addressee_refs = self.markAddresseeRefs(thisDom, tok, addressee_refs)
+                           thisDom._.vwp_addressee_refs = addressee_refs
 
-                        # Mark this predicate as involving direct speech
-                        # (complement clause with dependent punctuation is
-                        # our best indicator of direct speech. That means
-                        # we'll run into trouble when students do not punctuate
-                        # correctly, but there's nothing to be done about it
-                        # short of training a classifier on erroneous student
-                        # writing.)
-                        if subj is not None and (subj._.animate
-                           or subj.pos_ == 'PROPN'):
-                            tok.head._.vwp_direct_speech = True
-                        else:
-                            continue
+                       thisDom._.vwp_direct_speech = True
+                       break
+                   
+                   # we need punctuation BETWEEN the head and
+                   # the complement for this to be indirect speech
+                   elif (child.dep_ == 'punct'
+                          and (child.i < tok.i and tok.i < target.i and tok.dep_=='nsubj' and tok.pos_ == 'VERB'
+                               or target.i < child.i and child.i < tok.i
+                               or target.i > child.i and child.i > tok.i)):
 
-                        # Record the speaker as being the subject
-                        if subj is not None:
-                            tok.head._.vwp_speaker = [subj.i]
-                            tok._.vwp_speaker = [subj.i]
-                            if subj.i not in speaker_refs:
-                                speaker_refs.append(subj.i)
-                            subjAnt = [hdoc[loc] for loc
-                                       in ResolveReference(subj, hdoc)]
-                            if subjAnt is not None:
-                                for ref in subjAnt:
-                                    if ref.i not in tok.head._.vwp_speaker:
-                                        tok.head._.vwp_speaker.append(ref.i)
-                                    if ref.i not in tok._.vwp_speaker:
-                                        tok._.vwp_speaker.append(ref.i)
-                                    if ref.i not in speaker_refs:
-                                        speaker_refs.append(ref.i)
+                       if isRoot(target):
+                           speaker_refs = []
+                           addressee_refs = []
 
-                        elif isRoot(tok.head):
-                            tok.head._.vwp_speaker = []
-                            tok._.vwp_speaker = []
+                       # Mark the speaker for the local domain, which will
+                       # be the subject or agent, if one is available, and
+                       # interpret first person pronouns within the local
+                       # domain as referring to the subject of the domain
+                       # predicate
+                       subj = getSubject(target)
 
-                        # Mark the addressee for the local domain,
-                        # which will be the object of the preposition
-                        # 'to' or the direct object
-                        if isRoot(tok.head):
-                            tok.head._.vwp_addressee = []
-                        for child2 in tok.head.children:
-                            if child2.dep_ == 'dative' and child2._.animate:
-                                tok.head._.vwp_addressee = [child2.i]
-                                tok._.vwp_addressee = [child2.i]
-                                if child2.i not in addressee_refs:
-                                    addressee_refs.append(child2.i)
-                                break
-                            if child2.dep_ == 'dobj' and child2._.animate:
-                                tok.head._.vwp_addressee = [child2.i]
-                                tok._.vwp_addressee = [child2.i]
-                                if child2.i not in addressee_refs:
-                                    addressee_refs.append(child2.i)
-                                break
-                        if tok.head._.vwp_addressee is not None:
-                            dativeNoun = getPrepObject(tok.head, ['to'])
-                            if dativeNoun is not None \
-                               and dativeNoun._.animate:
-                                tok.head._.vwp_addressee = [dativeNoun.i]
-                                dativeNoun._.vwp_addressee = [dativeNoun.i]
-                                if child2.i not in addressee_refs:
-                                    addressee_refs.append(child2.i)
-                                break
-                            dativeNoun = getPrepObject(tok.head, ['at'])
-                            if dativeNoun is not None \
-                               and dativeNoun._.animate:
-                                tok.head._.vwp_addressee = [dativeNoun.i]
-                                dativeNoun._.vwp_addressee = [dativeNoun.i]
-                                if child2.i not in addressee_refs:
-                                    addressee_refs.append(child2.i)
-                                break
+                       # TO-DO: add support for controlled subjects
+                       # ("This is wrong", Jenna wanted to say.")
 
-                        # If it does not conflict with the syntactic
-                        # assignment, direct speech status is inherited
-                        # from the node we detect as involving direct
-                        # speech.
-                        for descendant in tok.head.subtree:
-                            if descendant._.vwp_quoted:
-                                # TO-DO: add block to prevent inheritance
-                                # for embedded direct speech
-                                if descendant.text.lower() in \
-                                   first_person_pronouns \
-                                   and len(list(descendant.children)) == 0:
-                                    descendant._.vwp_speaker = \
-                                        tok.head._.vwp_speaker
-                                    if descendant.i not in speaker_refs \
-                                       and descendant.i not in addressee_refs:
-                                        speaker_refs.append(descendant.i)
-                        tok.head._.vwp_speaker_refs = speaker_refs
+                       # Demoted subject of passive sentence
+                       if subj is None:
+                           subj = getPrepObject(tok, ['by'])
 
-                        for descendant in tok.subtree:
-                            if descendant._.vwp_quoted:
-                                if (descendant.text.lower()
-                                    in second_person_pronouns
-                                    and len(list(descendant.children)) == 0
-                                    and descendant.i not in speaker_refs) \
-                                   or (descendant.dep_ == 'vocative'
-                                       and descendant.pos_ == 'NOUN'):
-                                    descendant._.vwp_addressee = \
-                                        tok.head._.vwp_addressee
-                                    if descendant.i not in addressee_refs:
-                                        addressee_refs.append(descendant.i)
-                        tok.head._.vwp_addressee_refs = addressee_refs
+                       # Inverted subject construction 
+                       # ('spare me, begged the poor mouse')
+                       if subj == tok and getObject(target) is not None:
+                           subj = getObject(target)
+
+                       # Mark this predicate as involving direct speech
+                       # (complement clause with dependent punctuation is
+                       # our best indicator of direct speech. That means
+                       # we'll run into trouble when students do not punctuate
+                       # correctly, but there's nothing to be done about it
+                       # short of training a classifier on erroneous student
+                       # writing.)
+                        
+                       if subj is not None \
+                          and (subj._.animate
+                               or subj._.vwp_sourcetext
+                               or subj.text.lower() in ['they', 'it']
+                               or subj.pos_ == 'PROPN'):
+                           target._.vwp_direct_speech = True
+                       else:
+                           continue
+
+                       # If the quote doesn't encompass the complement,
+                       # this isn't direct speech
+                       if quotationMark(child) and not tok._.vwp_quoted:
+                           continue
+
+                       # Record the speaker as being the subject
+                       if subj is not None:
+                           target._.vwp_speaker = [subj.i]
+                           tok._.vwp_speaker = [subj.i]
+                           if subj.i not in speaker_refs:
+                               speaker_refs.append(subj.i)
+                           subjAnt = [hdoc[loc] for loc
+                                      in ResolveReference(subj, hdoc)]
+                           if subjAnt is not None:
+                               for ref in subjAnt:
+                                   if ref.i not in target._.vwp_speaker:
+                                       target._.vwp_speaker.append(ref.i)
+                                   if ref.i not in tok._.vwp_speaker:
+                                       tok._.vwp_speaker.append(ref.i)
+                                   if ref.i not in speaker_refs:
+                                       speaker_refs.append(ref.i)
+
+                       elif isRoot(tok.head):
+                           target._.vwp_speaker = []
+                           tok._.vwp_speaker = []
+
+                       # Mark the addressee for the local domain,
+                       # which will be the object of the preposition
+                       # 'to' or the direct object
+                       addressee_refs = self.markAddresseeRefs(target, tok, addressee_refs)
+                       
+                       # If it does not conflict with the syntactic
+                       # assignment, direct speech status is inherited
+                       # from the node we detect as involving direct
+                       # speech.
+                       for descendant in target.subtree:
+                           if descendant._.vwp_quoted:
+                               # TO-DO: add block to prevent inheritance
+                               # for embedded direct speech
+                               if descendant.text.lower() in \
+                                  first_person_pronouns \
+                                  and len(list(descendant.children)) == 0:
+                                   descendant._.vwp_speaker = \
+                                       target._.vwp_speaker
+                                   if descendant.i not in speaker_refs \
+                                      and descendant.i not in addressee_refs:
+                                       speaker_refs.append(descendant.i)
+                       target._.vwp_speaker_refs = speaker_refs
+
+                       # direct speech should be treated as quoted even if
+                       # it isn't in quotation marks, as in 'This is good, I thought'
+                       for descendant in tok.subtree:
+                           descendant._.vwp_quoted = True
+
+                       for descendant in tok.subtree:
+                           if descendant._.vwp_quoted:
+                               if (descendant.text.lower()
+                                   in second_person_pronouns
+                                   and len(list(descendant.children)) == 0
+                                   and descendant.i not in speaker_refs) \
+                                  or (descendant.dep_ == 'vocative'
+                                      and descendant.pos_ == 'NOUN'):
+                                   descendant._.vwp_addressee = \
+                                       tok.head._.vwp_addressee
+                                   if descendant.i not in addressee_refs:
+                                       addressee_refs.append(descendant.i)
+                       target._.vwp_addressee_refs = addressee_refs
+                       break
+
             if (currentRoot is not None
                 and lastRoot is not None
                 and lastRoot._.vwp_quoted
@@ -1537,7 +1629,9 @@ class ViewpointFeatureDef:
 
             # A quotation following direct speech without identifier
             # can be assumed to be a continuation of the previous
-            # direct speech.
+            # direct speech. OR following an immediate introduction
+            # by a communication/cognition/argument word
+
             if currentRoot is not None \
                and lastRoot is not None \
                and currentRoot._.vwp_quoted \
@@ -2097,24 +2191,41 @@ class ViewpointFeatureDef:
             if token._.vwp_direct_speech:
                 speaker = token._.vwp_speaker_refs
                 addressee = token._.vwp_addressee_refs
+                left = token.left_edge
+                right = token.right_edge
+
+                # Edge case: quotation mark for a following quote
+                # Adjust span boundaries to include the quotation
+                # mark in the following not the preceding span
+                if left.i > 0 \
+                   and quotationMark(hdoc[left.i - 1]) \
+                   and hdoc[left.i]._.vwp_quoted:
+                    left = hdoc[left.i - 1]
+                if right.i + 1 < len(hdoc) and right.i > 1:
+                    if quotationMark(hdoc[right.i]) \
+                       and not hdoc[right.i - 1]._.vwp_quoted:
+                        hdoc[right.i]._.vwp_quoted = True
+                        right =  hdoc[right.i - 1]
+                
+                # Define spans
                 if speaker is not None \
                    and addressee is not None \
                    and len(speaker) > 0 \
                    and len(addressee) > 0:
                     dspans.append([speaker,
                                   addressee,
-                                  token.left_edge.i,
-                                  token.right_edge.i])
+                                  left.i,
+                                  right.i])
                 elif speaker is not None and len(speaker) > 0:
                     dspans.append([speaker,
                                   [],
-                                  token.left_edge.i,
-                                  token.right_edge.i])
+                                  left.i,
+                                  right.i])
                 elif addressee is not None and len(addressee) > 0:
                     dspans.append([[],
                                   addressee,
-                                  token.left_edge.i,
-                                  token.right_edge.i])
+                                  left.i,
+                                  right.i])
         lastSpeaker = None
         lastAddressee = None
         lastItem = None
@@ -2290,7 +2401,7 @@ class ViewpointFeatureDef:
 
         theory_of_mind_sentences = []
 
-        # print_parse_tree(hdoc)
+        #print_parse_tree(hdoc)
 
         for token in hdoc:
 
@@ -4467,7 +4578,11 @@ class ViewpointFeatureDef:
                             if agent._.animate \
                                and childControllers is not None \
                                and controller not in childControllers \
-                               and childSubj._.animate:
+                               and childSubj._.animate \
+                               and not (agent.text.lower() in first_person_pronouns
+                                        and childSubj.text.lower() in first_person_pronouns) \
+                               and not (agent.text.lower() in second_person_pronouns
+                                        and childSubj.text.lower() in second_person_pronouns):
                                 entry = [token.sent.start,
                                          token.sent.end]
                                 if entry not in theory_of_mind_sentences:
@@ -5557,6 +5672,30 @@ class ViewpointFeatureDef:
         characterList = doc._.nominalReferences[0]
         details = []
         for token in doc:
+        
+            # Nominalizations won't name concrete details
+            morpholex = token._.morpholexsegm
+            if morpholex is not None \
+               and (morpholex.endswith('>ship>')
+                    or morpholex.endswith('>hood>')
+                    or morpholex.endswith('>ness>')
+                    or morpholex.endswith('>less>')
+                    or morpholex.endswith('>ion>')
+                    or morpholex.endswith('>tion>')
+                    or morpholex.endswith('>ity>')
+                    or morpholex.endswith('>ty>')
+                    or morpholex.endswith('>cy>')
+                    or morpholex.endswith('>al>')
+                    or morpholex.endswith('>ance>')):
+                continue
+
+            # Higher frequency words aren't likely to be concrete details
+            if token._.max_freq > 5:
+                continue
+
+            if token._.is_academic:
+                continue
+
             if token.text.capitalize() in characterList \
                and len(characterList[token.text.capitalize()]) > 2:
                 continue

@@ -2393,7 +2393,6 @@ ruefully,ADV,emotion,sadness
 savor,VERB,emotion,happiness
 suspect,VERB,emotion,fear
 suspicion,NOUN,emotion,fear
-paranoid,ADJ,emotion,fear
 suspicious,ADJ,emotion,fear
 suspiciously,ADV,emotion,fear
 treat,VERB,emotion,neutral
@@ -2983,6 +2982,7 @@ niggling,ADJ,emotional_impact,anger
 nigglingly,ADV,emotional_impact,anger
 offend,VERB,emotional_impact,anger
 offense,NOUN,emotional_impact,anger
+offended,VERB,emotion,anger
 offended,ADJ,emotion,anger
 offendedly,ADV,emotion,anger
 offensive,ADJ,emotional_impact,anger

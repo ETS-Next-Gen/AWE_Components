@@ -14,7 +14,6 @@ from pathlib import Path
 from itertools import chain
 from nltk.corpus import wordnet
 import site
-import imp
 
 import nltk
 import os

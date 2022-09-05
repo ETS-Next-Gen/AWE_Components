@@ -989,6 +989,26 @@ def getPassiveSubject(tok: Token):
     return None
 
 
+def getObject(tok: Token):
+    for child in tok.children:
+        if child.tag_ != '_SP':
+            if child.dep_ == 'dobj':
+                return child
+    return None
+
+
+def quotationMark(token: Token):
+    if token.tag_ not in ['-LRB-', '-RRB-']:
+        if 'Ini' in token.morph.get('PunctSide'):
+            return True
+        elif 'Fin' in token.morph.get('PunctSide'):
+            return True
+        elif token.text in ['"', '"', "'", '“', '”', "''", '``']:
+            return True
+    return False
+
+
+
 def getLogicalObject(tok: Token):
     for child in tok.children:
         try:
@@ -1250,7 +1270,8 @@ second_person_pronouns = ['you',
                           'your',
                           'yours',
                           'yourself',
-                          'yourselves']
+                          'yourselves',
+                          'u']
 
 
 def definite(tok: Token):
@@ -1383,8 +1404,10 @@ def temporalPhrase(tok: Token):
             for child in tok.children:
                 if child.dep_ in ['pobj', 'pcomp']:
                     if is_temporal(child) \
-                       or is_event(tok) \
-                       or child.pos_ == 'VERB':
+                       or (is_event(tok) \
+                           and tok.text.lower() != 'in') \
+                       or (child.pos_ == 'VERB' \
+                           and tok.text.lower() != 'in'):
                         scope = []
                         for sub in tok.subtree:
                             if sub.dep_ in ['mark',

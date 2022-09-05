@@ -44,7 +44,7 @@ class LexicalFeatureDef(object):
 
     SYLLABLES_PATH = \
         resources.path('awe_workbench_components.json_data',
-                       'syllables.json')
+                           'syllables.json')
 
     ROOTS_PATH = \
         resources.path('awe_workbench_components.json_data',
@@ -2162,6 +2162,7 @@ class LexicalFeatureDef(object):
     part1 = wordnet.synsets('part')[1]
     possession = wordnet.synsets('possession')[1]
     group = wordnet.synsets('grouping')[0]
+    vegetation = wordnet.synsets('vegetation')[0]
     gathering = wordnet.synsets('assemblage')[0]
     magnitude = wordnet.synsets('magnitude')[0]
 
@@ -2189,20 +2190,22 @@ class LexicalFeatureDef(object):
                     hypernyms = set([i for i
                                      in synsets[0].closure(lambda s:
                                                            s.hypernyms())])
-                    if self.attribute in hypernyms \
-                       or self.quantity in hypernyms \
-                       or self.part in hypernyms \
-                       or self.possession in hypernyms \
-                       or self.group[0] in hypernyms \
-                       or self.gathering in hypernyms \
-                       or self.magnitude in hypernyms \
-                       or synsets[0] == self.attribute \
-                       or synsets[0] == self.quantity \
-                       or synsets[0] == self.part \
-                       or synsets[0] == self.possession \
-                       or synsets[0] == self.group[0] \
-                       or synsets[0] == self.gathering \
-                       or synsets[0] == self.magnitude:
+                    if len(hypernyms)>0 and \
+                       (self.attribute in hypernyms \
+                        or self.quantity in hypernyms \
+                        or self.part in hypernyms \
+                        or self.possession in hypernyms \
+                        or (self.group in hypernyms
+                            and self.vegetation not in hypernyms) \
+                        or self.gathering in hypernyms \
+                        or self.magnitude in hypernyms \
+                        or synsets[0] == self.attribute \
+                        or synsets[0] == self.quantity \
+                        or synsets[0] == self.part \
+                        or synsets[0] == self.possession \
+                        or synsets[0] == self.group \
+                        or synsets[0] == self.gathering \
+                        or synsets[0] == self.magnitude):
                         self.abstractTraitNouns[token.text.lower()] = True
                         return True
             except Exception as e:
@@ -2477,6 +2480,7 @@ class LexicalFeatureDef(object):
 
     travelV = wordnet.synsets('travel', pos=wordnet.VERB)
     travelN = wordnet.synsets('travel', pos=wordnet.NOUN)
+    eventN = wordnet.synsets('event', pos=wordnet.NOUN)
 
     def is_location(self, token):
         """
@@ -2484,23 +2488,42 @@ class LexicalFeatureDef(object):
          location references.
         """
 
+        if token.is_stop:
+            return False
+
         if is_temporal(token):
             return False
+
+        if self.concreteness(token) is not None \
+           and self.concreteness(token)<3.5:
+            return False
+
+        if self.is_animate(token):
+            return False
+
+        if self.abstract_trait(token):
+            return False
+
+        if self.is_academic(token):
+            return False
+
         for child in token.children:
             if is_temporal(child):
                 return False
-        if token.head is not None:
-            if token != token.head and token.head._.location:
-                return True
 
         if token.ent_type_ in ['FAC', 'GPE', 'LOC']:
             return True
+        elif token.ent_type_ in ['PERSON', 'ORG', 'WORK_OF_ART']:
+            return False
 
         if token.orth_ in ['here',
                            'there',
                            'where',
                            'somewhere',
                            'anywhere']:
+            if token.pos_ not in ['ADV', 'PRON'] \
+               or token.tag_ == 'EX':
+                return False
             if token.i+1 < len(token.doc) and token.nbor(1) is not None \
                and token.nbor(1).orth_ in ['is', 'was', 'are', 'were'] \
                and token.orth_ in ['here', 'there']:
@@ -2510,10 +2533,6 @@ class LexicalFeatureDef(object):
         # If a word is object of a locative preposition associated with a
         # motion verb, it's a location
         if token.dep_ == 'pobj' \
-           and not token._.abstract_trait \
-           and not token._.animate \
-           and (token._.concreteness is None
-                or token._.concreteness > 3.5) \
            and token.head.lemma_ in ['to',
                                      'from',
                                      'in',
@@ -2541,6 +2560,12 @@ class LexicalFeatureDef(object):
                 wrdhyp = set([i for i
                               in wrdsyns[0].closure(lambda s:
                                                     s.hypernyms())])
+                if (len(self.eventN) > 0
+                    and len(wrdsyns) > 0
+                    and (self.eventN[0] in wrdhyp
+                         or self.eventN[0] == wrdsyns[0])):
+                    return False
+
                 if (len(self.travelV) > 0
                     and len(wrdsyns) > 0
                     and (self.travelV[0] in wrdhyp
@@ -2550,7 +2575,6 @@ class LexicalFeatureDef(object):
         # If a word is object of a locative preposition associated with a
         # motion noun, it's a location
         elif (token.dep_ == 'pobj'
-              and not token._.abstract_trait
               and token.head.lemma_ in ['to',
                                         'from',
                                         'in',
@@ -2578,6 +2602,12 @@ class LexicalFeatureDef(object):
                 wrdhyp = set([i for i
                               in wrdsyns[0].closure(lambda s:
                                                     s.hypernyms())])
+                if (len(self.eventN) > 0
+                    and len(wrdsyns) > 0
+                    and (self.eventN[0] in wrdhyp
+                         or self.eventN[0] == wrdsyns[0])):
+                    return False
+
                 if len(self.travelV) > 0 \
                    and len(wrdsyns) > 0 \
                    and (self.travelV[0] in wrdhyp or
@@ -2587,13 +2617,23 @@ class LexicalFeatureDef(object):
         # If a word is under the wordnet location, structure nodes, or
         # subject or object of location verbs like leave and arrive, it's
         # a location
-        elif not token.is_stop and token.pos_ in ['NOUN']:
+        if not token.is_stop and token.pos_ in ['NOUN']:
             synsets = wordnet.synsets(token.lemma_)
             if len(synsets) > 0:
                 try:
                     hypernyms = set([i for i
                                      in synsets[0].closure(lambda s:
                                                            s.hypernyms())])
+
+                    wrdsyns = wordnet.synsets(token.head.head.lemma_,
+                                              pos=wordnet.VERB)
+                
+                    if (len(self.eventN) > 0
+                        and len(wrdsyns) > 0
+                        and (self.eventN[0] in hypernyms
+                             or self.eventN[0] == wrdsyns[0])):
+                        return False
+
                     if len(self.location) > 0 \
                        and (self.location[0] in hypernyms
                             or self.location[0] == synsets[0]):
