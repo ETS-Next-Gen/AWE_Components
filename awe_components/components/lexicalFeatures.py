@@ -1,4 +1,5 @@
-# Copyright 2021 Educational Testing Service
+#!/usr/bin/env python3.10
+# Copyright 2022, Educational Testing Service
 
 import math
 import numpy as np
@@ -8,6 +9,7 @@ import srsly
 import wordfreq
 import imp
 import statistics
+import awe_lexica
 
 from spacy.tokens import Doc, Span, Token
 from spacy.language import Language

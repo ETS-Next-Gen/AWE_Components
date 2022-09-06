@@ -1,4 +1,5 @@
-# Copyright 2021 Educational Testing Service
+#!/usr/bin/env python3.10
+# Copyright 2022, Educational Testing Service
 
 import re
 import spacy

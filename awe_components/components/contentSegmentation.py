@@ -1,3 +1,6 @@
+#!/usr/bin/env python3.10
+# Copyright 2022, Educational Testing Service
+
 from .utility_functions import *
 from operator import itemgetter
 import spacy

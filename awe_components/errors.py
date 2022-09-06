@@ -1,3 +1,6 @@
+#!/usr/bin/env python3.10
+# Copyright 2022, Educational Testing Service
+
 class AWE_Workbench_Error(Exception):
     def __init__(self, text):
         self.text = text
