@@ -9,7 +9,7 @@ from enum import Enum
 from spacy.tokens import Token, Doc, Span
 from nltk.corpus import wordnet as wn
 from ..errors import *
-from awe_workbench_components.wordprobs.wordseqProbClient import *
+from awe_components.wordprobs.wordseqProbClient import *
 
 logging.basicConfig(level="DEBUG")
 

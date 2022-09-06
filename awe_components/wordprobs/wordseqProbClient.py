@@ -36,5 +36,4 @@ class WordseqProbClient:
 
 if __name__ == '__main__':
     wsc = WordseqProbClient()
-    test = wsc.send(['they', 'and', 'call themselves'])
-    test = wsc.send(['we', 'and', 'call themselves'])
+

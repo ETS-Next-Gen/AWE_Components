@@ -8,7 +8,7 @@ import websockets
 
 from distutils.sysconfig import get_python_lib
 
-from awe_workbench_components.wordprobs.wordProbabilityInContext \
+from awe_components.wordprobs.wordProbabilityInContext \
     import WordProbabilityInContext
 
 if sys.version_info[0] == 3:

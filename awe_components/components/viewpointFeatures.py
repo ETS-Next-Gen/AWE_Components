@@ -35,7 +35,7 @@ class ViewpointFeatureDef:
     """
 
     STANCE_PERSPECTIVE_PATH = \
-        resources.path('awe_components.json_data',
+        resources.path('awe_lexica.json_data',
                        'stancePerspectiveVoc.json')
 
     stancePerspectiveVoc = {}
