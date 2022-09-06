@@ -43,55 +43,55 @@ def LexicalFeatures(nlp, name):
 class LexicalFeatureDef(object):
 
     SYLLABLES_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                            'syllables.json')
 
     ROOTS_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'roots.json')
 
     FAMILY_SIZES_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'family_sizes.json')
 
     FAMILY_MAX_FREQS_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'family_max_freqs.json')
 
     FAMILY_IDX_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'family_idxs.json')
 
     FAMILY_LISTS_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'family_lists.json')
 
     CONCRETES_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'concretes.json')
 
     MORPHOLEX_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'morpholex.json')
 
     LATINATE_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'latinate.json')
 
     ACADEMIC_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'academic.json')
 
     NMORPH_STATUS_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'nMorph_status.json')
 
     ACADEMIC_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'academic.json')
 
     SENTIMENT_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'sentiment.json')
 
     nlp = None

@@ -29,11 +29,11 @@ def SyntaxAndDiscourseFeatures(nlp, name):
 class SyntaxAndDiscourseFeatDef(object):
 
     TRANSITION_TERMS_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'transition_terms.json')
 
     TRANSITION_CATEGORIES_PATH = \
-        resources.path('awe_workbench_components.json_data',
+        resources.path('awe_components.json_data',
                        'transition_categories.json')
 
     transition_terms = {}

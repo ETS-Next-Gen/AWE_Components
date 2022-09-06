@@ -50,7 +50,7 @@ class data:
         return all(ord(c) < 128 for c in s)
 
     def load_text_resource(self, filename):
-        data = resources.read_text('awe_workbench_components.data',
+        data = resources.read_text('awe_components.data',
                                    filename)
         rowSet = data.split('\n')
         return rowSet
@@ -756,7 +756,7 @@ class data:
 
         stancePerspectiveVoc = {}
 
-        filepath = resources.path('awe_workbench_components.data',
+        filepath = resources.path('awe_components.data',
                                   viewpointLex)
 
         with open(filepath, mode='r') as csv_file:
@@ -810,59 +810,59 @@ class data:
         stancePerspectiveVoc = \
             self.loadViewpointLexicon()
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'syllables.json')
         srsly.write_json(outputfile, syllables)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'roots.json')
         srsly.write_json(outputfile, roots)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'family_sizes.json')
         srsly.write_json(outputfile, family_sizes)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'family_max_freqs.json')
         srsly.write_json(outputfile, family_max_freqs)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'family_idxs.json')
         srsly.write_json(outputfile, family_idxs)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'family_lists.json')
         srsly.write_json(outputfile, family_lists)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'morpholex.json')
         srsly.write_json(outputfile, morpholex)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'latinate.json')
         srsly.write_json(outputfile, latinate)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'nMorph_status.json')
         srsly.write_json(outputfile, nMorph_status)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'sentiment.json')
         srsly.write_json(outputfile, sentiment)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'academic.json')
         srsly.write_json(outputfile, academic)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'transition_terms.json')
         srsly.write_json(outputfile, transition_terms)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'transition_categories.json')
         srsly.write_json(outputfile, transition_categories)
 
-        outputfile = resources.path('awe_workbench_components.json_data',
+        outputfile = resources.path('awe_components.json_data',
                                     'stancePerspectiveVoc.json')
         srsly.write_json(outputfile, stancePerspectiveVoc)
 
@@ -938,7 +938,7 @@ class data:
 
     def processConcretes(self):
         rawconcretes = {}
-        filepath = resources.path('awe_workbench_components.data',
+        filepath = resources.path('awe_components.data',
                                   'Concr_Base.csv')
         with open(filepath, mode='r', encoding='ISO-8859-1') as csv_file:
             csv_reader = csv.DictReader(csv_file)
@@ -1396,7 +1396,7 @@ class data:
             for lemma in extras:
                 finalDict[lemma] = extras[lemma]
 
-            outputfile = resources.path('awe_workbench_components.json_data',
+            outputfile = resources.path('awe_components.json_data',
                                         'concretes.json')
             srsly.write_json(outputfile, finalDict)
 
