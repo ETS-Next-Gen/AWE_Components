@@ -2195,7 +2195,7 @@ class LexicalFeatureDef(object):
                         or self.quantity in hypernyms \
                         or self.part in hypernyms \
                         or self.possession in hypernyms \
-                        or (self.group in hypernyms
+                        or (self.group[0] in hypernyms
                             and self.vegetation not in hypernyms) \
                         or self.gathering in hypernyms \
                         or self.magnitude in hypernyms \
@@ -2203,7 +2203,7 @@ class LexicalFeatureDef(object):
                         or synsets[0] == self.quantity \
                         or synsets[0] == self.part \
                         or synsets[0] == self.possession \
-                        or synsets[0] == self.group \
+                        or synsets[0] == self.group[0] \
                         or synsets[0] == self.gathering \
                         or synsets[0] == self.magnitude):
                         self.abstractTraitNouns[token.text.lower()] = True
@@ -2951,7 +2951,7 @@ class LexicalFeatureDef(object):
         return None
 
     def is_academic(self, token: Token):
-        if not self.alphanum_word(token.text):
+        if not self.alphanum_word(token.text) or len(token.text)<3:
             return None
         if token.text.lower() is not None:
             key1 = self.nlp.vocab.strings[token.text.lower()]
@@ -2965,6 +2965,7 @@ class LexicalFeatureDef(object):
             key3 = self.nlp.vocab.strings[token._.root]
         else:
             key3 = None
+            
         if key1 is not None and key1 in self.academic \
            or key2 is not None and key2 in self.academic \
            or key3 is not None and key3 in self.academic:

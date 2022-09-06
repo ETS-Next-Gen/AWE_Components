@@ -13,6 +13,8 @@ from spacy.cli.download import download
 from pathlib import Path
 from itertools import chain
 from nltk.corpus import wordnet
+from nltk.corpus import stopwords
+
 import site
 
 import nltk
@@ -41,7 +43,6 @@ import wordfreq
 # Large word frequency database. Provides Zipf frequencies
 # (log scale of frequency) for most English words, based on a
 # variety of corpora.
-
 
 class data:
 
@@ -159,6 +160,14 @@ class data:
         complexity information for really rare words. TBD: build an extension
         that covers morpholex style analysis for a fuller vocabulary.
         """
+
+        stops = set(stopwords.words('english'))
+        stops.add('inside')
+        stops.add('inward')
+        stops.add('inwardly')
+        stops.add('inmost')
+        stops.add('inner')
+ 
         Lines = self.load_text_resource(morpho)
         lineNo = 0
         word = ''
@@ -469,6 +478,8 @@ class data:
                         word = item.lower()
                         if not re.match('^[-\'.A-Za-z0-9]+$', word):
                             break
+                        if word in stops or len(word)<3:
+                            break
                     elif icount > 0:
                         if icount < len(headers):
                             value = item.replace('\n', '')
@@ -655,6 +666,10 @@ class data:
                 academic.append(word)
 
         academic.sort()
+        # eliminate words that may be
+        # on one of the component lists
+        # but should not be considered academic
+        academic.remove('tiny')
 
         return academic
 

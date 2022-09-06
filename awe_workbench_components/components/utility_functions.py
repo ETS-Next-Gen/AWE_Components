@@ -683,6 +683,8 @@ def in_past_tense_scope(tok: Token):
                                              'had',
                                              'was',
                                              'were',
+                                             'could',
+                                             'would',
                                              '\'d']:
                     return True
             return False
@@ -695,6 +697,10 @@ def in_past_tense_scope(tok: Token):
            and item.text.lower() in ['did',
                                      'had',
                                      '\'d',
+                                     'was',
+                                     'were',
+                                     'could',
+                                     'would',
                                      '’d']:
             return True
     if isRoot(tok) and 'VerbForm=Inf' in str(tok.morph):
