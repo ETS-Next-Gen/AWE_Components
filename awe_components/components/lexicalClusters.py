@@ -386,6 +386,7 @@ def mainClusterSpans(hdoc):
      throughout the whole document. (Note that the clusters include resolved
      pronominal referents clustered using the vectors of their antecedents.)
     """
+    
     if hdoc._.clusterInfo is not None \
        and len(hdoc._.clusterInfo) > 0:
         offsets = hdoc._.clusterInfo[0][3]
@@ -467,8 +468,8 @@ Span.set_extension("clusterInfo", getter=get_clinfo, force=True)
 
 
 def mnMainClusterSpan(tokens):
-    lambda tokens: summarize(mainClusterSpans(tokens),
-                             summaryType=FType.MEAN)
+    return summarize(mainClusterSpans(tokens),
+                     summaryType=FType.MEAN)
 
 
 Doc.set_extension("mean_main_cluster_span",
@@ -484,8 +485,8 @@ Doc.set_extension("mean_main_cluster_span",
 
 
 def mdMainClusterSpan(tokens):
-    lambda tokens: summarize(mainClusterSpans(tokens),
-                             summaryType=FType.MEDIAN)
+    return summarize(mainClusterSpans(tokens),
+                     summaryType=FType.MEDIAN)
 
 
 Doc.set_extension("median_main_cluster_span",
@@ -501,8 +502,8 @@ Doc.set_extension("median_main_cluster_span",
 
 
 def minMainClusterSpan(tokens):
-    lambda tokens: summarize(mainClusterSpans(tokens),
-                             summaryType=FType.MIN)
+    return summarize(mainClusterSpans(tokens),
+                     summaryType=FType.MIN)
 
 
 Doc.set_extension("min_main_cluster_span",
@@ -517,8 +518,8 @@ Doc.set_extension("min_main_cluster_span",
 #############################################################
 
 def maxMainClusterSpan(tokens):
-    lambda tokens: summarize(mainClusterSpans(tokens),
-                             summaryType=FType.MAX)
+    return summarize(mainClusterSpans(tokens),
+                     summaryType=FType.MAX)
 
 
 Doc.set_extension("max_main_cluster_span",
@@ -534,8 +535,8 @@ Doc.set_extension("max_main_cluster_span",
 
 
 def stdMainClusterSpan(tokens):
-    lambda tokens: summarize(mainClusterSpans(tokens),
-                             summaryType=FType.STDEV)
+    return summarize(mainClusterSpans(tokens),
+                     summaryType=FType.STDEV)
 
 
 Doc.set_extension("stdev_main_cluster_span",
@@ -554,7 +555,7 @@ def devlist(tokens):
 
 
 def dcwrd(tokens):
-    lambda tokens: devlist(tokens)
+    return devlist(tokens)
 
 
 Doc.set_extension("devwords",
@@ -569,9 +570,9 @@ Doc.set_extension("devwords",
 
 
 def dcwrdlen(tokens):
-    lambda tokens: len([x.text.lower()
-                        for x in developmentContentWords(tokens)
-                        ]) / (len(tokens) + .01)
+    return len([x.text.lower()
+                for x in developmentContentWords(tokens)
+               ]) / (len(tokens) + .01)
     # +.01 to avoid errors if empty
 
 
@@ -586,11 +587,11 @@ Doc.set_extension("propn_devwords",
 ###############################################################
 
 def mnDwrdNSyll(tokens):
-    lambda tokens: summarize(
-        [int(x._.nSyll)
-            for x in developmentContentWords(tokens)
-            if x._.nSyll is not None],
-        summaryType=FType.MEAN)
+    return summarize(
+                     [int(x._.nSyll)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSyll is not None],
+                      summaryType=FType.MEAN)
 
 
 Doc.set_extension("mean_devword_nsyll",
@@ -605,10 +606,10 @@ Doc.set_extension("mean_devword_nsyll",
 
 
 def mdDwrdNSyll(tokens):
-    lambda tokens: summarize([int(x._.nSyll)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSyll is not None
-                              ], summaryType=FType.MEDIAN)
+    return summarize([int(x._.nSyll)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSyll is not None
+                      ], summaryType=FType.MEDIAN)
 
 
 Doc.set_extension("median_devword_nsyll",
@@ -622,10 +623,10 @@ Doc.set_extension("median_devword_nsyll",
 
 
 def minDwrdNSyll(tokens):
-    lambda tokens: summarize([int(x._.nSyll)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSyll is not None
-                              ], summaryType=FType.MIN)
+    return summarize([int(x._.nSyll)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSyll is not None
+                      ], summaryType=FType.MIN)
 
 
 Doc.set_extension("min_devword_nsyll",
@@ -640,10 +641,10 @@ Doc.set_extension("min_devword_nsyll",
 
 
 def mxDwrdNSyll(tokens):
-    lambda tokens: summarize([int(x._.nSyll)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSyll is not None
-                              ], summaryType=FType.MAX)
+    return summarize([int(x._.nSyll)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSyll is not None
+                      ], summaryType=FType.MAX)
 
 
 Doc.set_extension("max_devword_nsyll",
@@ -658,10 +659,10 @@ Doc.set_extension("max_devword_nsyll",
 
 
 def stdDwrdNSyll(tokens):
-    lambda tokens: summarize([int(x._.nSyll)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSyll is not None
-                              ], summaryType=FType.STDEV)
+    return summarize([int(x._.nSyll)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSyll is not None
+                      ], summaryType=FType.STDEV)
 
 
 Doc.set_extension("stdev_devword_nsyll",
@@ -676,10 +677,10 @@ Doc.set_extension("stdev_devword_nsyll",
 
 
 def mnDwrdNMorph(tokens):
-    lambda tokens: summarize([int(x._.nMorph)
-                              for x in developmentContentWords(tokens)
-                              if x._.nMorph is not None
-                              ], summaryType=FType.MEAN)
+    return summarize([int(x._.nMorph)
+                      for x in developmentContentWords(tokens)
+                      if x._.nMorph is not None
+                      ], summaryType=FType.MEAN)
 
 
 Doc.set_extension("mean_devword_nmorph",
@@ -694,10 +695,10 @@ Doc.set_extension("mean_devword_nmorph",
 
 
 def mdDwrdNMorph(tokens):
-    lambda tokens: summarize([int(x._.nMorph)
-                              for x in developmentContentWords(tokens)
-                              if x._.nMorph is not None
-                              ], summaryType=FType.MEDIAN)
+    return summarize([int(x._.nMorph)
+                      for x in developmentContentWords(tokens)
+                      if x._.nMorph is not None
+                      ], summaryType=FType.MEDIAN)
 
 
 Doc.set_extension("median_devword_nmorph",
@@ -712,10 +713,10 @@ Doc.set_extension("median_devword_nmorph",
 
 
 def minDwrdNMorph(tokens):
-    lambda tokens: summarize([int(x._.nMorph)
-                              for x in developmentContentWords(tokens)
-                              if x._.nMorph is not None
-                              ], summaryType=FType.MIN)
+    return summarize([int(x._.nMorph)
+                      for x in developmentContentWords(tokens)
+                      if x._.nMorph is not None
+                      ], summaryType=FType.MIN)
 
 
 Doc.set_extension("min_devword_nmorph",
@@ -730,10 +731,10 @@ Doc.set_extension("min_devword_nmorph",
 
 
 def mxDwrdNMorph(tokens):
-    lambda tokens: summarize([int(x._.nMorph)
-                              for x in developmentContentWords(tokens)
-                              if x._.nMorph is not None
-                              ], summaryType=FType.MAX)
+    return summarize([int(x._.nMorph)
+                      for x in developmentContentWords(tokens)
+                      if x._.nMorph is not None
+                      ], summaryType=FType.MAX)
 
 
 Doc.set_extension("max_devword_nmorph",
@@ -748,10 +749,10 @@ Doc.set_extension("max_devword_nmorph",
 
 
 def stdDwrdNMorph(tokens):
-    lambda tokens: summarize([int(x._.nMorph)
-                              for x in developmentContentWords(tokens)
-                              if x._.nMorph is not None
-                              ], summaryType=FType.STDEV)
+    return summarize([int(x._.nMorph)
+                      for x in developmentContentWords(tokens)
+                      if x._.nMorph is not None
+                      ], summaryType=FType.STDEV)
 
 
 Doc.set_extension("stdev_devword_nmorph",
@@ -766,10 +767,10 @@ Doc.set_extension("stdev_devword_nmorph",
 
 
 def mnDwrdNSenses(tokens):
-    lambda tokens: summarize([int(x._.nSenses)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSenses is not None
-                              ], summaryType=FType.MEAN)
+    return summarize([int(x._.nSenses)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSenses is not None
+                      ], summaryType=FType.MEAN)
 
 
 Doc.set_extension("mean_devword_nsenses",
@@ -784,10 +785,10 @@ Doc.set_extension("mean_devword_nsenses",
 
 
 def mdDwrdNSenses(tokens):
-    lambda tokens: summarize([int(x._.nSenses)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSenses is not None
-                              ], summaryType=FType.MEDIAN)
+    return summarize([int(x._.nSenses)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSenses is not None
+                      ], summaryType=FType.MEDIAN)
 
 
 Doc.set_extension("median_devword_nsenses",
@@ -802,10 +803,10 @@ Doc.set_extension("median_devword_nsenses",
 
 
 def minDwrdNSenses(tokens):
-    lambda tokens: summarize([int(x._.nSenses)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSenses is not None
-                              ], summaryType=FType.MIN)
+    return summarize([int(x._.nSenses)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSenses is not None
+                      ], summaryType=FType.MIN)
 
 
 Doc.set_extension("min_devword_nsenses",
@@ -820,10 +821,10 @@ Doc.set_extension("min_devword_nsenses",
 
 
 def mxDwrdNSenses(tokens):
-    lambda tokens: summarize([int(x._.nSenses)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSenses is not None
-                              ], summaryType=FType.MAX)
+    return summarize([int(x._.nSenses)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSenses is not None
+                      ], summaryType=FType.MAX)
 
 
 Doc.set_extension("max_devword_nsenses",
@@ -838,10 +839,10 @@ Doc.set_extension("max_devword_nsenses",
 
 
 def stdDwrdNSenses(tokens):
-    lambda tokens: summarize([int(x._.nSenses)
-                              for x in developmentContentWords(tokens)
-                              if x._.nSenses is not None
-                              ], summaryType=FType.STDEV)
+    return summarize([int(x._.nSenses)
+                      for x in developmentContentWords(tokens)
+                      if x._.nSenses is not None
+                      ], summaryType=FType.STDEV)
 
 
 Doc.set_extension("stdev_devword_nsenses",
@@ -856,10 +857,10 @@ Doc.set_extension("stdev_devword_nsenses",
 
 
 def mnDwrdTokFreq(tokens):
-    lambda tokens: summarize([float(x._.token_freq)
-                              for x in developmentContentWords(tokens)
-                              if x._.token_freq is not None
-                              ], summaryType=FType.MEAN)
+    return summarize([float(x._.token_freq)
+                      for x in developmentContentWords(tokens)
+                      if x._.token_freq is not None
+                      ], summaryType=FType.MEAN)
 
 
 Doc.set_extension("mean_devword_token_freq",
@@ -874,10 +875,10 @@ Doc.set_extension("mean_devword_token_freq",
 
 
 def mdDwrdTokFreq(tokens):
-    lambda tokens: summarize([float(x._.token_freq)
-                              for x in developmentContentWords(tokens)
-                              if x._.token_freq is not None
-                              ], summaryType=FType.MEDIAN)
+    return summarize([float(x._.token_freq)
+                      for x in developmentContentWords(tokens)
+                      if x._.token_freq is not None
+                      ], summaryType=FType.MEDIAN)
 
 
 Doc.set_extension("median_devword_token_freq",
@@ -892,10 +893,10 @@ Doc.set_extension("median_devword_token_freq",
 
 
 def minDwrdTokFreq(tokens):
-    lambda tokens: summarize([float(x._.token_freq)
-                              for x in developmentContentWords(tokens)
-                              if x._.token_freq is not None
-                              ], summaryType=FType.MIN)
+    return summarize([float(x._.token_freq)
+                      for x in developmentContentWords(tokens)
+                      if x._.token_freq is not None
+                      ], summaryType=FType.MIN)
 
 
 Doc.set_extension("min_devword_token_freq",
@@ -910,10 +911,10 @@ Doc.set_extension("min_devword_token_freq",
 
 
 def mxDwrdTokFreq(tokens):
-    lambda tokens: summarize([float(x._.token_freq)
-                              for x in developmentContentWords(tokens)
-                              if x._.token_freq is not None
-                              ], summaryType=FType.MAX)
+    return summarize([float(x._.token_freq)
+                      for x in developmentContentWords(tokens)
+                      if x._.token_freq is not None
+                      ], summaryType=FType.MAX)
 
 
 Doc.set_extension("max_devword_token_freq",
@@ -928,10 +929,10 @@ Doc.set_extension("max_devword_token_freq",
 
 
 def stdDwrdTokFreq(tokens):
-    lambda tokens: summarize([float(x._.token_freq)
-                              for x in developmentContentWords(tokens)
-                              if x._.token_freq is not None
-                              ], summaryType=FType.STDEV)
+    return summarize([float(x._.token_freq)
+                      for x in developmentContentWords(tokens)
+                      if x._.token_freq is not None
+                      ], summaryType=FType.STDEV)
 
 
 Doc.set_extension("stdev_devword_token_freq",
@@ -946,10 +947,10 @@ Doc.set_extension("stdev_devword_token_freq",
 
 
 def mnDwrdConcr(tokens):
-    lambda tokens: summarize([float(x._.concreteness)
-                              for x in developmentContentWords(tokens)
-                              if x._.concreteness is not None
-                              ], summaryType=FType.MEAN)
+    return summarize([float(x._.concreteness)
+                      for x in developmentContentWords(tokens)
+                      if x._.concreteness is not None
+                      ], summaryType=FType.MEAN)
 
 
 Doc.set_extension("mean_devword_concreteness",
@@ -964,10 +965,10 @@ Doc.set_extension("mean_devword_concreteness",
 
 
 def mdDwrdConcr(tokens):
-    lambda tokens: summarize([float(x._.concreteness)
-                              for x in developmentContentWords(tokens)
-                              if x._.concreteness is not None
-                              ], summaryType=FType.MEDIAN)
+    return summarize([float(x._.concreteness)
+                      for x in developmentContentWords(tokens)
+                      if x._.concreteness is not None
+                      ], summaryType=FType.MEDIAN)
 
 
 Doc.set_extension("median_devword_concreteness",
@@ -982,10 +983,10 @@ Doc.set_extension("median_devword_concreteness",
 
 
 def minDwrdConcr(tokens):
-    lambda tokens: summarize([float(x._.concreteness)
-                              for x in developmentContentWords(tokens)
-                              if x._.concreteness is not None
-                              ], summaryType=FType.MEDIAN)
+    return summarize([float(x._.concreteness)
+                      for x in developmentContentWords(tokens)
+                      if x._.concreteness is not None
+                      ], summaryType=FType.MEDIAN)
 
 
 Doc.set_extension("min_devword_concreteness",
@@ -999,10 +1000,10 @@ Doc.set_extension("min_devword_concreteness",
 #######################################################
 
 def mxDwrdConcr(tokens):
-    lambda tokens: summarize([float(x._.concreteness)
-                              for x in developmentContentWords(tokens)
-                              if x._.concreteness is not None
-                              ], summaryType=FType.MAX)
+    return summarize([float(x._.concreteness)
+                      for x in developmentContentWords(tokens)
+                      if x._.concreteness is not None
+                      ], summaryType=FType.MAX)
 
 
 Doc.set_extension("max_devword_concreteness",
@@ -1017,10 +1018,10 @@ Doc.set_extension("max_devword_concreteness",
 
 
 def stdDwrdConcr(tokens):
-    lambda tokens: summarize([float(x._.concreteness)
-                              for x in developmentContentWords(tokens)
-                              if x._.concreteness is not None
-                              ], summaryType=FType.STDEV)
+    return summarize([float(x._.concreteness)
+                      for x in developmentContentWords(tokens)
+                      if x._.concreteness is not None
+                      ], summaryType=FType.STDEV)
 
 
 Doc.set_extension("stdev_devword_concreteness",

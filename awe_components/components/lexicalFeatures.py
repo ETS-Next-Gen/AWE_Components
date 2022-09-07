@@ -513,7 +513,7 @@ class LexicalFeatureDef(object):
     def fms(self, token):
         if self.nlp.vocab.strings[token.text.lower()] in self.family_sizes \
            and self.alphanum_word(token.text):
-            return self.nlp.vocab.strings[token.text.lower()]
+            return self.family_sizes[self.nlp.vocab.strings[token.text.lower()]]
         else:
             return None
 
@@ -731,28 +731,28 @@ class LexicalFeatureDef(object):
         for token in tokens:
             if self.min_root_freq(token) is not None \
                and self.min_root_freq(token) > 0:
-                retlist.append(math.log(min_root_freq(token)))
+                retlist.append(math.log(self.min_root_freq(token)))
             else:
                 retlist.append(None)
         return retlist
 
-    def mnfrh(self, tokens):
+    def mnlgfrh(self, tokens):
         return summarize(tokens._.log_root_freqs_HAL,
                          summaryType=FType.MEAN)
 
-    def mdfrh(self, tokens):
+    def mdlgfrh(self, tokens):
         return summarize(tokens._.log_root_freqs_HAL,
                          summaryType=FType.MEDIAN)
 
-    def mxfrh(self, tokens):
+    def mxlgfrh(self, tokens):
         return summarize(tokens._.log_root_freqs_HAL,
                          summaryType=FType.MAX)
 
-    def minfrh(tokens):
+    def minlgfrh(self, tokens):
         return summarize(tokens._.log_root_freqs_HAL,
                          summaryType=FType.MIN)
 
-    def stdfrh(self, tokens):
+    def stdlgfrh(self, tokens):
         return summarize(tokens._.log_root_freqs_HAL,
                          summaryType=FType.STDEV)
 
@@ -918,7 +918,7 @@ class LexicalFeatureDef(object):
         return summarize(lexFeat(tokens, 'max_freq'),
                          summaryType=FType.MEDIAN)
 
-    def mxrtfrq(tokens):
+    def mxrtfrq(self, tokens):
         return summarize(lexFeat(tokens, 'max_freq'),
                          summaryType=FType.MAX)
 
@@ -1559,50 +1559,50 @@ class LexicalFeatureDef(object):
         if not Doc.has_extension("mean_logfreq_HAL") \
            or not Span.has_extension("mean_logfreq_HAL"):
             Span.set_extension("mean_logfreq_HAL",
-                               getter=self.mnfrh,
+                               getter=self.mnlgfrh,
                                force=True)
             Doc.set_extension("mean_logfreq_HAL",
-                              getter=self.mnfrh,
+                              getter=self.mnlgfrh,
                               force=True)
 
         # Document level measure: median HAL root frequency
         if not Doc.has_extension("med_logfreq_HAL") \
            or not Span.has_extension("med_logfreq_HAL"):
             Span.set_extension("med_logfreq_HAL",
-                               getter=self.mdfrh,
+                               getter=self.mdlgfrh,
                                force=True)
             Doc.set_extension("med_logfreq_HAL",
-                              getter=self.mdfrh,
+                              getter=self.mdlgfrh,
                               force=True)
 
         # Document level measure: max HAL root frequency
         if not Doc.has_extension("max_logfreq_HAL") \
            or not Span.has_extension("max_logfreq_HAL"):
             Span.set_extension("max_logfreq_HAL",
-                               getter=self.mxfrh,
+                               getter=self.mxlgfrh,
                                force=True)
             Doc.set_extension("max_logfreq_HAL",
-                              getter=self.mxfrh,
+                              getter=self.mxlgfrh,
                               force=True)
 
         # Document level measure: min HAL root frequency
         if not Doc.has_extension("min_logfreq_HAL") \
            or not Span.has_extension("max_logfreq_HAL"):
             Span.set_extension("min_logfreq_HAL",
-                               getter=self.minfrh,
+                               getter=self.minlgfrh,
                                force=True)
             Doc.set_extension("min_logfreq_HAL",
-                              getter=self.minfrh,
+                              getter=self.minlgfrh,
                               force=True)
 
         # Document level measure: standard deviation of HAL root frequency
         if not Doc.has_extension("std_logfreq_HAL") \
            or not Span.has_extension("std_logfreq_HAL"):
             Span.set_extension("std_logfreq_HAL",
-                               getter=self.stdfrh,
+                               getter=self.stdlgfrh,
                                force=True)
             Doc.set_extension("std_logfreq_HAL",
-                              getter=self.stdfrh,
+                              getter=self.stdlgfrh,
                               force=True)
 
         # The family size of the root is a measure of vocabulary difficulty

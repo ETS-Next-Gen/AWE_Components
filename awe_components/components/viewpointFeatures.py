@@ -775,7 +775,7 @@ class ViewpointFeatureDef:
         Span.set_extension("mean_tone",
                            getter=self.mntone,
                            force=True)
-        Doc.set_extension("mean_sentiment",
+        Doc.set_extension("mean_tone",
                           getter=self.mntone,
                           force=True)
 
@@ -808,10 +808,10 @@ class ViewpointFeatureDef:
 
         # St Dev Sentiword polarity (positive/negative tone)
         # of word tokens in the document
-        Span.set_extension("stdev_sentiment",
+        Span.set_extension("stdev_tone",
                            getter=self.stdtone,
                            force=True)
-        Doc.set_extension("stdev_sentiment",
+        Doc.set_extension("stdev_tone",
                           getter=self.stdtone,
                           force=True)
 

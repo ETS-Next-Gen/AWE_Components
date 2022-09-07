@@ -151,7 +151,7 @@ class SyntaxAndDiscourseFeatDef(object):
         return summarize(self.slidingWindowCohesions(tokens),
                          summaryType=FType.MEDIAN)
 
-    def mxSlideCoh(self, tokoens):
+    def mxSlideCoh(self, tokens):
         return summarize(self.slidingWindowCohesions(tokens),
                          summaryType=FType.MAX)
 
@@ -1830,7 +1830,9 @@ class SyntaxAndDiscourseFeatDef(object):
         A simple measure of depth of syntactic embedding
         (number of links to the sentence root)
         """
-        if tok.dep_ is None or tok.dep_ == 'ROOT':
+        if tok.dep_ is None \
+           or tok == tok.head \
+           or tok.dep_ == 'ROOT':
             return depth
         elif tok.dep_ == 'conj':
             return self.syntacticDepth(tok.head, depth)
@@ -1885,7 +1887,8 @@ class SyntaxAndDiscourseFeatDef(object):
          a flat, additive way, without use of complex embedded
          complement structures.
         """
-        if tok.text == tok.sent.root.text:
+        if tok.text == tok.sent.root.text \
+           or tok == tok.head:
             return depth
         else:
             if tok.dep_ == 'appos' \
