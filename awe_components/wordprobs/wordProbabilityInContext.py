@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.10
+#!/usr/bin/env python
 # Copyright 2022, Educational Testing Service
 
 from transformers import BertTokenizer, BertForMaskedLM
@@ -46,5 +46,4 @@ class WordProbabilityInContext(object):
 
 
 wpic = WordProbabilityInContext()
-word = 'they'
-context = wpic.make_context_string('and', 'call themselves')
+

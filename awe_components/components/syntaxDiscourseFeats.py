@@ -1,10 +1,11 @@
-#!/usr/bin/env python3.10
+#!/usr/bin/env python3
 # Copyright 2022, Educational Testing Service
 
 import math
 import os
 import srsly
 import imp
+from varname import nameof
 
 from enum import Enum
 from spacy.tokens import Doc, Span, Token
@@ -29,24 +30,29 @@ def SyntaxAndDiscourseFeatures(nlp, name):
 
 class SyntaxAndDiscourseFeatDef(object):
 
-    TRANSITION_TERMS_PATH = \
-        resources.path('awe_lexica.json_data',
-                       'transition_terms.json')
+    with resources.path('awe_lexica.json_data',
+                        'transition_terms.json') as filepath:
+        TRANSITION_TERMS_PATH = filepath
 
-    TRANSITION_CATEGORIES_PATH = \
-        resources.path('awe_lexica.json_data',
-                       'transition_categories.json')
+    with resources.path('awe_lexica.json_data',
+                        'transition_categories.json') as filepath:
+        TRANSITION_CATEGORIES_PATH = filepath
+
+    datapaths = [{'pathname': nameof(TRANSITION_TERMS_PATH),
+                  'value': TRANSITION_TERMS_PATH},
+                 {'pathname': nameof(TRANSITION_CATEGORIES_PATH),
+                  'value': TRANSITION_CATEGORIES_PATH}]
 
     transition_terms = {}
     transition_categories = {}
 
     def package_check(self, lang):
-        if not os.path.exists(self.TRANSITION_TERMS_PATH) \
-          or not os.path.exists(self.TRANSITION_CATEGORIES_PATH):
-            raise LexiconMissingError(
-                "Trying to load AWE Workbench Syntaxa and Discourse \
-                 Feature Module without supporting datafiles".format(lang)
-            )
+        for path in self.datapaths:
+            if not os.path.exists(path['value']):
+                raise LexiconMissingError(
+                    "Trying to load AWE Workbench Lexicon Module \
+                    without {name} datafile".format(name=path['pathname'])
+                )
 
     def load_lexicons(self, lang):
         self.transition_terms = \
@@ -69,386 +75,778 @@ class SyntaxAndDiscourseFeatDef(object):
     ##########################################
 
     def nParas(self, tokens):
+        ''' Number of paragraphs in the text
+        '''
         return len(self.paragraphs(tokens))
 
     def mnParaLen(self, tokens):
+        ''' Mean length of paragraphs in the document
+        '''
         return summarize(self.paragraphLengths(tokens),
                          summaryType=FType.MEAN)
 
     def mdParaLen(self, tokens):
+        ''' Median length of paragraphs in the document
+        '''
         return summarize(self.paragraphLengths(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxParaLen(self, tokens):
+        ''' Max length of paragraphs in the document
+        '''
         return summarize(self.paragraphLengths(tokens),
                          summaryType=FType.MAX)
 
     def minParaLen(self, tokens):
+        ''' Min length of paragraphs in the document
+        '''
         return summarize(self.paragraphLengths(tokens),
                          summaryType=FType.MIN)
 
     def stdParaLen(self, tokens):
+        ''' sTandard Deviation of length of paragraphs in the document
+        '''
         return summarize(self.paragraphLengths(tokens),
                          summaryType=FType.STDEV)
 
     def transCt(self, tokens):
+        ''' Number of transitions detected in the document
+        '''
         return tokens._.transition_word_profile[0]
 
     def transCatCt(self, tokens):
+        ''' Number of distinct transition types detected in the document
+        '''
         return len(tokens._.transition_word_profile[1])
 
     def transTypeCt(self, tokens):
+        ''' Counts for each transition type detected in the document
+        '''
         return len(tokens._.transition_word_profile[2])
 
     def mdTransDist(self, tokens):
+        ''' Median distance between transition terms in the document
+        '''
         return summarize(self.transitionDistances(tokens),
                          summaryType=FType.MEDIAN)
 
     def transterms(self, tokens):
+        ''' List of transition terms in the document
+        '''
         return tokens._.transition_word_profile[3]
 
     def mnTransDist(self, tokens):
+        ''' Mean distance between transition terms in the document
+        '''
         return summarize(self.transitionDistances(tokens),
                          summaryType=FType.MEAN)
 
     def mxTransDist(self, tokens):
+        ''' Max distance between transition terms in the document
+        '''
         return summarize(self.transitionDistances(tokens),
                          summaryType=FType.MAX)
 
     def minTransDist(self, tokens):
+        ''' Min distance between transition terms in the document
+        '''
         return summarize(self.transitionDistances(tokens),
                          summaryType=FType.MIN)
 
     def stdTransDist(self, tokens):
+        ''' Std. Dev. of distance between transition terms in the document
+        '''
         return summarize(self.transitionDistances(tokens),
                          summaryType=FType.STDEV)
 
     def mnSentCoh(self, tokens):
+        ''' Mean cohesion cosine between sentences in the document
+        '''
         return summarize(self.interSentenceCohesions(tokens),
                          summaryType=FType.MEAN)
 
     def mdSentCoh(self, tokens):
+        ''' Median cohesion cosine between sentences in the document
+        '''
         return summarize(self.interSentenceCohesions(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxSentCoh(self, tokens):
+        ''' Max cohesion cosine between sentences in the document
+        '''
         return summarize(self.interSentenceCohesions(tokens),
                          summaryType=FType.MAX)
 
     def minSentCoh(self, tokens):
+        ''' Min cohesion cosine between sentences in the document
+        '''
         return summarize(self.interSentenceCohesions(tokens),
                          summaryType=FType.MIN)
 
     def sdSentCoh(self, tokens):
+        ''' STd. dev. of cohesion cosine between sentences in the document
+        '''
         return summarize(self.interSentenceCohesions(tokens),
                          summaryType=FType.STDEV)
 
     def mnSlideCoh(self, tokens):
+        ''' Mean cohesion cosine between sliding windows of ten words before
+            and after any given point in the document
+        '''
         return summarize(self.slidingWindowCohesions(tokens),
                          summaryType=FType.MEAN)
 
     def mdSlideCoh(self, tokens):
+        ''' Median cohesion cosine between sliding windows of ten words before
+            and after any given point in the document
+        '''
         return summarize(self.slidingWindowCohesions(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxSlideCoh(self, tokens):
+        ''' Max cohesion cosine between sliding windows of ten words before
+            and after any given point in the document
+        '''
         return summarize(self.slidingWindowCohesions(tokens),
                          summaryType=FType.MAX)
 
     def minSlideCoh(self, tokens):
+        ''' Min cohesion cosine between sliding windows of ten words before
+            and after any given point in the document
+        '''
         return summarize(self.slidingWindowCohesions(tokens),
                          summaryType=FType.MIN)
 
     def sdSlideCoh(self, tokens):
+        ''' Std. Dev. of cohesion cosine between sliding windows of ten words before
+            and after any given point in the document
+        '''
         return summarize(self.slidingWindowCohesions(tokens),
                          summaryType=FType.STDEV)
 
     def nCoref(self, tokens):
+        ''' Number of chains of coreferring terms detected by Coreferee
+        '''
         return len(tokens._.coref_chains)
 
     def mnCorefCL(self, tokens):
+        ''' Mean length of chains of coreferring terms detected by Coreferee
+        '''
         return summarize(self.corefChainLengths(tokens),
                          summaryType=FType.MEAN)
 
     def mdCorefCL(self, tokens):
+        ''' Median length of chains of coreferring terms detected by Coreferee
+        '''
         return summarize(self.corefChainLengths(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxCorefCL(self, tokens):
+        ''' Max length of chains of coreferring terms detected by Coreferee
+        '''
         return summarize(self.corefChainLengths(tokens),
                          summaryType=FType.MAX)
 
     def minCorefCL(self, tokens):
+        ''' Min length of chains of coreferring terms detected by Coreferee
+        '''
         return summarize(self.corefChainLengths(tokens),
                          summaryType=FType.MIN)
 
     def sdCorefCL(self, tokens):
+        ''' Std. Dev. of length of chains of coreferring terms detected by Coreferee
+        '''
         return summarize(self.corefChainLengths(tokens),
                          summaryType=FType.STDEV)
 
     def sentc(self, tokens):
+        ''' Number of sentences in the document
+        '''
         return len(list(tokens.sents))
 
     def stopwords(self, tokens):
+        ''' Vector of flags indicating whether each token in the document
+            is or is not a stopword
+        '''
         return [token.is_stop for token in tokens]
 
     def mnsentlen(self, tokens):
+        ''' Mean length of sentences in the document
+        '''
         return summarize(self.sentenceLens(tokens),
                          summaryType=FType.MEAN)
 
     def mdsentlen(self, tokens):
+        ''' Median length of sentences in the document
+        '''
         return summarize(self.sentenceLens(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxsentlen(self, tokens):
+        ''' Max length of sentences in the document
+        '''
         return summarize(self.sentenceLens(tokens),
                          summaryType=FType.MAX)
 
     def minsentlen(self, tokens):
+        ''' Min length of sentences in the document
+        '''
         return summarize(self.sentenceLens(tokens),
                          summaryType=FType.MIN)
 
     def stdsentlen(self, tokens):
+        ''' Std. dev. of length of sentences in the document
+        '''
         return summarize(self.sentenceLens(tokens),
                          summaryType=FType.STDEV)
 
     def sqsentLens(self, tokens):
+        ''' Square roots of lengths of sentences in the document
+        '''
         return [math.sqrt(x) for x in self.sentenceLens(tokens)]
 
     def mnsqsentlen(self, tokens):
+        ''' Mean square root of length of sentences in the document
+        '''
         return summarize(tokens._.sqrt_sentence_lengths,
                          summaryType=FType.MEAN)
 
     def mdsqsentlen(self, tokens):
+        ''' Median square root of length of sentences in the document
+        '''
         return summarize(tokens._.sqrt_sentence_lengths,
                          summaryType=FType.MEDIAN)
 
     def mxsqsentlen(self, tokens):
+        ''' Max square root of length of sentences in the document
+        '''
         return summarize(tokens._.sqrt_sentence_lengths,
                          summaryType=FType.MAX)
 
     def minsqsentlen(self, tokens):
+        ''' Min square root of length of sentences in the document
+        '''
         return summarize(tokens._.sqrt_sentence_lengths,
                          summaryType=FType.MIN)
 
     def stdsqsentlen(self, tokens):
+        ''' Std. dev. of mean square root of length of sentences in the document
+        '''
         return summarize(tokens._.sqrt_sentence_lengths,
                          summaryType=FType.STDEV)
 
     def mnword2root(self, tokens):
-        return summarize(self.sentenceRhemes(tokens),
+        ''' Mean theme length (no words from sentence start to root word)
+        '''
+        return summarize(self.sentenceThemes(tokens),
                          summaryType=FType.MEAN)
 
     def mdword2root(self, tokens):
-        return summarize(self.sentenceRhemes(tokens),
+        ''' Median theme length (no words from sentence start to root word)
+        '''
+        return summarize(self.sentenceThemes(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxword2root(self, tokens):
-        return summarize(self.sentenceRhemes(tokens),
+        ''' Maxn theme length (no words from sentence start to root word)
+        '''
+        return summarize(self.sentenceThemes(tokens),
                          summaryType=FType.MAX)
 
     def minword2root(self, tokens):
-        return summarize(self.sentenceRhemes(tokens),
+        ''' Min theme length (no words from sentence start to root word)S
+        '''
+        return summarize(self.sentenceThemes(tokens),
                          summaryType=FType.MIN)
 
     def sdword2root(self, tokens):
-        return summarize(self.sentenceRhemes(tokens),
-                         summaryType=FType.STDEV)
-
-    def mnRhemeDepth(self, tokens):
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdRhemeDepth(self, tokens):
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxRhemeDepth(self, tokens):
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.MAX)
-
-    def minRhemeDepth(self, tokens):
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.MIN)
-
-    def sdRhemeDepth(self, tokens):
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
+        ''' Std. dev. of theme length (no words from sentence start to root word)
+        '''
+        return summarize(self.sentenceThemes(tokens),
                          summaryType=FType.STDEV)
 
     def mnThemeDepth(self, tokens):
+        ''' Mean theme depth (avg. embedding of words
+             from sentence start to root word)
+        '''
         return summarize(self.syntacticDepthsOfThemes(tokens),
                          summaryType=FType.MEAN)
 
     def mdThemeDepth(self, tokens):
+        ''' Median theme depth (avg. embedding of words
+             from sentence start to root word)
+        '''
         return summarize(self.syntacticDepthsOfThemes(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxThemeDepth(self, tokens):
+        ''' Max theme depth (avg. embedding of words
+             from sentence start to root word)
+        '''
         return summarize(self.syntacticDepthsOfThemes(tokens),
                          summaryType=FType.MAX)
 
     def minThemeDepth(self, tokens):
+        ''' Min theme depth (avg. embedding of words
+             from sentence start to root word)
+        '''
         return summarize(self.syntacticDepthsOfThemes(tokens),
                          summaryType=FType.MIN)
 
     def sdThemeDepth(self, tokens):
+        ''' Std. dev. of theme depth (avg. embedding of words
+             from sentence start to root word)
+        '''
         return summarize(self.syntacticDepthsOfThemes(tokens),
                          summaryType=FType.STDEV)
 
+    def mnRhemeDepth(self, tokens):
+        ''' Mean rheme depth (avg. embedding of words
+             from root word to end of sentence)
+        '''
+        return summarize(self.syntacticDepthsOfRhemes(tokens),
+                         summaryType=FType.MEAN)
+
+    def mdRhemeDepth(self, tokens):
+        ''' Median rheme depth (avg. embedding of words
+             from root word to end of sentence)
+        '''
+        return summarize(self.syntacticDepthsOfRhemes(tokens),
+                         summaryType=FType.MEDIAN)
+
+    def mxRhemeDepth(self, tokens):
+        ''' Max rheme depth (avg. embedding of words
+             from root word to end of sentence)
+        '''
+        return summarize(self.syntacticDepthsOfRhemes(tokens),
+                         summaryType=FType.MAX)
+
+    def minRhemeDepth(self, tokens):
+        ''' Min rheme depth (avg. embedding of words
+             from root word to end of sentence)
+        '''
+        return summarize(self.syntacticDepthsOfRhemes(tokens),
+                         summaryType=FType.MIN)
+
+    def sdRhemeDepth(self, tokens):
+        ''' St. dev. of rheme depth (avg. embedding of words
+             from root word to end of sentence)
+        '''
+        return summarize(self.syntacticDepthsOfRhemes(tokens),
+                         summaryType=FType.STDEV)
+
     def mnWtDepth(self, tokens):
+        ''' Mean weighted depth (avg. embedding of words
+             in sentence weighted to penalize left-embedding)
+        '''
         return summarize(self.weightedSyntacticDepths(tokens),
                          summaryType=FType.MEAN)
 
     def mdWtDepth(self, tokens):
+        ''' Median weighted depth (avg. embedding of words
+             in sentence weighted to penalize left-embedding)
+        '''
         return summarize(self.weightedSyntacticDepths(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxWtDepth(self, tokens):
+        ''' Max weighted depth (avg. embedding of words
+             in sentence weighted to penalize left-embedding)
+        '''
         return summarize(self.weightedSyntacticDepths(tokens),
                          summaryType=FType.MAX)
 
     def minWtDepth(self, tokens):
+        ''' Min weighted depth (avg. embedding of words
+             in sentence weighted to penalize left-embedding)
+        '''
         return summarize(self.weightedSyntacticDepths(tokens),
                          summaryType=FType.MIN)
 
     def sdWtDepth(self, tokens):
+        ''' St. dev. weighted depth (avg. embedding of words
+             in sentence weighted to penalize left-embedding)
+        '''
         return summarize(self.weightedSyntacticDepths(tokens),
                          summaryType=FType.STDEV)
 
     def mnWtBreadth(self, tokens):
+        ''' Mean weighted breadth (avg. embedding of words
+             in sentence weighted to penalize rambling sentence
+             structure with a lot of loosely adjoined sequential
+             clauses
+        '''
         return summarize(self.weightedSyntacticBreadths(tokens),
                          summaryType=FType.MEAN)
 
     def mdWtBreadth(self, tokens):
+        ''' Median weighted breadth (avg. embedding of words
+             in sentence weighted to penalize rambling sentence
+             structure with a lot of loosely adjoined sequential
+             clauses
+        '''
         return summarize(self.weightedSyntacticBreadths(tokens),
                          summaryType=FType.MEDIAN)
 
     def mxWtBreadth(self, tokens):
+        ''' Max weighted breadth (avg. embedding of words
+             in sentence weighted to penalize rambling sentence
+             structure with a lot of loosely adjoined sequential
+             clauses
+        '''
         return summarize(self.weightedSyntacticBreadths(tokens),
                          summaryType=FType.MAX)
 
     def minWtBreadth(self, tokens):
+        ''' Min weighted breadth (avg. embedding of words
+             in sentence weighted to penalize rambling sentence
+             structure with a lot of loosely adjoined sequential
+             clauses
+        '''
         return summarize(self.weightedSyntacticBreadths(tokens),
                          summaryType=FType.MIN)
 
     def sdWtBreadth(self, tokens):
+        ''' Std. dev. of weighted breadth (avg. embedding of words
+             in sentence weighted to penalize rambling sentence
+             structure with a lot of loosely adjoined sequential
+             clauses
+        '''
         return summarize(self.weightedSyntacticBreadths(tokens),
                          summaryType=FType.STDEV)
 
     def synVar(self, tokens):
+        '''Syntactic variety (number of different dependency patterns
+           detected in the text
+        '''
         return len(self.syntacticProfile(tokens))
 
+    def pt(self, tok):
+        ''' Past tense scopre (tokens in clauses with past tense verbs)
+        '''
+        return in_past_tense_scope(tok)
+
     def ptscp(self, tokens):
+        ''' Past tense scopre (tokens in clauses with past tense verbs)
+        '''
         return [1 if in_past_tense_scope(tok)
                 else 0 for tok in tokens]
 
     def prptscp(self, tokens):
+        ''' Proportion of words in past tense scope
+        '''
         return sum(self.ptscp(tokens))/len(self.ptscp(tokens))
 
     def quot(self, tokens):
+        ''' Quoted words
+        '''
         return [1 if token._.vwp_quoted
                 else 0 for token in tokens]
 
-    def __init__(self, lang="en"):
-        super().__init__()
-        self.package_check(lang)
-        self.load_lexicons(lang)
+    def sv_inversion(self, tok: Token):
+        if (tok.lemma_ in ['be', 'have', 'do']
+           or tok.tag_ == 'MD'):
+            for child in tok.children:
+                if child.dep_ in ['nsubj', 'nsubjpass', 'csubj', 'csubjpass'] \
+                   and child.i > tok.i:
+                    return True
+        return False
 
-        # The depth of embedding of a word indicates the
-        # complexity of the structure within which it occurs
-        Token.set_extension("syntacticDepth",
-                            getter=self.syntacticDepth,
-                            force=True)
+    extensions = [{"name": "paragraph_breaks",
+                   "getter": "paragraphs",
+                   "type": "docspan"},
+                  {"name": "paragraph_count",
+                   "getter": "nParas",
+                   "type": "docspan"},
+                  {"name": "paragraph_lengths",
+                   "getter": "paragraphLengths",
+                   "type": "docspan"},
+                  {"name": "mean_paragraph_length",
+                   "getter": "mnParaLen",
+                   "type": "docspan"},
+                  {"name": "median_paragraph_length",
+                   "getter": "mdParaLen",
+                   "type": "docspan"},
+                  {"name": "max_paragraph_length",
+                   "getter": "mxParaLen",
+                   "type": "docspan"},
+                  {"name": "min_paragraph_length",
+                   "getter": "minParaLen",
+                   "type": "docspan"},
+                  {"name": "stdev_paragraph_length",
+                   "getter": "stdParaLen",
+                   "type": "docspan"},
+                  {"name": "sentence_types",
+                   "getter": "sentenceTypes",
+                   "type": "docspan"},
+                  {"name": "total_transition_words",
+                   "getter": "transCt",
+                   "type": "docspan"},
+                  {"name": "transition_category_count",
+                   "getter": "transCatCt",
+                   "type": "docspan"},
+                  {"name": "transition_word_type_count",
+                   "getter": "transTypeCt",
+                   "type": "docspan"},
+                  {"name": "transition_words",
+                   "getter": "transterms",
+                   "type": "docspan"},
+                  {"name": "transition_distances",
+                   "getter": "transitionDistances",
+                   "type": "docspan"},
+                  {"name": "mean_transition_distance",
+                   "getter": "mnTransDist",
+                   "type": "docspan"},
+                  {"name": "median_transition_distance",
+                   "getter": "mdTransDist",
+                   "type": "docspan"},
+                  {"name": "max_transition_distance",
+                   "getter": "mxTransDist",
+                   "type": "docspan"},
+                  {"name": "min_transition_distance",
+                   "getter": "minTransDist",
+                   "type": "docspan"},
+                  {"name": "stdev_transition_distance",
+                   "getter": "stdTransDist",
+                   "type": "docspan"},
+                  {"name": "intersentence_cohesions",
+                   "getter": "interSentenceCohesions",
+                   "type": "docspan"},
+                  {"name": "mean_sent_cohesion",
+                   "getter": "mnSentCoh",
+                   "type": "docspan"},
+                  {"name": "median_sent_cohesion",
+                   "getter": "mdSentCoh",
+                   "type": "docspan"},
+                  {"name": "max_sent_cohesion",
+                   "getter": "mxSentCoh",
+                   "type": "docspan"},
+                  {"name": "min_sent_cohesion",
+                   "getter": "minSentCoh",
+                   "type": "docspan"},
+                  {"name": "stdev_sent_cohesion",
+                   "getter": "sdSentCoh",
+                   "type": "docspan"},
+                  {"name": "sliding_window_cohesions",
+                   "getter": "slidingWindowCohesions",
+                   "type": "docspan"},
+                  {"name": "mean_slider_cohesion",
+                   "getter": "mnSlideCoh",
+                   "type": "docspan"},
+                  {"name": "median_slider_cohesion",
+                   "getter": "mdSlideCoh",
+                   "type": "docspan"},
+                  {"name": "max_slider_cohesion",
+                   "getter": "mxSlideCoh",
+                   "type": "docspan"},
+                  {"name": "min_slider_cohesion",
+                   "getter": "minSlideCoh",
+                   "type": "docspan"},
+                  {"name": "stdev_slider_cohesion",
+                   "getter": "sdSlideCoh",
+                   "type": "docspan"},
+                  {"name": "num_corefs",
+                   "getter": "nCoref",
+                   "type": "docspan"},
+                  {"name": "mean_coref_chain_len",
+                   "getter": "mnCorefCL",
+                   "type": "docspan"},
+                  {"name": "median_coref_chain_len",
+                   "getter": "mdCorefCL",
+                   "type": "docspan"},
+                  {"name": "max_coref_chain_len",
+                   "getter": "mxCorefCL",
+                   "type": "docspan"},
+                  {"name": "min_coref_chain_len",
+                   "getter": "minCorefCL",
+                   "type": "docspan"},
+                  {"name": "stdev_coref_chain_len",
+                   "getter": "sdCorefCL",
+                   "type": "docspan"},
+                  {"name": "sentence_count",
+                   "getter": "sentc",
+                   "type": "docspan"},
+                  {"name": "sentence_lengths",
+                   "getter": "sentenceLens",
+                   "type": "docspan"},
+                  {"name": "stopwords",
+                   "getter": "stopwords",
+                   "type": "docspan"},
+                  {"name": "mean_sentence_len",
+                   "getter": "mnsentlen",
+                   "type": "docspan"},
+                  {"name": "median_sentence_len",
+                   "getter": "mdsentlen",
+                   "type": "docspan"},
+                  {"name": "max_sentence_len",
+                   "getter": "mxsentlen",
+                   "type": "docspan"},
+                  {"name": "min_sentence_len",
+                   "getter": "minsentlen",
+                   "type": "docspan"},
+                  {"name": "std_sentence_len",
+                   "getter": "stdsentlen",
+                   "type": "docspan"},
+                  {"name": "sqrt_sentence_lengths",
+                   "getter": "sqsentLens",
+                   "type": "docspan"},
+                  {"name": "mean_sqrt_sentence_len",
+                   "getter": "mnsqsentlen",
+                   "type": "docspan"},
+                  {"name": "median_sqrt_sentence_len",
+                   "getter": "mdsqsentlen",
+                   "type": "docspan"},
+                  {"name": "max_sqrt_sentence_len",
+                   "getter": "mxsqsentlen",
+                   "type": "docspan"},
+                  {"name": "min_sqrt_sentence_len",
+                   "getter": "minsqsentlen",
+                   "type": "docspan"},
+                  {"name": "std_sqrt_sentence_len",
+                   "getter": "stdsqsentlen",
+                   "type": "docspan"},
+                  {"name": "words_before_sentence_root",
+                   "getter": "sentenceThemes",
+                   "type": "docspan"},
+                  {"name": "mean_words_to_sentence_root",
+                   "getter": "mnword2root",
+                   "type": "docspan"},
+                  {"name": "median_words_to_sentence_root",
+                   "getter": "mdword2root",
+                   "type": "docspan"},
+                  {"name": "max_words_to_sentence_root",
+                   "getter": "mxword2root",
+                   "type": "docspan"},
+                  {"name": "min_words_to_sentence_root",
+                   "getter": "minword2root",
+                   "type": "docspan"},
+                  {"name": "stdev_words_to_sentence_root",
+                   "getter": "sdword2root",
+                   "type": "docspan"},
+                  {"name": "syntacticRhemeDepths",
+                   "getter": "syntacticDepthsOfRhemes",
+                   "type": "docspan"},
+                  {"name": "meanRhemeDepth",
+                   "getter": "mnRhemeDepth",
+                   "type": "docspan"},
+                  {"name": "medianRhemeDepth",
+                   "getter": "mdRhemeDepth",
+                   "type": "docspan"},
+                  {"name": "maxRhemeDepth",
+                   "getter": "mxRhemeDepth",
+                   "type": "docspan"},
+                  {"name": "minRhemeDepth",
+                   "getter": "minRhemeDepth",
+                   "type": "docspan"},
+                  {"name": "stdevRhemeDepth",
+                   "getter": "sdRhemeDepth",
+                   "type": "docspan"},
+                  {"name": "syntacticThemeDepths",
+                   "getter": "syntacticDepthsOfThemes",
+                   "type": "docspan"},
+                  {"name": "meanThemeDepth",
+                   "getter": "mnThemeDepth",
+                   "type": "docspan"},
+                  {"name": "medianThemeDepth",
+                   "getter": "mdThemeDepth",
+                    "type": "docspan"},
+                  {"name": "maxThemeDepth",
+                   "getter": "mxThemeDepth",
+                   "type": "docspan"},
+                  {"name": "minThemeDepth",
+                   "getter": "minThemeDepth",
+                   "type": "docspan"},
+                  {"name": "stdevThemeDepth",
+                   "getter": "sdThemeDepth",
+                   "type": "docspan"},
+                  {"name": "weightedSyntacticDepths",
+                   "getter": "weightedSyntacticDepths",
+                   "type": "docspan"},
+                  {"name": "meanWeightedDepth",
+                   "getter": "mnWtDepth",
+                   "type": "docspan"},
+                  {"name": "medianWeightedDepth",
+                   "getter": "mdWtDepth",
+                   "type": "docspan"},
+                  {"name": "maxWeightedDepth",
+                   "getter": "mxWtDepth",
+                   "type": "docspan"},
+                  {"name": "minWeightedDepth",
+                   "getter": "minWtDepth",
+                   "type": "docspan"},
+                  {"name": "stdevWeightedDepth",
+                   "getter": "sdWtDepth",
+                   "type": "docspan"},
+                  {"name": "weightedSyntacticBreadths",
+                  "getter": "weightedSyntacticBreadths",
+                   "type": "docspan"},
+                  {"name": "meanWeightedBreadth",
+                   "getter": "mnWtBreadth",
+                   "type": "docspan"},
+                  {"name": "medianWeightedBreadth",
+                   "getter": "mdWtBreadth",
+                   "type": "docspan"},
+                  {"name": "maxWeightedBreadth",
+                   "getter": "mxWtBreadth",
+                   "type": "docspan"},
+                  {"name": "minWeightedBreadth",
+                   "getter": "minWtBreadth",
+                   "type": "docspan"},
+                  {"name": "stdevWeightedBreadth",
+                   "getter": "sdWtBreadth",
+                   "type": "docspan"},
+                  {"name": "syntacticProfile",
+                   "getter": "syntacticProfile",
+                   "type": "docspan"},
+                  {"name": "syntacticProfileNormed",
+                   "getter": "syntacticProfileNormed",
+                   "type": "docspan"},
+                  {"name": "syntacticVariety",
+                   "getter": "synVar",
+                   "type": "docspan"},
+                  {"name": "pastTenseScope",
+                   "getter": "ptscp",
+                   "type": "docspan"},
+                  {"name": "propn_past",
+                   "getter": "prptscp",
+                   "type": "docspan"},
+                  {"name": "pastTenseScope",
+                   "getter": "pt",
+                   "type": "token"},
+                  {"name": "subjectVerbInversion",
+                   "getter": "sv_inversion",
+                   "type": "token"},
+                  {"name": "weightedSyntacticDepth",
+                   "getter": "weightedSyntacticDepth",
+                   "type": "token"},
+                  {"name": "weightedSyntacticBreadth",
+                   "getter": "weightedSyntacticBreadth",
+                   "type": "token"},
+                  {"name": "syntacticDepth",
+                   "getter": "syntacticDepth",
+                   "type": "token"}]
+    def add_extensions(self):
 
-        # However, we may have a more accurate measure of
-        # complexity of the context if we consider
-        # left-embedding effects, which increase the cognitive cost
-        Token.set_extension("weightedSyntacticDepth",
-                            getter=self.weightedSyntacticDepth,
-                            force=True)
+        """
+         Funcion to add extensions with getter functions that allow us
+         to access the various lexicons this module is designed to support.
+        """
 
-        # We also want to know if sentences are constructed
-        # in a purely additive way without any embedding except
-        # what can be processed one by one in a simple sequential way
-        # Like "Advertisements should be banned because they trick
-        # kids so we should stop it and that's really important."
-        Token.set_extension("weightedSyntacticBreadth",
-                            getter=self.weightedSyntacticBreadth,
-                            force=True)
-
-        # List of locations where paragraph breaks occur in the document
-        Span.set_extension("paragraph_breaks",
-                           getter=self.paragraphs,
-                           force=True)
-        Doc.set_extension("paragraph_breaks",
-                          getter=self.paragraphs,
-                          force=True)
-
-        # Number of paragraphs in the document
-        Span.set_extension("paragraph_count",
-                           getter=self.nParas,
-                           force=True)
-        Doc.set_extension("paragraph_count",
-                          getter=self.nParas,
-                          force=True)
-
-        # List of paragraph lengths in document
-        Span.set_extension("paragraph_lengths",
-                           getter=self.paragraphLengths,
-                           force=True)
-        Doc.set_extension("paragraph_lengths",
-                          getter=self.paragraphLengths,
-                          force=True)
-
-        # Mean length of paragraphs in the document
-        Span.set_extension("mean_paragraph_length",
-                           getter=self.mnParaLen,
-                           force=True)
-        Doc.set_extension("mean_paragraph_length",
-                          getter=self.mnParaLen,
-                          force=True)
-
-        # information on simple, compound, complex, and
-        # compound/complex sentences
-        Span.set_extension('sentence_types',
-                           getter=self.sentenceTypes,
-                           force=True)
-        Doc.set_extension('sentence_types',
-                          getter=self.sentenceTypes,
-                          force=True)
-
-        # Median length of paragraphs in the document
-        Span.set_extension("median_paragraph_length",
-                           getter=self.mdParaLen,
-                           force=True)
-        Doc.set_extension("median_paragraph_length",
-                          getter=self.mdParaLen,
-                          force=True)
-
-        # Max length of paragraphs in the document
-        Span.set_extension("max_paragraph_length",
-                           getter=self.mxParaLen,
-                           force=True)
-        Doc.set_extension("max_paragraph_length",
-                          getter=self.mxParaLen,
-                          force=True)
-
-        # Min length of paragraphs in the document
-        Span.set_extension("min_paragraph_length",
-                           getter=self.minParaLen,
-                           force=True)
-        Doc.set_extension("min_paragraph_length",
-                          getter=self.minParaLen,
-                          force=True)
-
-        # Standard deviation of paragraph length in the document
-        Span.set_extension("stdev_paragraph_length",
-                           getter=self.stdParaLen,
-                           force=True)
-        Doc.set_extension("stdev_paragraph_length",
-                          getter=self.stdParaLen,
-                          force=True)
-
+        for extension in self.extensions:
+            if extension['type'] == 'docspan':
+                if not Doc.has_extension(extension['name']):
+                    Doc.set_extension(extension['name'],
+                                      getter=eval('self.' 
+                                                  + extension['getter']))
+                if not Span.has_extension(extension['name']):
+                    Span.set_extension(extension['name'],
+                                       getter=eval('self.' 
+                                                   + extension['getter']))
+            if extension['type'] == 'token':
+                if not Token.has_extension(extension['name']):
+                    Token.set_extension(extension['name'],
+                                        getter=eval('self.' 
+                                                    + extension['getter']))
         # By default, we do not classify words as transition terms
         # We set the flag true when we identif them later
         if not Token.has_extension('transition'):
@@ -456,6 +854,9 @@ class SyntaxAndDiscourseFeatDef(object):
 
         if not Token.has_extension('transition_category'):
             Token.set_extension('transition_category', default=None)
+
+        if not Token.has_extension('vwp_quoted'):
+            Token.set_extension('vwp_quoted', default=None)
 
         # Document level measure: return full transition word profile data
         Span.set_extension("transition_word_profile",
@@ -465,680 +866,12 @@ class SyntaxAndDiscourseFeatDef(object):
                           default=None,
                           force=True)
 
-        # Document level measure: total number of transition words and
-        # phrases present in text
-        Span.set_extension("total_transition_words",
-                           getter=self.transCt,
-                           force=True)
-        Doc.set_extension("total_transition_words",
-                          getter=self.transCt,
-                          force=True)
 
-        # Document level measure: number of TYPES of transition words
-        # present in text
-        Span.set_extension("transition_category_count",
-                           getter=self.transCatCt,
-                           force=True)
-        Doc.set_extension("transition_category_count",
-                          getter=self.transCatCt,
-                          force=True)
-
-        # Document level measure: number of distinct transition words
-        # present in text
-        Span.set_extension("transition_word_type_count",
-                           getter=self.transTypeCt,
-                           force=True)
-        Doc.set_extension("transition_word_type_count",
-                          getter=self.transTypeCt,
-                          force=True)
-
-        # Dictionary giving the frequency of transition term categories
-        # that appear in the document
-        Span.set_extension("transition_words",
-                           getter=self.transterms,
-                           force=True)
-        Doc.set_extension("transition_words",
-                          getter=self.transterms,
-                          force=True)
-
-        # List of cosine distances between ten-word text windows before/
-        # after the transition words and phrases in the document
-        Span.set_extension("transition_distances",
-                           getter=self.transitionDistances,
-                           force=True)
-        Doc.set_extension("transition_distances",
-                          getter=self.transitionDistances,
-                          force=True)
-
-        # Document level measure: mean cosine distance between text windows
-        # before/after a transition word or phrase
-        Span.set_extension("mean_transition_distance",
-                           getter=self.mnTransDist,
-                           force=True)
-        Doc.set_extension("mean_transition_distance",
-                          getter=self.mnTransDist,
-                          force=True)
-
-        # Document level measure: median cosine distance between text windows
-        # before/after a transition word or phrase
-        Span.set_extension("median_transition_distance",
-                           getter=self.mdTransDist,
-                           force=True)
-        Doc.set_extension("median_transition_distance",
-                          getter=self.mdTransDist,
-                          force=True)
-
-        # Document level measure: maximum cosine distance between text windows
-        # before/after a transition word or phrase
-        Span.set_extension("max_transition_distance",
-                           getter=self.mxTransDist,
-                           force=True)
-        Doc.set_extension("max_transition_distance",
-                          getter=self.mxTransDist,
-                          force=True)
-
-        # Document level measure: minimum cosine distance between text windows
-        # before/after a transition word or phrase
-        Span.set_extension("min_transition_distance",
-                           getter=self.minTransDist,
-                           force=True)
-        Doc.set_extension("min_transition_distance",
-                          getter=self.minTransDist,
-                          force=True)
-
-        # Document level measure: std. deviation of cosine distance between
-        # text windows before/after a transition word or phrase
-        Span.set_extension("stdev_transition_distance",
-                           getter=self.stdTransDist,
-                           force=True)
-        Doc.set_extension("stdev_transition_distance",
-                          getter=self.stdTransDist,
-                          force=True)
-
-        # List of intersentence cohesions (cosine distance between 10-word
-        # windows before and after a sentence boundary)
-        Span.set_extension("intersentence_cohesions",
-                           getter=self.interSentenceCohesions,
-                           force=True)
-        Doc.set_extension("intersentence_cohesions",
-                          getter=self.interSentenceCohesions,
-                          force=True)
-
-        # Document level measure: mean similarity between adjacent sentences
-        Span.set_extension("mean_sent_cohesion",
-                           getter=self.mnSentCoh,
-                           force=True)
-        Doc.set_extension("mean_sent_cohesion",
-                          getter=self.mnSentCoh,
-                          force=True)
-
-        # Document level measure: median similarity between adjacent sentences
-        Span.set_extension("median_sent_cohesion",
-                           getter=self.mdSentCoh,
-                           force=True)
-        Doc.set_extension("median_sent_cohesion",
-                          getter=self.mdSentCoh,
-                          force=True)
-
-        # Document level measure: max length similarity between adjacent
-        # sentences.
-        Span.set_extension("max_sent_cohesion",
-                           getter=self.mxSentCoh,
-                           force=True)
-        Doc.set_extension("max_sent_cohesion",
-                          getter=self.mxSentCoh,
-                          force=True)
-
-        # Document level measure: min length similarity between adjacent
-        # sentences.
-        Span.set_extension("min_sent_cohesion",
-                           getter=self.minSentCoh,
-                           force=True)
-        Doc.set_extension("min_sent_cohesion",
-                          getter=self.minSentCoh,
-                          force=True)
-
-        # Document level measure: st dev of  similarity between adjacent
-        # sentences.
-        Span.set_extension("stdev_sent_cohesion",
-                           getter=self.sdSentCoh,
-                           force=True)
-        Doc.set_extension("stdev_sent_cohesion",
-                          getter=self.sdSentCoh,
-                          force=True)
-
-        # List of local cohesion measures calculated by sliding a ten-word
-        # window over the text and taking the cosine between that window
-        # and the ten words that follow them.
-        Span.set_extension("sliding_window_cohesions",
-                           getter=self.slidingWindowCohesions,
-                           force=True)
-        Doc.set_extension("sliding_window_cohesions",
-                          getter=self.slidingWindowCohesions,
-                          force=True)
-
-        # Document level measure: mean similarity between sliding
-        # window of 10 words and the next 10 words
-        Span.set_extension("mean_slider_cohesion",
-                           getter=self.mnSlideCoh,
-                           force=True)
-        Doc.set_extension("mean_slider_cohesion",
-                          getter=self.mnSlideCoh,
-                          force=True)
-
-        # Document level measure: median similarity between sliding
-        # window of 10 words and the next 10 words
-        Span.set_extension("median_slider_cohesion",
-                           getter=self.mdSlideCoh,
-                           force=True)
-        Doc.set_extension("median_slider_cohesion",
-                          getter=self.mdSlideCoh,
-                          force=True)
-
-        # Document level measure: max length similarity between sliding
-        # window of 10 words and the next 10 words
-        Span.set_extension("max_slider_cohesion",
-                           getter=self.mxSlideCoh,
-                           force=True)
-        Doc.set_extension("max_slider_cohesion",
-                          getter=self.mxSlideCoh,
-                          force=True)
-
-        # Document level measure: min length similarity between sliding
-        # window of 10 words and the next 10 words
-        Span.set_extension("min_slider_cohesion",
-                           getter=self.minSlideCoh,
-                           force=True)
-        Doc.set_extension("min_slider_cohesion",
-                          getter=self.minSlideCoh,
-                          force=True)
-
-        # Document level measure: st dev of  similarity between sliding
-        # window of 10 words and the next 10 words
-        Span.set_extension("stdev_slider_cohesion",
-                           getter=self.sdSlideCoh,
-                           force=True)
-        Doc.set_extension("stdev_slider_cohesion",
-                          getter=self.sdSlideCoh,
-                          force=True)
-
-        # Document level measure: number of coreferential chains
-        Span.set_extension("num_corefs",
-                           getter=self.nCoref,
-                           force=True)
-        Doc.set_extension("num_corefs",
-                          getter=self.nCoref,
-                          force=True)
-
-        # Get coref chain data using extension ._.coref_chains
-
-        # Document level measure: mean length of coreferential chains
-        Span.set_extension("mean_coref_chain_len",
-                           getter=self.mnCorefCL,
-                           force=True)
-        Doc.set_extension("mean_coref_chain_len",
-                          getter=self.mnCorefCL,
-                          force=True)
-
-        # Document level measure: median length of coreferential chains
-        Span.set_extension("median_coref_chain_len",
-                           getter=self.mdCorefCL,
-                           force=True)
-        Doc.set_extension("median_coref_chain_len",
-                          getter=self.mdCorefCL,
-                          force=True)
-
-        # Document level measure: max length of coreferential chains
-        Span.set_extension("max_coref_chain_len",
-                           getter=self.mxCorefCL,
-                           force=True)
-        Doc.set_extension("max_coref_chain_len",
-                          getter=self.mxCorefCL,
-                          force=True)
-
-        # Document level measure: min length of coreferential chains
-        Span.set_extension("min_coref_chain_len",
-                           getter=self.minCorefCL,
-                           force=True)
-        Doc.set_extension("min_coref_chain_len",
-                          getter=self.minCorefCL,
-                          force=True)
-
-        # Document level measure: st dev of length of coreferential chains
-        Span.set_extension("stdev_coref_chain_len",
-                           getter=self.sdCorefCL,
-                           force=True)
-        Doc.set_extension("stdev_coref_chain_len",
-                          getter=self.sdCorefCL,
-                          force=True)
-
-        # Document level measure: sentence count
-        Span.set_extension("sentence_count",
-                           getter=self.sentc,
-                           force=True)
-        Doc.set_extension("sentence_count",
-                          getter=self.sentc,
-                          force=True)
-
-        # List of sentence lengths for document
-        Span.set_extension("sentence_lengths",
-                           getter=self.sentenceLens,
-                           force=True)
-        Doc.set_extension("sentence_lengths",
-                          getter=self.sentenceLens,
-                          force=True)
-
-        # List of sentence lengths for document
-        Span.set_extension("stopwords",
-                           getter=self.stopwords,
-                           force=True)
-        Doc.set_extension("stopwords",
-                          getter=self.stopwords,
-                          force=True)
-
-        # Document level measure: mean sentence length
-        Span.set_extension("mean_sentence_len",
-                           getter=self.mnsentlen,
-                           force=True)
-        Doc.set_extension("mean_sentence_len",
-                          getter=self.mnsentlen,
-                          force=True)
-
-        # Document level measure: median sentence length
-        Span.set_extension("median_sentence_len",
-                           getter=self.mdsentlen,
-                           force=True)
-        Doc.set_extension("median_sentence_len",
-                          getter=self.mdsentlen,
-                          force=True)
-
-        # Document level measure: max sentence length
-        Span.set_extension("max_sentence_len",
-                           getter=self.mxsentlen,
-                           force=True)
-        Doc.set_extension("max_sentence_len",
-                          getter=self.mxsentlen,
-                          force=True)
-
-        # Document level measure: min sentence length
-        Span.set_extension("min_sentence_len",
-                           getter=self.minsentlen,
-                           force=True)
-        Doc.set_extension("min_sentence_len",
-                          getter=self.minsentlen,
-                          force=True)
-
-        # Document level measure: st dev sentence length
-        Span.set_extension("std_sentence_len",
-                           getter=self.stdsentlen,
-                           force=True)
-        Doc.set_extension("std_sentence_len",
-                          getter=self.stdsentlen,
-                          force=True)
-
-        # List of sqrt sentence lengths for document
-        Span.set_extension("sqrt_sentence_lengths",
-                           getter=self.sqsentLens,
-                           force=True)
-        Doc.set_extension("sqrt_sentence_lengths",
-                          getter=self.sqsentLens,
-                          force=True)
-
-        # Document level measure: mean sentence length
-        Span.set_extension("mean_sqrt_sentence_len",
-                           getter=self.mnsqsentlen,
-                           force=True)
-        Doc.set_extension("mean_sqrt_sentence_len",
-                          getter=self.mnsqsentlen,
-                          force=True)
-
-        # Document level measure: median sentence length
-        Span.set_extension("median_sqrt_sentence_len",
-                           getter=self.mdsqsentlen,
-                           force=True)
-        Doc.set_extension("median_sqrt_sentence_len",
-                          getter=self.mdsqsentlen,
-                          force=True)
-
-        # Document level measure: max sentence length
-        Span.set_extension("max_sqrt_sentence_len",
-                           getter=self.mxsqsentlen,
-                           force=True)
-        Doc.set_extension("max_sqrt_sentence_len",
-                          getter=self.mxsqsentlen,
-                          force=True)
-
-        # Document level measure: min sentence length
-        Span.set_extension("min_sqrt_sentence_len",
-                           getter=self.minsqsentlen,
-                           force=True)
-        Doc.set_extension("min_sqrt_sentence_len",
-                          getter=self.minsqsentlen,
-                          force=True)
-
-        # Document level measure: st dev sentence length
-        Span.set_extension("std_sqrt_sentence_len",
-                           getter=self.stdsqsentlen,
-                           force=True)
-        Doc.set_extension("std_sqrt_sentence_len",
-                          getter=self.stdsqsentlen,
-                          force=True)
-
-        # List of sentence rheme lengths (no. words before sentence root)
-        Span.set_extension("words_before_sentence_root",
-                           getter=self.sentenceRhemes,
-                           force=True)
-        Doc.set_extension("words_before_sentence_root",
-                          getter=self.sentenceRhemes,
-                          force=True)
-
-        # Document level measure: mean number of words before main verb
-        Span.set_extension("mean_words_to_sentence_root",
-                           getter=self.mnword2root,
-                           force=True)
-        Doc.set_extension("mean_words_to_sentence_root",
-                          getter=self.mnword2root,
-                          force=True)
-
-        # Document level measure: median number of words before main verb
-        Span.set_extension("median_words_to_sentence_root",
-                           getter=self.mdword2root,
-                           force=True)
-        Doc.set_extension("median_words_to_sentence_root",
-                          getter=self.mdword2root,
-                          force=True)
-
-        # Document level measure: max number of words before main verb
-        Span.set_extension("max_words_to_sentence_root",
-                           getter=self.mxword2root,
-                           force=True)
-        Doc.set_extension("max_words_to_sentence_root",
-                          getter=self.mxword2root,
-                          force=True)
-
-        # Document level measure: min number of words before main verb
-        Span.set_extension("min_words_to_sentence_root",
-                           getter=self.minword2root,
-                           force=True)
-        Doc.set_extension("min_words_to_sentence_root",
-                          getter=self.minword2root,
-                          force=True)
-
-        # Document level measure: st dev of number of words before main verb
-        Span.set_extension("stdev_words_to_sentence_root",
-                           getter=self.sdword2root,
-                           force=True)
-        Doc.set_extension("stdev_words_to_sentence_root",
-                          getter=self.sdword2root,
-                          force=True)
-
-        # List of rheme depths (depth of dependency embedding for words
-        # before sentence root)
-        Span.set_extension("syntacticRhemeDepths",
-                           getter=self.syntacticDepthsOfRhemes,
-                           force=True)
-        Doc.set_extension("syntacticRhemeDepths",
-                          getter=self.syntacticDepthsOfRhemes,
-                          force=True)
-
-        # Document level measure: mean depth of syntactic embedding of subject
-        # and other pre-main-verb elements
-        Span.set_extension("meanRhemeDepth",
-                           getter=self.mnRhemeDepth,
-                           force=True)
-        Doc.set_extension("meanRhemeDepth",
-                          getter=self.mnRhemeDepth,
-                          force=True)
-
-        # Document level measure: median depth of syntactic embedding of
-        # subject and other pre-main-verb elements
-        Span.set_extension("medianRhemeDepth",
-                           getter=self.mdRhemeDepth,
-                           force=True)
-        Doc.set_extension("medianRhemeDepth",
-                          getter=self.mdRhemeDepth,
-                          force=True)
-
-        # Document level measure: max depth of syntactic embedding of subject
-        # and other pre-main-verb elements
-        Span.set_extension("maxRhemeDepth",
-                           getter=self.mxRhemeDepth,
-                           force=True)
-        Doc.set_extension("maxRhemeDepth",
-                          getter=self.mxRhemeDepth,
-                          force=True)
-
-        # Document level measure: min depth of syntactic embedding of subject
-        # and other pre-main-verb elements
-        Span.set_extension("minRhemeDepth",
-                           getter=self.minRhemeDepth,
-                           force=True)
-        Doc.set_extension("minRhemeDepth",
-                          getter=self.minRhemeDepth,
-                          force=True)
-
-        # Document level measure: standard deviation of depth of syntactic
-        # embedding of subject and other pre-main-verb elements
-        Span.set_extension("stdevRhemeDepth",
-                           getter=self.sdRhemeDepth,
-                           force=True)
-        Doc.set_extension("stdevRhemeDepth",
-                          getter=self.sdRhemeDepth,
-                          force=True)
-
-        # List of theme depths (depth of dependency embedding for
-        # sentence root and following words)
-        Span.set_extension("syntacticThemeDepths",
-                           getter=self.syntacticDepthsOfThemes,
-                           force=True)
-        Doc.set_extension("syntacticThemeDepths",
-                          getter=self.syntacticDepthsOfThemes,
-                          force=True)
-
-        # Document level measure: mean depth of syntactic embedding
-        # of sentence predicate elements
-        Span.set_extension("meanThemeDepth",
-                           getter=self.mnThemeDepth,
-                           force=True)
-        Doc.set_extension("meanThemeDepth",
-                          getter=self.mnThemeDepth,
-                          force=True)
-
-        # Document level measure: median depth of syntactic embedding of \
-        # sentence predicate elements
-        Span.set_extension("medianThemeDepth",
-                           getter=self.mdThemeDepth,
-                           force=True)
-        Doc.set_extension("medianThemeDepth",
-                          getter=self.mdThemeDepth,
-                          force=True)
-
-        # Document level measure: max depth of syntactic embedding of sentence
-        # predicate elements
-        Span.set_extension("maxThemeDepth",
-                           getter=self.mxThemeDepth,
-                           force=True)
-        Doc.set_extension("maxThemeDepth",
-                          getter=self.mxThemeDepth,
-                          force=True)
-
-        # Document level measure: min depth of syntactic embedding of sentence
-        # predicate elements
-        Span.set_extension("minThemeDepth",
-                           getter=self.minThemeDepth,
-                           force=True)
-        Doc.set_extension("minThemeDepth",
-                          getter=self.minThemeDepth,
-                          force=True)
-
-        # Document level measure: st dev of depth of syntactic embedding of
-        # sentence predicate elements
-        Span.set_extension("stdevThemeDepth",
-                           getter=self.sdThemeDepth,
-                           force=True)
-        Doc.set_extension("stdevThemeDepth",
-                          getter=self.sdThemeDepth,
-                          force=True)
-
-        # List of weighted syntactic depths for all words in the sentence
-        Span.set_extension('weightedSyntacticDepths',
-                           getter=self.weightedSyntacticDepths,
-                           force=True)
-        Doc.set_extension('weightedSyntacticDepths',
-                          getter=self.weightedSyntacticDepths,
-                          force=True)
-
-        # Document level measure: mean weighted depth of syntactic embedding
-        Span.set_extension("meanWeightedDepth",
-                           getter=self.mnWtDepth,
-                           force=True)
-        Doc.set_extension("meanWeightedDepth",
-                          getter=self.mnWtDepth,
-                          force=True)
-
-        # Document level measure: median weighted depth of syntactic embedding
-        Span.set_extension("medianWeightedDepth",
-                           getter=self.mdWtDepth,
-                           force=True)
-        Doc.set_extension("medianWeightedDepth",
-                          getter=self.mdWtDepth,
-                          force=True)
-
-        # Document level measure: max weighted depth of syntactic embedding
-        Span.set_extension("maxWeightedDepth",
-                           getter=self.mxWtDepth,
-                           force=True)
-        Doc.set_extension("maxWeightedDepth",
-                          getter=self.mxWtDepth,
-                          force=True)
-
-        # Document level measure: min weighted depth of syntactic embedding
-        Span.set_extension("minWeightedDepth",
-                           getter=self.minWtDepth,
-                           force=True)
-        Doc.set_extension("minWeightedDepth",
-                          getter=self.minWtDepth,
-                          force=True)
-
-        # Document level measure: st dev of weighted depth
-        # of syntactic embedding
-        Span.set_extension("stdevWeightedDepth",
-                           getter=self.sdWtDepth,
-                           force=True)
-        Doc.set_extension("stdevWeightedDepth",
-                          getter=self.sdWtDepth,
-                          force=True)
-
-        # List of weighted syntactic breadths for all words in the sentence
-        Span.set_extension('weightedSyntacticBreadths',
-                           getter=self.weightedSyntacticBreadths,
-                           force=True)
-        Doc.set_extension('weightedSyntacticBreadths',
-                          getter=self.weightedSyntacticBreadths,
-                          force=True)
-
-        # Document level measure: mean weighted breadth of syntactic embedding
-        Span.set_extension("meanWeightedBreadth",
-                           getter=self.mnWtBreadth,
-                           force=True)
-        Doc.set_extension("meanWeightedBreadth",
-                          getter=self.mnWtBreadth,
-                          force=True)
-
-        # Document level measure: median weighted breadth
-        # of syntactic embedding
-        Span.set_extension("medianWeightedBreadth",
-                           getter=self.mdWtBreadth,
-                           force=True)
-        Doc.set_extension("medianWeightedBreadth",
-                          getter=self.mdWtBreadth,
-                          force=True)
-
-        # Document level measure: max weighted breadth of syntactic embedding
-        Span.set_extension("maxWeightedBreadth",
-                           getter=self.mxWtBreadth,
-                           force=True)
-        Doc.set_extension("maxWeightedBreadth",
-                          getter=self.mxWtBreadth,
-                          force=True)
-
-        # Document level measure: min weighted breadth of syntactic embedding
-        Span.set_extension("minWeightedBreadth",
-                           getter=self.minWtBreadth,
-                           force=True)
-        Doc.set_extension("minWeightedBreadth",
-                          getter=self.minWtBreadth,
-                          force=True)
-
-        # Document level measure: st dev of weighted breadth
-        # of syntactic embedding
-        Span.set_extension("stdevWeightedBreadth",
-                           getter=self.sdWtBreadth,
-                           force=True)
-        Doc.set_extension("stdevWeightedBreadth",
-                          getter=self.sdWtBreadth,
-                          force=True)
-
-        # Document level measure: syntactic profile vector
-        Span.set_extension("syntacticProfile",
-                           getter=self.syntacticProfile,
-                           force=True)
-        Doc.set_extension("syntacticProfile",
-                          getter=self.syntacticProfile,
-                          force=True)
-
-        # Document level measure: normed syntactic profile vector
-        Span.set_extension("syntacticProfileNormed",
-                           getter=self.syntacticProfileNormed,
-                           force=True)
-        Doc.set_extension("syntacticProfileNormed",
-                          getter=self.syntacticProfileNormed,
-                          force=True)
-
-        # Document level measure: length of syntactic profile vector
-        # (syntactic variety)
-        Span.set_extension("syntacticVariety",
-                           getter=self.synVar,
-                           force=True)
-        Doc.set_extension("syntacticVariety",
-                          getter=self.synVar,
-                          force=True)
-
-        Token.set_extension("pastTenseScope",
-                            getter=in_past_tense_scope,
-                            force=True)
-
-        # Document level measure: list of tokens within past tense clauses
-        Span.set_extension("pastTenseScope",
-                           getter=self.ptscp,
-                           force=True)
-        Doc.set_extension("pastTenseScope",
-                          getter=self.ptscp,
-                          force=True)
-
-        # Document level measure: proportion of tokens inside a past tense
-        # clause/sentence. Past tense clauses are strongly associated with
-        # narrative.
-        Span.set_extension("propn_past",
-                           getter=self.prptscp,
-                           force=True)
-        Doc.set_extension("propn_past",
-                          getter=self.prptscp,
-                          force=True)
-
-        Token.set_extension('subjectVerbInversion',
-                            getter=self.sv_inversion,
-                            force=True)
-
-        # Flag that identifies whether a token falls within an
-        # explicitly quoted text segment.
-        if not Token.has_extension('vwp_quoted'):
-            Token.set_extension('vwp_quoted', default=False)
-
-        if not Span.has_extension('vwp_quoted'):
-            Span.set_extension('vwp_quoted', getter=self.quot)
-        if not Doc.has_extension('vwp_quoted'):
-            Doc.set_extension('vwp_quoted', getter=self.quot)
+    def __init__(self, lang="en"):
+        super().__init__()
+        self.package_check(lang)
+        self.load_lexicons(lang)
+        self.add_extensions()
 
     def quotedText(self, hdoc):
         """
@@ -1330,26 +1063,8 @@ class SyntaxAndDiscourseFeatDef(object):
                      i + 1,
                      self.transition_categories[
                          self.transition_terms[gram1]]])
-            elif (gram0 in self.transition_terms and document[i].tag_ not in
-                  ['NN',
-                   'NNS',
-                   'NNP',
-                   'NNPS',
-                   'VB',
-                   'VBD',
-                   'VBG',
-                   'VBN',
-                   'VBP',
-                   'VBZ',
-                   'JJ',
-                   'JJR',
-                   'JJS',
-                   'RP',
-                   'GW',
-                   'NOUN',
-                   'PROPN',
-                   'VERB',
-                   'ADJ']):
+            elif (gram0 in self.transition_terms
+                  and document[i].tag_ not in adj_noun_or_verb):
                 # basically we require one-word transition terms
                 # to be adverbs or function words
                 document[i]._.transition = True
@@ -1474,78 +1189,18 @@ class SyntaxAndDiscourseFeatDef(object):
                         continue
                     if (Document[i].has_vector
                         and not Document[i].is_stop
-                        and Document[i].tag_ in
-                        ['NN',
-                         'NNS',
-                         'NNP',
-                         'NNPS',
-                         'VB',
-                         'VBD',
-                         'VBG',
-                         'VBN',
-                         'VBP',
-                         'VBZ',
-                         'JJ',
-                         'JJR',
-                         'JJS',
-                         'RB',
-                         'RBR',
-                         'RBS',
-                         'RP',
-                         'GW',
-                         'NOUN',
-                         'PROPN',
-                         'VERB',
-                         'ADJ',
-                         'ADV',
-                         'CD']):
+                        and Document[i].tag_ in content_tags):
                         left.append(Document[i].vector)
-                    elif Document[i].tag_ in ['PRP',
-                                              'PRP$',
-                                              'WDT',
-                                              'WP',
-                                              'WP$',
-                                              'WRB',
-                                              'DT']:
+                    elif Document[i].tag_ in possessive_or_determiner:
                         Resolution = ResolveReference(Document[i], Document)
                         if Resolution is not None and len(Resolution) > 0:
                             left.append(sum([Document[item].vector
                                              for item in Resolution]))
                     if (Document[j].has_vector
                         and not Document[j].is_stop
-                        and Document[j].tag_ in
-                        ['NN',
-                         'NNS',
-                         'NNP',
-                         'NNPS',
-                         'VB',
-                         'VBD',
-                         'VBG',
-                         'VBN',
-                         'VBP',
-                         'VBZ',
-                         'JJ',
-                         'JJR',
-                         'JJS',
-                         'RB',
-                         'RBR',
-                         'RBS',
-                         'RP',
-                         'GW',
-                         'NOUN',
-                         'PROPN',
-                         'VERB',
-                         'ADJ',
-                         'ADV',
-                         'CD']):
+                        and Document[j].tag_ in content_tags):
                         right.append(Document[j].vector)
-                    elif Document[j].tag_ in ['PRP',
-                                              'PRP$',
-                                              'WDT',
-                                              'WP',
-                                              'WP$',
-                                              'WRB',
-                                              'DT']:
+                    elif Document[j].tag_ in possessive_or_determiner:
                         Resolution = ResolveReference(Document[j], Document)
                         if Resolution is not None and len(Resolution) > 0:
                             right.append(sum([Document[item].vector
@@ -1718,78 +1373,18 @@ class SyntaxAndDiscourseFeatDef(object):
                     continue
                 if (Document[i + j].has_vector
                     and not Document[i + j].is_stop
-                    and Document[i + j].tag_ in
-                    ['NN',
-                     'NNS',
-                     'NNP',
-                     'NNPS',
-                     'VB',
-                     'VBD',
-                     'VBG',
-                     'VBN',
-                     'VBP',
-                     'VBZ',
-                     'JJ',
-                     'JJR',
-                     'JJS',
-                     'RB',
-                     'RBR',
-                     'RBS',
-                     'RP',
-                     'GW',
-                     'NOUN',
-                     'PROPN',
-                     'VERB',
-                     'ADJ',
-                     'ADV',
-                     'CD']):
+                    and Document[i + j].tag_ in content_tags):
                     left.append(Document[i + j].vector)
-                elif Document[i + j].tag_ in ['PRP',
-                                              'PRP$',
-                                              'WDT',
-                                              'WP',
-                                              'WP$',
-                                              'WRB',
-                                              'DT']:
+                elif Document[i + j].tag_ in possessive_or_determiner:
                     Resolution = Document[i + j]._.coref_chains.resolve(
                         Document[i + j])
                     if Resolution is not None and len(Resolution) > 0:
                         left.append(sum([item.vector for item in Resolution]))
                 if (Document[i + j + 10].has_vector
                     and not Document[i + j + 10].is_stop
-                    and Document[i + j + 10].tag_ in
-                    ['NN',
-                     'NNS',
-                     'NNP',
-                     'NNPS',
-                     'VB',
-                     'VBD',
-                     'VBG',
-                     'VBN',
-                     'VBP',
-                     'VBZ',
-                     'JJ',
-                     'JJR',
-                     'JJS',
-                     'RB',
-                     'RBR',
-                     'RBS',
-                     'RP',
-                     'GW',
-                     'NOUN',
-                     'PROPN',
-                     'VERB',
-                     'ADJ',
-                     'ADV',
-                     'CD']):
+                    and Document[i + j + 10].tag_ in content_tags):
                     right.append(Document[i + j + 10].vector)
-                elif Document[i + j + 10].tag_ in ['PRP',
-                                                   'PRP$',
-                                                   'WDT',
-                                                   'WP',
-                                                   'WP$',
-                                                   'WRB',
-                                                   'DT']:
+                elif Document[i + j + 10].tag_ in possessive_or_determiner:
                     Resolution = Document._.coref_chains.resolve(
                         Document[i + j + 10])
                     if Resolution is not None and len(Resolution) > 0:
@@ -1805,14 +1400,14 @@ class SyntaxAndDiscourseFeatDef(object):
         sentLens = [len(sent) for sent in tokens.sents]
         return sentLens
 
-    def sentenceRhemes(self, tokens: Doc):
+    def sentenceThemes(self, tokens: Doc): ####
         """
-        Calculate the length of the rheme (number of words before the main
+        Calculate the length of the theme (number of words before the main
         verb) in a sentence, using is_sent_start to locate the start of a
         sentence and t.sent.root.text to identify the root of the sentence
         parse tree.
 
-        Longer rhemes tend to correspond to breaks in the cohesion structure
+        Longer themes tend to correspond to breaks in the cohesion structure
         of a well-written essay. Too many long rhemes thus suggests a lack
         of cohesion.
         """
@@ -1821,7 +1416,7 @@ class SyntaxAndDiscourseFeatDef(object):
         for t in tokens:
             if t.is_sent_start:
                 currentStart = t.i
-            if t.text == t.sent.root.text:
+            if t == t.head or t.dep_ == 'ROOT':
                 offsets.append(t.i - currentStart)
         return offsets
 
@@ -1949,29 +1544,29 @@ class SyntaxAndDiscourseFeatDef(object):
             depths.append(float(self.weightedSyntacticBreadth(token)))
         return depths
 
-    def syntacticDepthsOfRhemes(self, Document: Doc):
+    def syntacticDepthsOfThemes(self, Document: Doc):
         """
         The early part of the sentence (before the main verb) prototypically
         contains information that is GIVEN -- i.e., it links to what came
         before in the text, which usually means use of simple pronouns and
         referring expressions rather than long, complex elements. So if we
-        caculate a summary statistic for the rheme part of the sentence, it
+        caculate a summary statistic for the theme part of the sentence, it
         gives us a measure of the extent to which the writer is keeping the
         rheme simple and hence presumably linked to the rest of the test.
         """
         depths = []
-        inRheme = True
+        inTheme = True
         for token in Document:
-            depth = float(self.syntacticDepth(token))-1
+            depth = int(self.syntacticDepth(token))-1
             if token.is_sent_start:
-                inRheme = True
+                inTheme = True
             if depth == 1:
-                inRheme = False
-            if inRheme:
+                inTheme = False
+            if inTheme:
                 depths.append(depth)
         return depths
 
-    def syntacticDepthsOfThemes(self, Document: Doc):
+    def syntacticDepthsOfRhemes(self, Document: Doc):
         """
         The theme -- the part of the sentence from the main verb onward --
         is where prototypically new information tends to be put in a sentence.
@@ -1980,15 +1575,15 @@ class SyntaxAndDiscourseFeatDef(object):
         of what is likely to be new content.
         """
         depths = []
-        inRheme = True
+        inTheme = True
         for token in Document:
             depth = float(self.syntacticDepth(token))
             if token.is_sent_start:
-                inRheme = True
+                inTheme = True
             if depth == 1:
-                inRheme = False
-            if not inRheme:
-                depths.append(depth)
+                inTheme = False
+            if not inTheme:
+                depths.append(int(depth))
         return depths
 
     def syntacticProfile(self, Document: Doc, normalized=False):
@@ -2044,12 +1639,3 @@ class SyntaxAndDiscourseFeatDef(object):
 
     def syntacticProfileNormed(self, Document: Doc):
         return self.syntacticProfile(Document, normalized=True)
-
-    def sv_inversion(self, tok: Token):
-        if (tok.lemma_ in ['be', 'have', 'do']
-           or tok.tag_ == 'MD'):
-            for child in tok.children:
-                if child.dep_ in ['nsubj', 'nsubjpass', 'csubj', 'csubjpass'] \
-                   and child.i > tok.i:
-                    return True
-        return False
