@@ -65,8 +65,8 @@ class SyntaxAndDiscourseFeatDef(object):
         # to the lexical features. There is no actual parsing of the
         # sentences, except for a scan to label transition terms.
 
-        doc._.transition_word_profile = self.transitionProfile(doc)
         self.quotedText(doc)
+        doc._.transition_word_profile = self.transitionProfile(doc)
 
         return doc
 
@@ -810,6 +810,9 @@ class SyntaxAndDiscourseFeatDef(object):
                   {"name": "propn_past",
                    "getter": "prptscp",
                    "type": "docspan"},
+                  {"name": "vwp_quoted",
+                   "getter": "quot",
+                   "type": "docspan"},
                   {"name": "pastTenseScope",
                    "getter": "pt",
                    "type": "token"},
@@ -825,6 +828,7 @@ class SyntaxAndDiscourseFeatDef(object):
                   {"name": "syntacticDepth",
                    "getter": "syntacticDepth",
                    "type": "token"}]
+                   
     def add_extensions(self):
 
         """
@@ -855,8 +859,7 @@ class SyntaxAndDiscourseFeatDef(object):
         if not Token.has_extension('transition_category'):
             Token.set_extension('transition_category', default=None)
 
-        if not Token.has_extension('vwp_quoted'):
-            Token.set_extension('vwp_quoted', default=None)
+        Token.set_extension('vwp_quoted', default=False, force=True)
 
         # Document level measure: return full transition word profile data
         Span.set_extension("transition_word_profile",
@@ -885,6 +888,7 @@ class SyntaxAndDiscourseFeatDef(object):
          So we should interpret the quotedText results with some degree
          of caution.
         """
+
         inQuote = False
         for token in hdoc:
             if token.tag_ not in ['-LRB-', '-RRB-']:
@@ -967,9 +971,9 @@ class SyntaxAndDiscourseFeatDef(object):
                     i = i + len(trans)
                     continue
 
-            if tok._.vwp_quoted:
-                i += 1
-                continue
+            #if tok._.vwp_quoted:
+            #    i += 1
+            #    continue
 
             gram0 = None
             gram1 = None
@@ -1131,6 +1135,7 @@ class SyntaxAndDiscourseFeatDef(object):
                     self.transition_categories[-1]
 
             i += 1
+        print(transitionList)
         return transitionList
 
     def transitionProfile(self, document: Doc):

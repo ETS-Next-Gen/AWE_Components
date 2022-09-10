@@ -35,10 +35,10 @@ class ViewpointFeatureDef:
      argumentation.
     """
 
-    STANCE_PERSPECTIVE_PATH = \
-        resources.path('awe_lexica.json_data',
-                       'stancePerspectiveVoc.json')
-
+    with resources.path('awe_lexica.json_data',
+                        'stancePerspectiveVoc.json') as filepath:
+        STANCE_PERSPECTIVE_PATH = filepath
+ 
     stancePerspectiveVoc = {}
 
     calculatePerspective = True
@@ -47,7 +47,7 @@ class ViewpointFeatureDef:
         if not os.path.exists(self.STANCE_PERSPECTIVE_PATH):
             raise LexiconMissingError(
                 "Trying to load AWE Workbench Syntaxa and Discourse Feature \
-                 Module without supporting datafiles".format(lang)
+                 Module without supporting datafile {}".format(filepath)
             )
 
     def load_lexicon(self, lang):
@@ -65,57 +65,10 @@ class ViewpointFeatureDef:
         """
 
         for token in doc:
+            # Add attributes specified in the stance lexicon
+            self.setLexiconAttributes(token, doc)
 
-            ######################################################
-            # Register the viewpoint/stance attributes of tokens #
-            # in the document                                    #
-            ######################################################
-
-            # unigram lexicon match
-            if token.lemma_ in self.stancePerspectiveVoc \
-               and token.pos_ in self.stancePerspectiveVoc[token.lemma_]:
-                for item in (self.stancePerspectiveVoc[
-                             token.lemma_][token.pos_]):
-                    if not Token.has_extension('vwp_' + item):
-                        Token.set_extension('vwp_' + item, default=False)
-                    token._.set('vwp_' + item, True)
-
-            # for now only requiring string match for bigram or trigram
-            # entries. TO-DO: use dep_ of head of matched phrase to pick
-            # the POS
-            if token.i < len(doc) - 1:
-                bigram = token.text.lower() + '_' + doc[token.i+1].text.lower()
-                if bigram in self.stancePerspectiveVoc:
-                    for pos in self.stancePerspectiveVoc[bigram]:
-                        for item in self.stancePerspectiveVoc[bigram][pos]:
-                            if not Token.has_extension('vwp_' + item):
-                                Token.set_extension('vwp_'
-                                                    + item,
-                                                    default=False)
-                            token._.set('vwp_' + item, True)
-                            doc[token.i+1]._.set('vwp_'
-                                                 + item, True)
-            if token.i < len(doc) - 2:
-                trigram = (token.text.lower()
-                           + '_'
-                           + doc[token.i
-                           + 1].text.lower()
-                           + '_'
-                           + doc[token.i + 2].text.lower())
-                if trigram in self.stancePerspectiveVoc:
-                    for pos in self.stancePerspectiveVoc[trigram]:
-                        for item in self.stancePerspectiveVoc[trigram][pos]:
-                            if not Token.has_extension('vwp_' + item):
-                                Token.set_extension('vwp_'
-                                                    + item,
-                                                    default=False)
-                            token._.set('vwp_' + item, True)
-                            doc[token.i + 1]._.set('vwp_' + item, True)
-                            doc[token.i + 2]._.set('vwp_' + item, True)
-
-            #########################################
-            # Mark implicit subject relationships   #
-            #########################################
+            # Mark implicit subject relationships within each clause
             if isRoot(token):
                 self.markImplicitSubject(token, doc)
 
@@ -156,141 +109,221 @@ class ViewpointFeatureDef:
 
         return doc
 
-    def claimflags(self, tokens): [token._.vwp_claim for token in tokens]
+    def claimflags(self, tokens):
+        ''' Return list of words flagged as part of a claim
+        '''
+        [token._.vwp_claim for token in tokens]
 
     def discussionflags(self, tokens):
+        ''' Return list of words flagged as part of a discussion
+            of a quote/assertion
+        '''
         return [token._.vwp_discussion for token in tokens]
 
     def perspectiveflags(self, tokens):
+        ''' Return perspective information for all tokens in document
+        '''
         return [token._.vwp_perspective for token in tokens]
 
     def attributionflags(self, tokens):
+        ''' Return attribution flags for all tokens in document
+        '''
         return [token._.vwp_attribution for token in tokens]
 
     def sourceflags(self, tokens):
+        ''' Return source flags for all tokens in document
+        '''
         return [token._.vwp_source for token in tokens]
 
     def citeflags(self, tokens):
+        ''' Return citation flags for all tokens in document
+        '''
         return [token._.vwp_cite for token in tokens]
 
     def emowd(self, tokens):
+        ''' Return list of emotion words for all tokens in document
+        '''
         return [token._.vwp_emotion
                 or token._.vwp_emotional_impact
                 for token in tokens]
 
     def charwd(self, tokens):
+        ''' Return list of character trait words for all tokens in document
+        '''
         return [token._.vwp_character for token in tokens]
 
     def subj_rtg(self, tokens):
+        ''' Return subjectivity ratings for all tokens in document
+        '''
         return [token._.subjectivity for token in tokens]
 
     def mnsubj(self, tokens):
+        ''' Document level measure: mean subjectivity ratings
+        '''
         return summarize(lexFeat(tokens, 'subjectivity'),
                          summaryType=FType.MEAN)
 
     def mdsubj(self, tokens):
+        ''' Document level measure: median subjectivity ratings
+        '''
         return summarize(lexFeat(tokens, 'subjectivity'),
                          summaryType=FType.MEDIAN)
 
     def minsubj(self, tokens):
+        ''' Document level measure: minimum subjectivity ratings
+        '''
         return summarize(lexFeat(tokens, 'subjectivity'),
                          summaryType=FType.MIN)
 
     def maxsubj(self, tokens):
+        ''' Document level measure: max subjectivity ratings
+        '''
         return summarize(lexFeat(tokens, 'subjectivity'),
                          summaryType=FType.MAX)
 
     def stdsubj(self, tokens):
+        ''' Document level measure: standard deviation of subjectivity ratings
+        '''
         return summarize(lexFeat(tokens, 'subjectivity'),
                          summaryType=FType.STDEV)
 
     def pol_rtg(self, tokens):
+        ''' Return list of polarity ratings for all tokens in document
+        '''
         return [token._.polarity for token in tokens]
 
     def mnpol(self, tokens):
+        ''' Document level measure: mean polarity ratings
+        '''
         return summarize(lexFeat(tokens, 'polarity'),
                          summaryType=FType.MEAN)
 
     def mdpol(self, tokens):
+        ''' Document level measure: median polarity ratings
+        '''
         return summarize(lexFeat(tokens, 'polarity'),
                          summaryType=FType.MEDIAN)
 
     def minpol(self, tokens):
+        ''' Document level measure: min polarity ratings
+        '''
         return summarize(lexFeat(tokens, 'polarity'),
                          summaryType=FType.MIN)
 
     def mxpol(self, tokens):
+        ''' Document level measure: max polarity ratings
+        '''
         return summarize(lexFeat(tokens, 'polarity'),
                          summaryType=FType.MAX)
 
     def stdpol(self, tokens):
+        ''' Document level measure: std. dev. of polarity ratings
+        '''
         return summarize(lexFeat(tokens, 'polarity'),
                          summaryType=FType.STDEV)
 
     def snt_rtg(self, tokens):
+        ''' Return sentiment ratings for all tokens in document
+        '''
         return [token._.vwp_sentiment for token in tokens]
 
     def mnsent(self, tokens):
+        ''' Document level measure: mean sentiment ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_sentiment'),
                          summaryType=FType.MEAN)
 
     def mdsent(self, tokens):
+        ''' Document level measure: median sentiment ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_sentiment'),
                          summaryType=FType.MEDIAN)
 
     def minsent(self, tokens):
+        ''' Document level measure: min sentiment ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_sentiment'),
                          summaryType=FType.MIN)
 
     def mxsent(self, tokens):
+        ''' Document level measure: max sentiment ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_sentiment'),
                          summaryType=FType.MAX)
 
     def stdsent(self, tokens):
+        ''' Document level measure: std dev of sentiment ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_sentiment'),
                          summaryType=FType.STDEV)
 
     def snt_tone(self, tokens):
+        ''' Return tone ratings for all tokens in document
+        '''
         return [token._.vwp_tone for token in tokens]
 
     def mntone(self, tokens):
+        ''' Document level measure: mean tone ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_tone'),
                          summaryType=FType.MEAN)
 
     def mdtone(self, tokens):
+        ''' Document level measure: median tone ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_tone'),
                          summaryType=FType.MEDIAN)
 
     def mintone(self, tokens):
+        ''' Document level measure: min tone ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_tone'),
                          summaryType=FType.MIN)
 
     def mxtone(self, tokens):
+        ''' Document level measure: max tone ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_tone'),
                          summaryType=FType.MAX)
 
     def stdtone(self, tokens):
+        ''' Document level measure: std dev of tone ratings
+        '''
         return summarize(lexFeat(tokens, 'vwp_tone'),
                          summaryType=FType.STDEV)
 
     def govsubj(self, tokens):
+        ''' Return list of governing subjectgs for all tokens in document
+        '''
         return [token._.governing_subject for token in tokens]
 
     def inds(self, tokens):
+        ''' Return indirect speech status flags for all tokens in document
+        '''
         return [1 if token._.vwp_in_direct_speech
                 else 0 for token in tokens]
 
     def oral(self, tokens):
+        ''' Return proportion of text signaling oral/interactive style
+        '''
         return len([token.i for token in tokens
                     if token._.vwp_interactive])/len(tokens)
 
     def inter(self, tokens):
+        ''' Return oral/interactive style flags for all tokens in document
+        '''
         return [token.i for token in tokens if token._.vwp_interactive]
 
     def listargs(self, tokens):
+        ''' Return flag indicating that the token is part of a sequence
+            of words that has markers of subjectivity / argumentation
+        '''
         return [token.i for token in tokens if token._.vwp_argumentation]
 
     def listargs1(self, tokens):
+        ''' Return list of token indexes for words that meet the standard 
+            for being explicit argumentation words
+        '''
         return [token.i for token in tokens
                 if (token._.vwp_argument
                     or token._.vwp_certainty
@@ -311,10 +344,16 @@ class ViewpointFeatureDef:
                     or token._.vwp_argue)]
 
     def listargs2(self, tokens):
+        ''' Return proportion of words in document that belong to
+            subjective/argumentative word sequences
+        '''
         return len([token.i for token in tokens
                     if token._.vwp_argumentation]) / len(tokens)
 
     def explistargs(self, tokens):
+        ''' Return list of indexes to words that belong to argumentation
+            sequences and can be classified as subjective/argument language
+        '''
         return [token.i for token in tokens
                 if token._.vwp_argumentation
                 and (token._.vwp_argument
@@ -380,21 +419,174 @@ class ViewpointFeatureDef:
                                           token._.governing_subject
                                           ]._.vwp_communication)))))]
 
-    def __init__(self, fast: bool, lang="en"):
-        super().__init__()
-        self.package_check(lang)
-        self.load_lexicon(lang)
-        self.calculatePerspective = not fast
 
-        ##############################################################
-        # Register extensions for all the categories in the lexicon  #
-        ##############################################################
+    extensions = [{"name": "vwp_claims",
+                   "getter": "claimflags",
+                   "type": "docspan"},
+                  {"name": "vwp_discussions",
+                   "getter": "discussionflags",
+                   "type": "docspan"},
+                   {"name": "vwp_perspectives",
+                   "getter": "perspectiveflags",
+                   "type": "docspan"},
+                   {"name": "vwp_attributions",
+                   "getter": "attributionflags",
+                   "type": "docspan"},
+                   {"name": "vwp_sources",
+                   "getter": "sourceflags",
+                   "type": "docspan"},
+                   {"name": "vwp_cites",
+                   "getter": "citeflags",
+                   "type": "docspan"},
+                   {"name": "propn_egocentric",
+                   "getter": "propn_egocentric",
+                   "type": "docspan"},
+                   {"name": "propn_allocentric",
+                   "getter": "propn_allocentric",
+                   "type": "docspan"},
+                   {"name": "vwp_emotionwords",
+                   "getter": "emowd",
+                   "type": "docspan"},
+                   {"name": "vwp_characterwords",
+                   "getter": "charwd",
+                   "type": "docspan"},
+                   {"name": "subjectivity_ratings",
+                   "getter": "subj_rtg",
+                   "type": "docspan"},
+                   {"name": "mean_subjectivity",
+                   "getter": "mnsubj",
+                   "type": "docspan"},
+                   {"name": "median_subjectivity",
+                   "getter": "mdsubj",
+                   "type": "docspan"},
+                   {"name": "min_subjectivity",
+                   "getter": "minsubj",
+                   "type": "docspan"},
+                   {"name": "max_subjectivity",
+                   "getter": "maxsubj",
+                   "type": "docspan"},
+                   {"name": "stdev_subjectivity",
+                   "getter": "stdsubj",
+                   "type": "docspan"},
+                   {"name": "polarity_ratings",
+                   "getter": "pol_rtg",
+                   "type": "docspan"},
+                   {"name": "mean_polarity",
+                   "getter": "mnpol",
+                   "type": "docspan"},
+                   {"name": "median_polarity",
+                   "getter": "mdpol",
+                   "type": "docspan"},
+                   {"name": "min_polarity",
+                   "getter": "minpol",
+                   "type": "docspan"},
+                   {"name": "max_polarity",
+                   "getter": "mxpol",
+                   "type": "docspan"},
+                   {"name": "stdev_polarity",
+                   "getter": "stdpol",
+                   "type": "docspan"},
+                   {"name": "sentiment_ratings",
+                   "getter": "snt_rtg",
+                   "type": "docspan"},
+                   {"name": "mean_sentiment",
+                   "getter": "mnsent",
+                   "type": "docspan"},
+                   {"name": "median_sentiment",
+                   "getter": "mdsent",
+                   "type": "docspan"},
+                   {"name": "min_sentiment",
+                   "getter": "minsent",
+                   "type": "docspan"},
+                   {"name": "max_sentiment",
+                   "getter": "mxsent",
+                   "type": "docspan"},
+                   {"name": "stdev_sentiment",
+                   "getter": "stdsent",
+                   "type": "docspan"},
+                   {"name": "tone_ratings",
+                   "getter": "snt_tone",
+                   "type": "docspan"},
+                   {"name": "mean_tone",
+                   "getter": "mntone",
+                   "type": "docspan"},
+                   {"name": "median_tone",
+                   "getter": "mdtone",
+                   "type": "docspan"},
+                   {"name": "min_tone",
+                   "getter": "mintone",
+                   "type": "docspan"},
+                   {"name": "max_tone",
+                   "getter": "mxtone",
+                   "type": "docspan"},
+                   {"name": "stdev_tone",
+                   "getter": "stdtone",
+                   "type": "docspan"},
+                   {"name": "vwp_argumentwords",
+                   "getter": "listargs1",
+                   "type": "docspan"},
+                   {"name": "vwp_arguments",
+                   "getter": "listargs",
+                   "type": "docspan"},
+                   {"name": "vwp_explicit_arguments",
+                   "getter": "explistargs",
+                   "type": "docspan"},
+                   {"name": "propn_argument_words",
+                   "getter": "listargs2",
+                   "type": "docspan"},
+                   {"name": "vwp_interactives",
+                   "getter": "inter",
+                   "type": "docspan"},
+                   {"name": "propn_interactive",
+                   "getter": "oral",
+                   "type": "docspan"},
+                   {"name": "vwp_in_direct_speech",
+                   "getter": "inds",
+                   "type": "docspan"},
+                   {"name": "propn_direct_speech",
+                   "getter": "propn_direct_speech",
+                   "type": "docspan"},
+                   {"name": "governing_subjects",
+                   "getter": "govsubj",
+                   "type": "docspan"},
+                   ]
+
+    def add_extensions(self):
+
+        """
+         Funcion to add extensions with getter functions that allow us
+         to access the various lexicons this module is designed to support.
+        """
+
+        ##################################################
+        # Register extensions for all the categories in  # 
+        # the stance lexicon                             #
+        ##################################################
         for wrd in self.stancePerspectiveVoc:
             for tg in self.stancePerspectiveVoc[wrd]:
                 for item in self.stancePerspectiveVoc[wrd][tg]:
                     Token.set_extension('vwp_' + item,
                                         default=False,
                                         force=True)
+
+        #####################################################
+        # Register all the extensions in the extension list #
+        #####################################################
+        for extension in self.extensions:
+            if extension['type'] == 'docspan':
+                if not Doc.has_extension(extension['name']):
+                    Doc.set_extension(extension['name'],
+                                      getter=eval('self.' 
+                                                  + extension['getter']))
+                if not Span.has_extension(extension['name']):
+                    Span.set_extension(extension['name'],
+                                       getter=eval('self.' 
+                                                   + extension['getter']))
+            if extension['type'] == 'token':
+                if not Token.has_extension(extension['name']):
+                    Token.set_extension(extension['name'],
+                                        getter=eval('self.' 
+                                                    + extension['getter']))
 
         ########################
         # Viewpoint and stance #
@@ -417,52 +609,10 @@ class ViewpointFeatureDef:
         if not Token.has_extension('vwp_claim'):
             Token.set_extension('vwp_claim', default=False, force=True)
 
-        Span.set_extension('vwp_claims',
-                           getter=self.claimflags,
-                           force=True)
-        Doc.set_extension('vwp_claims',
-                          getter=self.claimflags,
-                          force=True)
-
         if not Token.has_extension('vwp_discussion'):
             Token.set_extension('vwp_discussion',
                                 default=False,
                                 force=True)
-
-        Span.set_extension('vwp_discussions',
-                           getter=self.discussionflags,
-                           force=True)
-        Doc.set_extension('vwp_discussions',
-                          getter=self.discussionflags,
-                          force=True)
-
-        Span.set_extension('vwp_perspectives',
-                           getter=self.perspectiveflags,
-                           force=True)
-        Doc.set_extension('vwp_perspectives',
-                          getter=self.perspectiveflags,
-                          force=True)
-
-        Span.set_extension('vwp_attributions',
-                           getter=self.attributionflags,
-                           force=True)
-        Doc.set_extension('vwp_attributions',
-                          getter=self.attributionflags,
-                          force=True)
-
-        Span.set_extension('vwp_sources',
-                           getter=self.sourceflags,
-                           force=True)
-        Doc.set_extension('vwp_sources',
-                          getter=self.sourceflags,
-                          force=True)
-
-        Span.set_extension('vwp_cites',
-                           getter=self.citeflags,
-                           force=True)
-        Doc.set_extension('vwp_cites',
-                          getter=self.citeflags,
-                          force=True)
 
         # Mapping of tokens to viewpoints for the whole document
         #
@@ -493,31 +643,6 @@ class ViewpointFeatureDef:
                            default=None,
                            force=True)
 
-        # doc._.assessments is a SpacyTextBlob indicator of stance-taking
-        # language. It produces a list that contains a list of stance
-        # markers plus the polarity score for each marker, on a -1 to 1
-        # scale
-
-        # Proportion of the text that takes a subjective first person
-        # perspective, as indicated by stance markers within clauses
-        # that take implicit or explicit first person viewpoint
-        Span.set_extension('propn_egocentric',
-                           getter=self.propn_egocentric,
-                           force=True)
-        Doc.set_extension('propn_egocentric',
-                          getter=self.propn_egocentric,
-                          force=True)
-
-        # Proportion of the text from a third person subjective perspective
-        # (explicitly or implicitly), as indicated by stance markers
-        # within clauses that take an explicit third person viewpoint
-        Span.set_extension('propn_allocentric',
-                           getter=self.propn_allocentric,
-                           force=True)
-        Doc.set_extension('propn_allocentric',
-                          getter=self.propn_allocentric,
-                          force=True)
-
         # Identification of propositional attitude predicates associated
         # with specific predicates. E.g., believe or think in 'I believe
         # that this is true', or 'John thinks we are on the right track'.
@@ -541,12 +666,6 @@ class ViewpointFeatureDef:
         if not Doc.has_extension('vwp_emotion_states'):
             Doc.set_extension('vwp_emotion_states', default=None)
 
-        Span.set_extension('vwp_emotionwords',
-                           getter=self.emowd,
-                           force=True)
-        Doc.set_extension('vwp_emotionwords',
-                          getter=self.emowd,
-                          force=True)
 
         # Identification of character markers that attribute
         # character attributes to agents
@@ -560,14 +679,6 @@ class ViewpointFeatureDef:
             Doc.set_extension('vwp_character_traits',
                               default=None)
 
-        # or just dump true false flags by offset
-        Span.set_extension('vwp_characterwords',
-                           getter=self.charwd,
-                           force=True)
-        Doc.set_extension('vwp_characterwords',
-                          getter=self.charwd,
-                          force=True)
-
         if not Doc.has_extension('vwp_social_awareness'):
             Doc.set_extension('vwp_social_awareness',
                               default=None)
@@ -575,123 +686,6 @@ class ViewpointFeatureDef:
         if not Doc.has_extension('concrete_details'):
             Doc.set_extension('concrete_details',
                               default=None)
-
-        #########################################################
-        # Subjectivity ratings (estimate of strength of stance) #
-        #########################################################
-
-        # List subjectivity ratings for words in the document,  #
-        # using TextBlob subjectivity scores                    #
-        Span.set_extension("subjectivity_ratings",
-                           getter=self.subj_rtg,
-                           force=True)
-        Doc.set_extension("subjectivity_ratings",
-                          getter=self.subj_rtg,
-                          force=True)
-
-        # Mean subjectivity of word tokens in the document
-        # perspective (implicitly or explicitly), using
-        # TextBlob subjectivity scores
-        Span.set_extension("mean_subjectivity",
-                           getter=self.mnsubj,
-                           force=True)
-        Doc.set_extension("mean_subjectivity",
-                          getter=self.mnsubj,
-                          force=True)
-
-        # Median subjectivity of word tokens in the document
-        # perspective (implicitly or explicitly)
-        Span.set_extension("median_subjectivity",
-                           getter=self.mdsubj,
-                           force=True)
-        Doc.set_extension("median_subjectivity",
-                          getter=self.mdsubj,
-                          force=True)
-
-        # Min subjectivity of word tokens in the document
-        # perspective (implicitly or explicitly)
-        Span.set_extension("min_subjectivity",
-                           getter=self.minsubj,
-                           force=True)
-        Doc.set_extension("min_subjectivity",
-                          getter=self.minsubj,
-                          force=True)
-
-        # Max subjectivity of word tokens in the document
-
-        # perspective (implicitly or explicitly)
-        Span.set_extension("max_subjectivity",
-                           getter=self.maxsubj,
-                           force=True)
-        Doc.set_extension("max_subjectivity",
-                          getter=self.maxsubj,
-                          force=True)
-
-        # St Dev subjectivity of word tokens in the document
-        # perspective (implicitly or explicitly)
-        Span.set_extension("stdev_subjectivity",
-                           getter=self.stdsubj,
-                           force=True)
-        Doc.set_extension("stdev_subjectivity",
-                          getter=self.stdsubj,
-                          force=True)
-
-        ######################
-        # Sentiment/Polarity #
-        ######################
-
-        # TextBlob sentiment ratings #
-
-        # List polarity (sentiment positive/negative) ratings
-        # for words in the document, using TextBlob polarity scores
-        Doc.set_extension("polarity_ratings",
-                          getter=self.pol_rtg,
-                          force=True)
-
-        # Mean polarity (positive/negative sentiment)
-        # of word tokens in the document
-        Span.set_extension("mean_polarity",
-                           getter=self.mnpol,
-                           force=True)
-        Doc.set_extension("mean_polarity",
-                          getter=self.mnpol,
-                          force=True)
-
-        # Median polarity (positive/negative sentiment)
-        # of word tokens in the document
-        Span.set_extension("median_polarity",
-                           getter=self.mdpol,
-                           force=True)
-        Doc.set_extension("median_polarity",
-                          getter=self.mdpol,
-                          force=True)
-
-        # Min polarity (positive/negative sentiment)
-        # of word tokens in the document
-        Span.set_extension("min_polarity",
-                           getter=self.minpol,
-                           force=True)
-        Doc.set_extension("min_polarity",
-                          getter=self.minpol,
-                          force=True)
-
-        # Max polarity (positive/negative sentiment) of
-        # word tokens in the document
-        Span.set_extension("max_polarity",
-                           getter=self.mxpol,
-                           force=True)
-        Doc.set_extension("max_polarity",
-                          getter=self.mxpol,
-                          force=True)
-
-        # St Dev polarity (positive/negative sentiment)
-        # of word tokens in the document
-        Span.set_extension("stdev_polarity",
-                           getter=self.stdpol,
-                           force=True)
-        Doc.set_extension("stdev_polarity",
-                          getter=self.stdpol,
-                          force=True)
 
         # SentiWord sentiment polarity ratings #
 
@@ -705,157 +699,12 @@ class ViewpointFeatureDef:
             Token.set_extension('vwp_tone',
                                 default=None)
 
-        # List polarity (sentiment positive/negative ratings
-        # for words in the document, using SentiWord polarity
-        # adjusted for negation
-        Span.set_extension("sentiment_ratings",
-                           getter=self.snt_rtg,
-                           force=True)
-        Doc.set_extension("sentiment_ratings",
-                          getter=self.snt_rtg,
-                          force=True)
-
-        # Mean Sentiword polarity (positive/negative sentiment)
-        # of word tokens in the document
-        Span.set_extension("mean_sentiment",
-                           getter=self.mnsent,
-                           force=True)
-        Doc.set_extension("mean_sentiment",
-                          getter=self.mnsent,
-                          force=True)
-
-        # Median Sentiword polarity (positive/negative sentiment)
-        # of word tokens in the document
-        Span.set_extension("median_sentiment",
-                           getter=self.mdsent,
-                           force=True)
-        Doc.set_extension("median_sentiment",
-                          getter=self.mdsent,
-                          force=True)
-
-        # Min Sentiword polarity (positive/negative sentiment)
-        # of word tokens in the document
-        Span.set_extension("min_sentiment",
-                           getter=self.minsent,
-                           force=True)
-        Doc.set_extension("min_sentiment",
-                          getter=self.minsent,
-                          force=True)
-
-        # Max Sentiword polarity (positive/negative sentiment) of
-        # word tokens in the document
-        Span.set_extension("max_sentiment",
-                           getter=self.mxsent,
-                           force=True)
-        Doc.set_extension("max_sentiment",
-                          getter=self.mxsent,
-                          force=True)
-
-        # St Dev Sentiword polarity (positive/negative sentiment)
-        # of word tokens in the document
-        Span.set_extension("stdev_sentiment",
-                           getter=self.stdsent,
-                           force=True)
-        Doc.set_extension("stdev_sentiment",
-                          getter=self.stdsent,
-                          force=True)
-
-        # List tone(sentiment positive/negative ratings for words
-        # in the document, using combined SentiWord + polarity
-        # adjusted for negation
-        Span.set_extension("tone_ratings",
-                           getter=self.snt_tone,
-                           force=True)
-        Doc.set_extension("tone_ratings",
-                          getter=self.snt_tone,
-                          force=True)
-
-        # Mean Sentiword polarity (positive/negative tone)
-        # of word tokens in the document
-        Span.set_extension("mean_tone",
-                           getter=self.mntone,
-                           force=True)
-        Doc.set_extension("mean_tone",
-                          getter=self.mntone,
-                          force=True)
-
-        # Median Sentiword polarity (positive/negative tone)
-        # of word tokens in the document
-        Span.set_extension("median_tone",
-                           getter=self.mdtone,
-                           force=True)
-        Doc.set_extension("median_tone",
-                          getter=self.mdtone,
-                          force=True)
-
-        # Min Sentiword polarity (positive/negative tone)
-        # of word tokens in the document
-        Span.set_extension("min_tone",
-                           getter=self.mintone,
-                           force=True)
-        Doc.set_extension("min_tone",
-                          getter=self.mintone,
-                          force=True)
-
-        # Max Sentiword polarity (positive/negative tone)
-        # of word tokens in the document
-        Span.set_extension("max_tone",
-                           getter=self.mxtone,
-                           force=True)
-        Doc.set_extension("max_tone",
-                          getter=self.mxtone,
-                          force=True)
-
-        # St Dev Sentiword polarity (positive/negative tone)
-        # of word tokens in the document
-        Span.set_extension("stdev_tone",
-                           getter=self.stdtone,
-                           force=True)
-        Doc.set_extension("stdev_tone",
-                          getter=self.stdtone,
-                          force=True)
-
         ##########################
         # Argumentative style    #
         ##########################
 
         if not Token.has_extension('vwp_argumentation'):
             Token.set_extension('vwp_argumentation', default=False)
-
-        # List of token offsets for the base list of explicit argument words
-        Span.set_extension('vwp_argumentwords',
-                           getter=self.listargs1,
-                           force=True)
-        Doc.set_extension('vwp_argumentwords',
-                          getter=self.listargs1,
-                          force=True)
-
-        # List of token offsets for argumentation language combined
-        # with other academic language
-        Span.set_extension('vwp_arguments',
-                           getter=self.listargs,
-                           force=True)
-        Doc.set_extension('vwp_arguments',
-                          getter=self.listargs,
-                          force=True)
-
-        # List of token offsets that count as explcit argumentation
-        # language (in context with other academic language)
-        Span.set_extension('vwp_explicit_arguments',
-                           getter=self.explistargs,
-                           force=True)
-        Doc.set_extension('vwp_explicit_arguments',
-                          getter=self.explistargs,
-                          force=True)
-
-        # Proportion of words in the text consisting of explicit argument
-        # words or phrases
-        Span.set_extension('propn_argument_words',
-                           getter=self.listargs2,
-                           force=True)
-        Doc.set_extension('propn_argument_words',
-                          getter=self.listargs2,
-                          force=True)
 
         #####################
         # Interactive Style #
@@ -864,22 +713,6 @@ class ViewpointFeatureDef:
         # Flag identifying words that cue an interactive style
         if not Token.has_extension('vwp_interactive'):
             Token.set_extension('vwp_interactive', default=False)
-
-        # List of spans that contain typical interactive language
-        Span.set_extension('vwp_interactives',
-                           getter=self.inter,
-                           force=True)
-        Doc.set_extension('vwp_interactives',
-                          getter=self.inter,
-                          force=True)
-
-        # proportion of words in the text that match speech register patterns
-        Span.set_extension('propn_interactive',
-                           getter=self.oral,
-                           force=True)
-        Doc.set_extension('propn_interactive',
-                          getter=self.oral,
-                          force=True)
 
         if not Doc.has_extension('nominalReferences'):
             Doc.set_extension('nominalReferences', default=None)
@@ -899,25 +732,9 @@ class ViewpointFeatureDef:
             Token.set_extension('vwp_in_direct_speech',
                                 default=False)
 
-        Span.set_extension('vwp_in_direct_speech',
-                           getter=self.inds,
-                           force=True)
-
-        Doc.set_extension('vwp_in_direct_speech',
-                          getter=self.inds,
-                          force=True)
-
         # List of spans that count as direct speech
         if not Doc.has_extension('vwp_direct_speech_spans'):
             Doc.set_extension('vwp_direct_speech_spans', default=[])
-
-        # Proportion of the text marked as direct speech
-        Span.set_extension("propn_direct_speech",
-                           getter=self.propn_direct_speech,
-                           force=True)
-        Doc.set_extension("propn_direct_speech",
-                          getter=self.propn_direct_speech,
-                          force=True)
 
         # Flag identifying a nominal that identifies the
         # speaker referenced as 'I/me/my/mine' within a
@@ -956,27 +773,6 @@ class ViewpointFeatureDef:
         if not Token.has_extension('governing_subject'):
             Token.set_extension('governing_subject', default=None)
 
-        # Pointer to the governing subject for each token in the doc,
-        # if applicable.
-        if not Doc.has_extension('governing_subjects'):
-            # List of the offset of the token that functions as
-            # the grammatical subject governing the domain in
-            # which this token is found
-
-            # We use this relationship to find the entity to
-            # which emotional state and character trait predicates
-            # apply, but it is potentially quite useful for
-            # reconstructing other predicate/argument relations,
-            # especially since it was constructed to pay attention
-            # to the special cases for subject binding relations
-            # represented by raising verbs and tough predicates.
-            Span.set_extension('governing_subjects',
-                               getter=self.govsubj,
-                               force=True)
-            Doc.set_extension('governing_subjects',
-                              getter=self.govsubj,
-                              force=True)
-
         # A token's WordNet usage domain.
         if not Token.has_extension('usage'):
             Token.set_extension('usage', default=None)
@@ -985,8 +781,61 @@ class ViewpointFeatureDef:
         if not Doc.has_extension('vwp_tense_changes'):
             Doc.set_extension('vwp_tense_changes', default=None)
 
+
+    def __init__(self, fast: bool, lang="en"):
+        super().__init__()
+        self.package_check(lang)
+        self.load_lexicon(lang)
+        self.calculatePerspective = not fast
+        self.add_extensions()
+
+
     def synsets(self, token):
         return wordnet.synsets(token.orth_)
+
+    def setLexiconAttributes(self, token, doc):
+
+        # unigram lexicon match
+        if token.lemma_ in self.stancePerspectiveVoc \
+           and token.pos_ in self.stancePerspectiveVoc[token.lemma_]:
+            for item in (self.stancePerspectiveVoc[
+                         token.lemma_][token.pos_]):
+                if not Token.has_extension('vwp_' + item):
+                    Token.set_extension('vwp_' + item, default=False)
+                token._.set('vwp_' + item, True)
+
+        # for now only requiring string match for bigram or trigram
+        # entries. TO-DO: use dep_ of head of matched phrase to pick
+        # the POS
+        if token.i < len(doc) - 1:
+            bigram = token.text.lower() + '_' + doc[token.i+1].text.lower()
+            if bigram in self.stancePerspectiveVoc:
+                for pos in self.stancePerspectiveVoc[bigram]:
+                    for item in self.stancePerspectiveVoc[bigram][pos]:
+                        if not Token.has_extension('vwp_' + item):
+                            Token.set_extension('vwp_'
+                                                + item,
+                                                default=False)
+                        token._.set('vwp_' + item, True)
+                        doc[token.i+1]._.set('vwp_'
+                                                 + item, True)
+        if token.i < len(doc) - 2:
+            trigram = (token.text.lower()
+                       + '_'
+                       + doc[token.i
+                       + 1].text.lower()
+                       + '_'
+                       + doc[token.i + 2].text.lower())
+            if trigram in self.stancePerspectiveVoc:
+                for pos in self.stancePerspectiveVoc[trigram]:
+                    for item in self.stancePerspectiveVoc[trigram][pos]:
+                        if not Token.has_extension('vwp_' + item):
+                            Token.set_extension('vwp_'
+                                                + item,
+                                                default=False)
+                        token._.set('vwp_' + item, True)
+                        doc[token.i + 1]._.set('vwp_' + item, True)
+                        doc[token.i + 2]._.set('vwp_' + item, True)
 
     def viewpointPredicate(self, token):
         """

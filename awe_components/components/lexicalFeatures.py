@@ -174,7 +174,6 @@ class LexicalFeatureDef(object):
                              and not item.startswith('dis')
                              and not item.startswith('mis')
                              and not item.startswith('anti'))):
-                    print('adding sentiment estimate for ',item)
                     sentlist.append(self.sentiment[itemkey])
 
         if key not in self.sentiment or abs(self.sentiment[key]) <= .2:
@@ -215,10 +214,13 @@ class LexicalFeatureDef(object):
                 else:
                     key = self.nlp.vocab.strings.add(word)
  
-                if type(lexicon) == list:
-                    lexicon.append(key)
+                if lexicon_name == 'family_lists':
+                    lexicon[word] = temp[word]
                 else:
-                    lexicon[key] = temp[word]
+                    if type(lexicon) == list:
+                        lexicon.append(key)
+                    else:
+                        lexicon[key] = temp[word]
                 
                 # Note: this code assumes that we already
                 # loaded the family_idx and family_list lexicons
