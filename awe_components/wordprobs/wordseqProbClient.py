@@ -39,4 +39,3 @@ class WordseqProbClient:
 
 if __name__ == '__main__':
     wsc = WordseqProbClient()
-

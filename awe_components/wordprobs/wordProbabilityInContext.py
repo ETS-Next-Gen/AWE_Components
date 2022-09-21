@@ -46,4 +46,3 @@ class WordProbabilityInContext(object):
 
 
 wpic = WordProbabilityInContext()
-

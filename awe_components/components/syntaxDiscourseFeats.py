@@ -218,8 +218,8 @@ class SyntaxAndDiscourseFeatDef(object):
                          summaryType=FType.MIN)
 
     def sdSlideCoh(self, tokens):
-        ''' Std. Dev. of cohesion cosine between sliding windows of ten words before
-            and after any given point in the document
+        ''' Std. Dev. of cohesion cosine between sliding windows of
+            ten words before and after any given point in the document
         '''
         return summarize(self.slidingWindowCohesions(tokens),
                          summaryType=FType.STDEV)
@@ -254,7 +254,8 @@ class SyntaxAndDiscourseFeatDef(object):
                          summaryType=FType.MIN)
 
     def sdCorefCL(self, tokens):
-        ''' Std. Dev. of length of chains of coreferring terms detected by Coreferee
+        ''' Std. Dev. of length of chains of coreferring terms
+            detected by Coreferee
         '''
         return summarize(self.corefChainLengths(tokens),
                          summaryType=FType.STDEV)
@@ -330,7 +331,8 @@ class SyntaxAndDiscourseFeatDef(object):
                          summaryType=FType.MIN)
 
     def stdsqsentlen(self, tokens):
-        ''' Std. dev. of mean square root of length of sentences in the document
+        ''' Std. dev. of mean square root of length of sentences
+            in the document
         '''
         return summarize(tokens._.sqrt_sentence_lengths,
                          summaryType=FType.STDEV)
@@ -348,19 +350,22 @@ class SyntaxAndDiscourseFeatDef(object):
                          summaryType=FType.MEDIAN)
 
     def mxword2root(self, tokens):
-        ''' Maxn theme length (no words from sentence start to root word)
+        ''' Maxn theme length (no words from sentence start to
+            root word)
         '''
         return summarize(self.sentenceThemes(tokens),
                          summaryType=FType.MAX)
 
     def minword2root(self, tokens):
-        ''' Min theme length (no words from sentence start to root word)S
+        ''' Min theme length (no words from sentence start to
+            root word)S
         '''
         return summarize(self.sentenceThemes(tokens),
                          summaryType=FType.MIN)
 
     def sdword2root(self, tokens):
-        ''' Std. dev. of theme length (no words from sentence start to root word)
+        ''' Std. dev. of theme length (no words from sentence start
+            to root word)
         '''
         return summarize(self.sentenceThemes(tokens),
                          summaryType=FType.STDEV)
@@ -749,7 +754,7 @@ class SyntaxAndDiscourseFeatDef(object):
                    "type": "docspan"},
                   {"name": "medianThemeDepth",
                    "getter": "mdThemeDepth",
-                    "type": "docspan"},
+                   "type": "docspan"},
                   {"name": "maxThemeDepth",
                    "getter": "mxThemeDepth",
                    "type": "docspan"},
@@ -828,7 +833,7 @@ class SyntaxAndDiscourseFeatDef(object):
                   {"name": "syntacticDepth",
                    "getter": "syntacticDepth",
                    "type": "token"}]
-                   
+
     def add_extensions(self):
 
         """
@@ -840,16 +845,16 @@ class SyntaxAndDiscourseFeatDef(object):
             if extension['type'] == 'docspan':
                 if not Doc.has_extension(extension['name']):
                     Doc.set_extension(extension['name'],
-                                      getter=eval('self.' 
+                                      getter=eval('self.'
                                                   + extension['getter']))
                 if not Span.has_extension(extension['name']):
                     Span.set_extension(extension['name'],
-                                       getter=eval('self.' 
+                                       getter=eval('self.'
                                                    + extension['getter']))
             if extension['type'] == 'token':
                 if not Token.has_extension(extension['name']):
                     Token.set_extension(extension['name'],
-                                        getter=eval('self.' 
+                                        getter=eval('self.'
                                                     + extension['getter']))
         # By default, we do not classify words as transition terms
         # We set the flag true when we identif them later
@@ -868,7 +873,6 @@ class SyntaxAndDiscourseFeatDef(object):
         Doc.set_extension("transition_word_profile",
                           default=None,
                           force=True)
-
 
     def __init__(self, lang="en"):
         super().__init__()
@@ -971,10 +975,6 @@ class SyntaxAndDiscourseFeatDef(object):
                     i = i + len(trans)
                     continue
 
-            #if tok._.vwp_quoted:
-            #    i += 1
-            #    continue
-
             gram0 = None
             gram1 = None
             gram2 = None
@@ -1068,9 +1068,12 @@ class SyntaxAndDiscourseFeatDef(object):
                      self.transition_categories[
                          self.transition_terms[gram1]]])
             elif (gram0 in self.transition_terms
-                  and document[i].tag_ not in adj_noun_or_verb):
+                  and (document[i].tag_ not in adj_noun_or_verb
+                       or document[i].tag_ == 'NNP')):
                 # basically we require one-word transition terms
-                # to be adverbs or function words
+                # to be adverbs or function words, with the caveat
+                # that the parser will sometimes falsely call capitalized
+                # transition words proper nouns
                 document[i]._.transition = True
                 if gram0 in '?!':
                     transitionList.append(
@@ -1135,7 +1138,6 @@ class SyntaxAndDiscourseFeatDef(object):
                     self.transition_categories[-1]
 
             i += 1
-        print(transitionList)
         return transitionList
 
     def transitionProfile(self, document: Doc):
@@ -1192,18 +1194,18 @@ class SyntaxAndDiscourseFeatDef(object):
                         continue
                     if j >= len(Document) or Document[j] is None:
                         continue
-                    if (Document[i].has_vector
-                        and not Document[i].is_stop
-                        and Document[i].tag_ in content_tags):
+                    if Document[i].has_vector \
+                       and not Document[i].is_stop \
+                       and Document[i].tag_ in content_tags:
                         left.append(Document[i].vector)
                     elif Document[i].tag_ in possessive_or_determiner:
                         Resolution = ResolveReference(Document[i], Document)
                         if Resolution is not None and len(Resolution) > 0:
                             left.append(sum([Document[item].vector
                                              for item in Resolution]))
-                    if (Document[j].has_vector
-                        and not Document[j].is_stop
-                        and Document[j].tag_ in content_tags):
+                    if Document[j].has_vector \
+                       and not Document[j].is_stop \
+                       and Document[j].tag_ in content_tags:
                         right.append(Document[j].vector)
                     elif Document[j].tag_ in possessive_or_determiner:
                         Resolution = ResolveReference(Document[j], Document)
@@ -1376,18 +1378,18 @@ class SyntaxAndDiscourseFeatDef(object):
                     continue
                 if Document[i + j + 10] is None:
                     continue
-                if (Document[i + j].has_vector
-                    and not Document[i + j].is_stop
-                    and Document[i + j].tag_ in content_tags):
+                if Document[i + j].has_vector \
+                   and not Document[i + j].is_stop \
+                   and Document[i + j].tag_ in content_tags:
                     left.append(Document[i + j].vector)
                 elif Document[i + j].tag_ in possessive_or_determiner:
                     Resolution = Document[i + j]._.coref_chains.resolve(
                         Document[i + j])
                     if Resolution is not None and len(Resolution) > 0:
                         left.append(sum([item.vector for item in Resolution]))
-                if (Document[i + j + 10].has_vector
-                    and not Document[i + j + 10].is_stop
-                    and Document[i + j + 10].tag_ in content_tags):
+                if Document[i + j + 10].has_vector \
+                   and not Document[i + j + 10].is_stop \
+                   and Document[i + j + 10].tag_ in content_tags:
                     right.append(Document[i + j + 10].vector)
                 elif Document[i + j + 10].tag_ in possessive_or_determiner:
                     Resolution = Document._.coref_chains.resolve(
@@ -1405,7 +1407,7 @@ class SyntaxAndDiscourseFeatDef(object):
         sentLens = [len(sent) for sent in tokens.sents]
         return sentLens
 
-    def sentenceThemes(self, tokens: Doc): ####
+    def sentenceThemes(self, tokens: Doc):
         """
         Calculate the length of the theme (number of words before the main
         verb) in a sentence, using is_sent_start to locate the start of a

@@ -7,20 +7,25 @@ import spacy
 from spacy.tokens import Token, Doc
 from spacy.language import Language
 
+
 def setExtensions():
-    Doc.set_extension("prompt", default=None,force=True)
+    Doc.set_extension("prompt", default=None, force=True)
     Doc.set_extension("prompt_language", default=None, force=True)
     Doc.set_extension("prompt_related", default=None, force=True)
     Doc.set_extension("core_sentences", default=None, force=True)
     Doc.set_extension("extended_core_sentences", default=None, force=True)
     Doc.set_extension("content_segments", default=None, force=True)
 
+
 @Language.component("contentsegmentation")
 def contentsegmentation(doc):
     if doc._._clinfo is not None:
         setExtensions()
-        core_sentences, extended_core_sentences, \
-            elaboration_sentences, pclusters, plemmas = extract_content_segments(None, doc)
+        core_sentences, \
+            extended_core_sentences, \
+            elaboration_sentences, \
+            pclusters, \
+            plemmas = extract_content_segments(None, doc)
 
         doc._.core_sentences = core_sentences
         doc._.extended_core_sentences = extended_core_sentences
@@ -28,6 +33,7 @@ def contentsegmentation(doc):
         doc._.prompt_related = pclusters
         doc._.prompt_language = plemmas
     return doc
+
 
 def countDetails(start, end, doc, plemmas):
     segStart = start
@@ -504,5 +510,22 @@ def extract_content_segments(prompt, doc):
     if len(extras) > 0:
         for item in extras:
             final_elaboration.append(item)
+
+    # clean up to eliminate words that are not true content-focused
+    # words from the plemmas display
+    for token in doc:
+        if token.text.lower() in plemmas \
+           and (token.is_stop
+                or token._.vwp_argumentation):
+            plemmas.remove(token.text.lower())
+        if token.lemma_ in plemmas \
+           and (token.is_stop
+                or token._.vwp_argumentation):
+            plemmas.remove(token.lemma_)
+        if token._.root in plemmas \
+           and (token.is_stop
+                or token._.vwp_argumentation):
+            plemmas.remove(token._.root)
+
     return core_sentences, extended_core_sentences, \
         final_elaboration, pclusters, plemmas

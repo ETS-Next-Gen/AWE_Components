@@ -10,4 +10,3 @@ if __name__ == '__main__':
     download('en_core_web_lg')
     download('en_core_web_trf')
     os.system("python3 -m coreferee install en")
-

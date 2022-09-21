@@ -47,7 +47,7 @@ class LexicalFeatureDef(object):
 
     with resources.path('awe_lexica.json_data',
                         'syllables.json') as file:
-        SYLLABLES_PATH = file                          
+        SYLLABLES_PATH = file
 
     with resources.path('awe_lexica.json_data',
                         'roots.json') as file:
@@ -82,7 +82,7 @@ class LexicalFeatureDef(object):
         LATINATE_PATH = file
 
     with resources.path('awe_lexica.json_data',
-                       'academic.json') as file:
+                        'academic.json') as file:
         ACADEMIC_PATH = file
 
     with resources.path('awe_lexica.json_data',
@@ -196,12 +196,12 @@ class LexicalFeatureDef(object):
                and rootkey in self.sentiment \
                and abs(self.sentiment[rootkey]) > .2:
                 self.sentiment[key] = self.sentiment[rootkey]
- 
+
     def load_lexicons(self):
 
         for path in self.datapaths:
             lexicon_name = \
-                path['pathname'].replace('_PATH','').lower()
+                path['pathname'].replace('_PATH', '').lower()
             lexicon = eval('self.' + lexicon_name)
 
             # To save memory, use the spacy string hash as key,
@@ -213,7 +213,7 @@ class LexicalFeatureDef(object):
                     key = self.nlp.vocab.strings[word]
                 else:
                     key = self.nlp.vocab.strings.add(word)
- 
+
                 if lexicon_name == 'family_lists':
                     lexicon[word] = temp[word]
                 else:
@@ -221,7 +221,7 @@ class LexicalFeatureDef(object):
                         lexicon.append(key)
                     else:
                         lexicon[key] = temp[word]
-                
+
                 # Note: this code assumes that we already
                 # loaded the family_idx and family_list lexicons
                 if lexicon_name == 'sentiment':
@@ -229,9 +229,8 @@ class LexicalFeatureDef(object):
 
     def __call__(self, doc):
         # We're using this component as a wrapper to add access
-        # to the lexical features. There is no actual parsing of the
-        # sentences except for handling of a few special cases for
-        # specific features.
+        # to the lexical features. There is no actual processing of the
+        # sentences.
 
         return doc
 
@@ -340,13 +339,15 @@ class LexicalFeatureDef(object):
         return [self.ns(token) for token in tokens]
 
     def mns(self, tokens):
-        ''' Document level measure: mean number of syllables in a content token
+        ''' Document level measure: mean number of syllables in
+            a content token
         '''
         return summarize(lexFeat(tokens, 'nSyll'),
                          summaryType=FType.MEAN)
 
     def mdns(self, tokens):
-        ''' Document level measure: median number of syllables in a content token
+        ''' Document level measure: median number of syllables in
+            a content token
         '''
         return summarize(lexFeat(tokens, 'nSyll'),
                          summaryType=FType.MEDIAN)
@@ -359,7 +360,7 @@ class LexicalFeatureDef(object):
                          summaryType=FType.MAX)
 
     def minns(self, tokens):
-        ''' Document level measure: min number of syllables in 
+        ''' Document level measure: min number of syllables in
             a content token
         '''
         return summarize(lexFeat(tokens, 'nSyll'),
@@ -449,7 +450,7 @@ class LexicalFeatureDef(object):
     def fms(self, token):
         ''' Word Family Sizes as measured by slightly modified version of #
             Paul Nation's word family list.                               #
-        
+
           The family size flag identifies the number of morphologically
           related words in this word's word family. Words with larger
           word families have been shown to be, on average, easier
@@ -457,7 +458,8 @@ class LexicalFeatureDef(object):
         '''
         if self.nlp.vocab.strings[token.text.lower()] in self.family_sizes \
            and alphanum_word(token.text):
-            return self.family_sizes[self.nlp.vocab.strings[token.text.lower()]]
+            return self.family_sizes[
+                self.nlp.vocab.strings[token.text.lower()]]
         else:
             return None
 
@@ -491,7 +493,8 @@ class LexicalFeatureDef(object):
                          summaryType=FType.MIN)
 
     def stdfms(self, tokens):
-        ''' Document level measure: st dev of word family size for content words
+        ''' Document level measure: st dev of word family size
+            for content words
         '''
         return summarize(lexFeat(tokens, 'family_size'),
                          summaryType=FType.STDEV)
@@ -703,9 +706,9 @@ class LexicalFeatureDef(object):
            and 'ROOT2_Freq_HAL' in \
                self.morpholex[
                    self.nlp.vocab.strings[token.lemma_]]:
-                return self.morpholex[
-                    self.nlp.vocab.strings[
-                        token.lemma_]]['ROOT2_Freq_HAL']
+            return self.morpholex[self.nlp.vocab.strings[
+                                  token.lemma_]
+                                  ]['ROOT2_Freq_HAL']
         else:
             return None
 
@@ -864,10 +867,10 @@ class LexicalFeatureDef(object):
                          summaryType=FType.STDEV)
 
     def rpfmf(self, token):
-       ''' The percentage of words more frequent in the family size
-            is a measure of vocabulary difficulty
-       '''
-       if token.lemma_ is not None \
+        ''' The percentage of words more frequent in the family size
+             is a measure of vocabulary difficulty
+        '''
+        if token.lemma_ is not None \
            and token.lemma_ in self.nlp.vocab.strings \
            and alphanum_word(token.lemma_) \
            and self.nlp.vocab.strings[token.lemma_] \
@@ -875,8 +878,8 @@ class LexicalFeatureDef(object):
             return self.morpholex[
                 self.nlp.vocab.strings[
                     token.lemma_]]['ROOT1_PFMF']
-       else:
-           return None
+        else:
+            return None
 
     def rfszrt(self, tokens):
         ''' Document level measure: list of pfmfs for the first root for
@@ -1000,7 +1003,8 @@ class LexicalFeatureDef(object):
                          summaryType=FType.MIN)
 
     def stdfrq(self, tokens):
-        ''' Document level measure: std. dev. of token frequency for content words
+        ''' Document level measure: std. dev. of token frequency
+            for content words
         '''
         return summarize(lexFeat(tokens, 'token_freq'),
                          summaryType=FType.STDEV)
@@ -1034,8 +1038,8 @@ class LexicalFeatureDef(object):
                          summaryType=FType.MIN)
 
     def stdlmfrq(self, tokens):
-        ''' Document level measure: std. dev of  lemma frequency for content words
-            (counting lemma base frequency)
+        ''' Document level measure: std. dev of  lemma frequency
+            for content words (counting lemma base frequency)
         '''
         return summarize(lexFeat(tokens, 'lemma_freq'),
                          summaryType=FType.STDEV)
@@ -1069,8 +1073,8 @@ class LexicalFeatureDef(object):
                          summaryType=FType.MIN)
 
     def stdrtfrq(self, tokens):
-        ''' Document level measure: std. dev of root frequency for content words
-            (counting lemma base frequency)
+        ''' Document level measure: std. dev of root frequency
+            for content words (counting lemma base frequency)
         '''
         return summarize(lexFeat(tokens, 'max_freq'),
                          summaryType=FType.STDEV)
@@ -1591,7 +1595,7 @@ class LexicalFeatureDef(object):
                   {"name": "location",
                    "getter": "isloc",
                    "type": "token"}
-                 ]
+                  ]
 
     def add_extensions(self):
 
@@ -1604,18 +1608,17 @@ class LexicalFeatureDef(object):
             if extension['type'] == 'docspan':
                 if not Doc.has_extension(extension['name']):
                     Doc.set_extension(extension['name'],
-                                      getter=eval('self.' 
+                                      getter=eval('self.'
                                                   + extension['getter']))
                 if not Span.has_extension(extension['name']):
                     Span.set_extension(extension['name'],
-                                       getter=eval('self.' 
+                                       getter=eval('self.'
                                                    + extension['getter']))
             if extension['type'] == 'token':
                 if not Token.has_extension(extension['name']):
                     Token.set_extension(extension['name'],
-                                        getter=eval('self.' 
+                                        getter=eval('self.'
                                                     + extension['getter']))
-
 
     attribute = wordnet.synsets('attribute')[1]
     attribute2 = wordnet.synsets('attribute')[2]
@@ -1627,6 +1630,7 @@ class LexicalFeatureDef(object):
     vegetation = wordnet.synsets('vegetation')[0]
     gathering = wordnet.synsets('assemblage')[0]
     magnitude = wordnet.synsets('magnitude')[0]
+    cognition = wordnet.synsets('cognition')[0]
 
     def abstract_trait(self, token):
 
@@ -1652,22 +1656,24 @@ class LexicalFeatureDef(object):
                     hypernyms = set([i for i
                                      in synsets[0].closure(lambda s:
                                                            s.hypernyms())])
-                    if len(hypernyms)>0 and \
-                       (self.attribute in hypernyms \
-                        or self.quantity in hypernyms \
-                        or self.part in hypernyms \
-                        or self.possession in hypernyms \
-                        or (self.group[0] in hypernyms
-                            and self.vegetation not in hypernyms) \
-                        or self.gathering in hypernyms \
-                        or self.magnitude in hypernyms \
-                        or synsets[0] == self.attribute \
-                        or synsets[0] == self.quantity \
-                        or synsets[0] == self.part \
-                        or synsets[0] == self.possession \
-                        or synsets[0] == self.group[0] \
-                        or synsets[0] == self.gathering \
-                        or synsets[0] == self.magnitude):
+                    if len(hypernyms) > 0 \
+                       and (self.attribute in hypernyms
+                            or self.quantity in hypernyms
+                            or self.part in hypernyms
+                            or self.possession in hypernyms
+                            or (self.group[0] in hypernyms
+                                and self.vegetation not in hypernyms)
+                            or self.gathering in hypernyms
+                            or self.magnitude in hypernyms
+                            or self.cognition in hypernyms
+                            or synsets[0] == self.attribute
+                            or synsets[0] == self.quantity
+                            or synsets[0] == self.part
+                            or synsets[0] == self.possession
+                            or synsets[0] == self.group[0]
+                            or synsets[0] == self.gathering
+                            or synsets[0] == self.magnitude
+                            or synsets[0] == self.cognition):
                         self.abstractTraitNouns[token.text.lower()] = True
                         return True
             except Exception as e:
@@ -1686,6 +1692,8 @@ class LexicalFeatureDef(object):
     race = wordnet.synsets("race")
     population = wordnet.synsets("population")
     hoi_polloi = wordnet.synsets("hoi_polloi")
+    mind = wordnet.synsets("mind")
+    thought = wordnet.synsets("thought")
 
     def is_animate(self, token):
         """
@@ -1698,8 +1706,16 @@ class LexicalFeatureDef(object):
          hierarchy in theme position
         """
 
-        if token.text.lower() in self.animateNouns:
+        if token.pos_ == 'NOUN' \
+           and token.text.lower() in self.animateNouns:
             return self.animateNouns[token.text.lower()]
+
+        # exceptional cases do need to be listed out unfortunately.
+        # The problem is that anaphoric elements like 'other'
+        # aren't handled currently by coreferee
+        if token.pos_ == 'NOUN' \
+           and token.lemma_ in ['other']:
+            return True
 
         if token.ent_type_ == 'PERSON' \
            or token.ent_type_ == 'GPE' \
@@ -1718,20 +1734,22 @@ class LexicalFeatureDef(object):
            or token.tag_ in possessive_or_determiner \
            and token.doc._.coref_chains is not None:
             try:
-                antecedents = token.doc._.coref_chains.resolve(token)
+                antecedents = [token.doc[index]
+                               for index
+                               in ResolveReference(token,
+                                                   token.doc)]
 
                 if antecedents is not None:
                     for antecedent in antecedents:
-                        return self.is_animate(antecedent)
+                        if antecedent.i != token.i:
+                            return self.is_animate(antecedent)
             except Exception as e:
                 print('animacy exception', e)
                 if token.text.lower() in personal_or_indefinite_pronoun:
-                    self.animateNouns[token.text.lower()] = True
                     return True
-                self.animateNouns[token.text.lower()] = False
                 return False
+
         if token.text.lower() in personal_or_indefinite_pronoun:
-            self.animateNouns[token.text.lower()] = True
             return True
 
         person = token.doc.vocab.get_vector("person")
@@ -1741,7 +1759,7 @@ class LexicalFeatureDef(object):
             # a normal content word. It's hard to detect in advance.
             # TBD: put in a better check to eliminate this case.
             if not all_zeros(token.vector) \
-               and token.pos_ in ['NOUN', 'PRONOUN']:
+               and token.pos_ in ['NOUN']:
                 if 1 - cosine(person, token.vector) > 0.8:
                     self.animateNouns[token.text.lower()] = True
                     return True
@@ -1750,51 +1768,79 @@ class LexicalFeatureDef(object):
                     return True
         except Exception as e:
             print('Token vector invalid for ', token, e)
-        if token.pos_ in ['NOUN', 'PRONOUN']:
-            synsets = wordnet.synsets(token.lemma_)
+
+        if token.pos_ in ['NOUN', 'PRON']:
+            if token.pos_ == 'NOUN':
+                synsets = wordnet.synsets(token.lemma_)
+            else:
+                antecedents = ResolveReference(token, token.doc)
+                if token._.antecedents is not None \
+                   and len(token._.antecedents) > 0:
+                    synsets = wordnet.synsets(token.doc[antecedents[0]].lemma_)
+                else:
+                    return False
             if len(synsets) > 0 \
-               and token.pos_ in ['NOUN', 'PRONOUN']:
+               and token.pos_ in ['NOUN', 'PRON']:
                 try:
                     hypernyms = set([i for i
                                      in synsets[0].closure(lambda s:
                                                            s.hypernyms())])
                     if self.organism[0] in hypernyms \
                        or self.organism[0] == synsets[0]:
-                        self.animateNouns[token.text.lower()] = True
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
                         return True
                     if self.social_group[0] in hypernyms \
                        or self.social_group[0] == synsets[0]:
-                        self.animateNouns[token.text.lower()] = True
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
                         return True
                     if self.people[0] in hypernyms \
                        or self.people[0] == synsets[0]:
-                        self.animateNouns[token.text.lower()] = True
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
                         return True
                     if self.human_beings[0] in hypernyms \
                        or self.human_beings[0] == synsets[0]:
-                        self.animateNouns[token.text.lower()] = True
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
                         return True
                     if self.ethnos[0] in hypernyms \
                        or self.ethnos[0] == synsets[0]:
-                        self.animateNouns[token.text.lower()] = True
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
                         return True
                     if self.race[2] in hypernyms \
                        or self.race[0] == synsets[0]:
-                        self.animateNouns[token.text.lower()] = True
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
                         return True
                     if self.population[0] in hypernyms \
                        or self.population[0] == synsets[0]:
-                        self.animateNouns[token.text.lower()] = True
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
                         return True
                     if self.hoi_polloi[0] in hypernyms \
                        or self.hoi_polloi[0] == synsets[0]:
-                        self.animateNouns[token.text.lower()] = True
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
+                        return True
+                    if self.mind[0] in hypernyms \
+                       or self.mind[0] == synsets[0]:
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
+                        return True
+                    if self.thought[0] in hypernyms \
+                       or self.thought[0] == synsets[0]:
+                        if token.pos_ == 'NOUN':
+                            self.animateNouns[token.text.lower()] = True
                         return True
                 except Exception as e:
                     print('Wordnet error b while \
                            checking synsets for ', token, e)
 
-        self.animateNouns[token.text.lower()] = False
+        if token.pos_ in ['NOUN', 'PROPN']:
+            self.animateNouns[token.text.lower()] = False
         return False
 
     location = wordnet.synsets('location')
@@ -1805,6 +1851,20 @@ class LexicalFeatureDef(object):
     travelV = wordnet.synsets('travel', pos=wordnet.VERB)
     travelN = wordnet.synsets('travel', pos=wordnet.NOUN)
     eventN = wordnet.synsets('event', pos=wordnet.NOUN)
+
+    def is_event(self, token, eventN):
+        wrdsyns = wordnet.synsets(token.head.head.lemma_,
+                                  pos=wordnet.VERB)
+        if len(wrdsyns) > 0:
+            wrdhyp = set([i for i
+                          in wrdsyns[0].closure(lambda s:
+                                                s.hypernyms())])
+        if len(self.eventN) > 0 \
+           and len(wrdsyns) > 0 \
+           and (self.eventN[0] in wrdhyp
+                or self.eventN[0] == wrdsyns[0]):
+            return True
+        return False
 
     def is_location(self, token):
         """
@@ -1819,7 +1879,7 @@ class LexicalFeatureDef(object):
             return False
 
         if self.concreteness(token) is not None \
-           and self.concreteness(token)<3.5:
+           and self.concreteness(token) < 3.5:
             return False
 
         if self.is_animate(token):
@@ -1855,17 +1915,16 @@ class LexicalFeatureDef(object):
         if token.dep_ == 'pobj' \
            and token.head.lemma_ in major_locative_prepositions \
            and token.head.head.pos_ in ['VERB']:
+
+            if self.is_event(token.head, self.eventN):
+                return False
+
             wrdsyns = wordnet.synsets(token.head.head.lemma_,
                                       pos=wordnet.VERB)
             if len(wrdsyns) > 0:
                 wrdhyp = set([i for i
                               in wrdsyns[0].closure(lambda s:
                                                     s.hypernyms())])
-                if (len(self.eventN) > 0
-                    and len(wrdsyns) > 0
-                    and (self.eventN[0] in wrdhyp
-                         or self.eventN[0] == wrdsyns[0])):
-                    return False
 
                 if (len(self.travelV) > 0
                     and len(wrdsyns) > 0
@@ -1908,7 +1967,7 @@ class LexicalFeatureDef(object):
 
                     wrdsyns = wordnet.synsets(token.head.head.lemma_,
                                               pos=wordnet.VERB)
-                
+
                     if (len(self.eventN) > 0
                         and len(wrdsyns) > 0
                         and (self.eventN[0] in hypernyms
@@ -1928,7 +1987,8 @@ class LexicalFeatureDef(object):
                             and token.head.lemma_ in all_locative_prepositions
                             or (token.dep_ == 'pobj'
                                 and token.head.lemma_ == 'of'
-                                and token.head.head.lemma_ in all_locative_prepositions)
+                                and token.head.head.lemma_
+                                in all_locative_prepositions)
                             or (token.dep_ == 'pobj'
                                 and token.head.lemma_ == 'of'
                                 and token.head.head._.location)
@@ -1997,7 +2057,6 @@ class LexicalFeatureDef(object):
                 deictics.append(False)
         return deictics
 
-
     def is_latinate(self, token: Token):
         ''' The latinate flag identifies words that appear likely to be
             more academic as they are formed using latin or greek prefixes
@@ -2022,15 +2081,15 @@ class LexicalFeatureDef(object):
         else:
             key3 = None
         if key1 is not None and key1 in self.latinate:
-            return self.latinate[key1]==1
+            return self.latinate[key1] == 1
         if key2 is not None and key2 in self.latinate:
-            return self.latinate[key2]==1
+            return self.latinate[key2] == 1
         if key3 is not None and key3 in self.latinate:
-            return self.latinate[key3]==1
+            return self.latinate[key3] == 1
         return None
 
     def is_academic(self, token: Token):
-        if not alphanum_word(token.text) or len(token.text)<3:
+        if not alphanum_word(token.text) or len(token.text) < 3:
             return None
         if token.text.lower() is not None:
             key1 = self.nlp.vocab.strings[token.text.lower()]
@@ -2044,7 +2103,7 @@ class LexicalFeatureDef(object):
             key3 = self.nlp.vocab.strings[token._.root]
         else:
             key3 = None
-            
+
         if key1 is not None and key1 in self.academic \
            or key2 is not None and key2 in self.academic \
            or key3 is not None and key3 in self.academic:

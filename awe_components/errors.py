@@ -8,5 +8,6 @@ class AWE_Workbench_Error(Exception):
     def __str__(self):
         return self.text
 
+
 class LexiconMissingError(AWE_Workbench_Error):
     pass

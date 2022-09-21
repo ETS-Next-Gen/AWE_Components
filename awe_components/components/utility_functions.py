@@ -288,8 +288,12 @@ def print_parse_tree(sent):
             + token.dep_ + \
             ":" \
             + str(headLoc)
+
         line = line.expandtabs(6)
-        print(line)
+        print(line,
+              'ant:', token._.antecedents,
+              'gsubj:', token._.governing_subject,
+              'vp:', token._.vwp_perspective)
 
         lastToken = token
         if head is not None:
@@ -516,10 +520,17 @@ def takesBareInfinitive(item: Token):
         return False
     if item.lemma_ in ["make",
                        "have",
+                       "help",
                        "let",
+                       "go",
                        "bid",
+                       "feel",
+                       "hear",
                        "see",
                        "watch",
+                       "notice",
+                       "observe",
+                       "overhear",
                        "monitor",
                        "help",
                        "observe",
@@ -608,9 +619,7 @@ def tensed_clause(tok: Token):
     elif (head is not None
           and takesBareInfinitive(head)
           and tok.text.lower() == tok.lemma_
-          and hasSubj
-          and 'dobj' not in [child.dep_
-                             for child in tok.children]):
+          and hasSubj):
         return False
     return True
 
@@ -869,12 +878,32 @@ def isRoot(token):
     if token == token.head \
        or token.dep_ == 'ROOT':
         return True
+    elif (token.dep_ == 'conj'
+          and token.head == token.head.head):
+        return True
     else:
         return False
 
 
+def rootTree(token, start, end):
+    if token.i < start:
+        start = token.i
+    if token.i > end:
+        end = token.i
+    for child in token.children:
+        if isRoot(child) \
+           and tensed_clause(child):
+            break
+        start, end = rootTree(child, start, end)
+    return start, end
+
+
 def getTensedVerbHead(token):
     if isRoot(token):
+        return token
+
+    if token.text.lower() == 'be' \
+       and 'MD' in [child.tag_ for child in token.children]:
         return token
 
     if token.morph is not None \
@@ -972,7 +1001,8 @@ def getSubject(tok: Token):
                or child.dep_ == 'nsubjpass' \
                or child.dep_ == 'poss' \
                or child.dep_ == 'csubj' \
-               or child.dep_ == 'csubjpass':
+               or child.dep_ == 'csubjpass' \
+               or child.dep_ == 'attr':
                 return child
     return None
 
@@ -1016,7 +1046,6 @@ def quotationMark(token: Token):
     return False
 
 
-
 def getLogicalObject(tok: Token):
     for child in tok.children:
         try:
@@ -1028,6 +1057,10 @@ def getLogicalObject(tok: Token):
             if child.dep_ == 'auxpass' \
                and tok._.has_governing_subject:
                 return tok.doc[tok._.governing_subject]
+            if child.dep_ == 'ccomp' \
+               and not tensed_clause(child) \
+               and getSubject(child) is not None:
+                return getSubject(child)
         except Exception as e:
             print('getlogicalobject', e)
     return None
@@ -1052,9 +1085,9 @@ def getDative(tok: Token):
 
 def getPrepObject(tok: Token, tlist):
     for child in tok.children:
-        if child.dep_ == 'prep' and child.lemma_ in tlist:
+        if child.dep_ == 'prep' and child.text.lower() in tlist:
             return getPrepObject(child, tlist)
-        elif child.dep_ == 'pobj' and tok.lemma_ in tlist:
+        elif child.dep_ == 'pobj' and tok.text.lower() in tlist:
             return child
     return None
 
@@ -1083,9 +1116,22 @@ def scanForAnimatePotentialAntecedents(doc,
                 Resolution = doc._.coref_chains.resolve(doc[pos])
                 if Resolution is not None \
                    and len(Resolution) > 0:
+                    resolve = []
                     for item in Resolution:
                         if item._.animate and item.i not in altAntecedents:
-                            altAntecedents.append(item.i)
+                            return [item.i]
+
+                # Let's not ignore a perfectly plausible c-commanding
+                # potential antecedent if it happens to be there ...
+                if doc[loc] in doc[pos].head.subtree \
+                   and doc[pos]._.animate \
+                   and (getTensedVerbHead(doc[loc])
+                        != getTensedVerbHead(doc[pos])) \
+                   and ('Number=Plur' in str(doc[pos].morph)
+                        or doc[pos].text.lower()
+                        in ['who', 'whom', 'whoever']):
+                    return [doc[pos].i]
+
             elif (doc[pos].pos_ in ['NOUN', 'PROPN']
                   and doc[pos]._.animate
                   and pos not in antecedentlocs
@@ -1093,6 +1139,12 @@ def scanForAnimatePotentialAntecedents(doc,
                   and doc[pos].text.lower() not in blockedLex):
                 if pos not in altAntecedents:
                     altAntecedents.append(pos)
+
+                    # if we have a plural antecedent we don't need
+                    # another antecedent to get a plural ...
+                    if doc[pos]._.animate \
+                       and 'Number=Plur' in str(doc[pos].morph):
+                        return [doc[pos].i]
             if len(altAntecedents) > 1:
                 if doc[altAntecedents[0]].text.capitalize() == \
                    doc[altAntecedents[1]].text.capitalize():
@@ -1157,42 +1209,43 @@ def ResolveReference(tok: Token, doc: Doc):
                         anim = False
                     else:
                         doclist.append(item.i)
-            for item in doclist:
-                start = tok.i - 4
-                end = tok.i + 4
-                if start < 0:
-                    start = 0
-                if end + 1 > len(doc):
-                    end = len(doc)
-                if tok.text.lower() in ['their', 'theirs']:
-                    res1 = wspc.send(['its',
-                                      doc[start:tok.i].text,
-                                      doc[tok.i+1:end].text])
+            if not anim:
+                for item in doclist:
+                    start = tok.i - 4
+                    end = tok.i + 4
+                    if start < 0:
+                        start = 0
+                    if end + 1 > len(doc):
+                        end = len(doc)
+                    if tok.text.lower() in ['their', 'theirs']:
+                        res1 = wspc.send(['its',
+                                          doc[start:tok.i].text,
+                                          doc[tok.i+1:end].text])
 
-                else:
-                    res1 = wspc.send(['things',
-                                      doc[start:tok.i].text,
-                                      doc[tok.i+1:end].text])
+                    else:
+                        res1 = wspc.send(['things',
+                                          doc[start:tok.i].text,
+                                          doc[tok.i+1:end].text])
 
-                if tok.text.lower() in ['their', 'theirs']:
-                    res2 = wspc.send(['his',
-                                      doc[start:tok.i].text,
-                                      doc[tok.i+1:end].text])
-                else:
-                    res2 = wspc.send(['people',
-                                      doc[start:tok.i].text,
-                                      doc[tok.i+1:end].text])
+                    if tok.text.lower() in ['their', 'theirs']:
+                        res2 = wspc.send(['his',
+                                          doc[start:tok.i].text,
+                                          doc[tok.i+1:end].text])
+                    else:
+                        res2 = wspc.send(['people',
+                                          doc[start:tok.i].text,
+                                          doc[tok.i+1:end].text])
 
-                if not anim and res2 > res1:
-                    antecedentlist = \
-                        scanForAnimatePotentialAntecedents(doc,
-                                                           tok.i,
-                                                           doclist,
-                                                           False)
-                    if antecedentlist is not None \
-                       and len(antecedentlist) > 0:
-                        doclist = antecedentlist
-                        break
+                    if not anim and res2 > res1:
+                        antecedentlist = \
+                            scanForAnimatePotentialAntecedents(doc,
+                                                               tok.i,
+                                                               doclist,
+                                                               False)
+                        if antecedentlist is not None \
+                           and len(antecedentlist) > 0:
+                            doclist = antecedentlist
+                            break
 
             if len(doclist) == 0:
                 antecedentlist = scanForAnimatePotentialAntecedents(
@@ -1236,6 +1289,78 @@ def ResolveReference(tok: Token, doc: Doc):
         return doclist
     else:
         return [tok.i]
+
+
+reflexives = ['myself',
+              'ourselves',
+              'yourself',
+              'yourselves',
+              'himself',
+              'herself',
+              'itself',
+              'themself',
+              'themselves']
+
+
+def getDistinctClauseReferences(tok: Token, hdoc: Doc):
+    referenceList = []
+    if tok.dep_ in ['nsubj',
+                    'nsubjpass',
+                    'dobj',
+                    'dative'] \
+       and tok.text.lower() not in reflexives:
+        referenceList.append(tok.i)
+        references = ResolveReference(tok, hdoc)
+        for reference in references:
+            referenceList.append(reference)
+    for child in tok.children:
+        if child.dep_ in ['nsubj',
+                          'nsubjpass',
+                          'dobj',
+                          'dative'] \
+           and child.text.lower() not in reflexives:
+            references = ResolveReference(child, hdoc)
+            for reference in references:
+                if reference not in referenceList:
+                    referenceList.append(reference)
+        if child.dep_ == 'prep':
+            for grandchild in child.children:
+                if grandchild.dep_ == 'pobj' \
+                   and grandchild.text.lower() not in reflexives:
+                    references = ResolveReference(grandchild, hdoc)
+                    for reference in references:
+                        if reference not in referenceList:
+                            referenceList.append(reference)
+                elif grandchild.dep_ == 'prep':
+                    for ggrandchild in grandchild.children:
+                        if ggrandchild.dep_ == 'pobj' \
+                           and not ggrandchild.text.lower() in reflexives:
+                            references = ResolveReference(ggrandchild, hdoc)
+                            for reference in references:
+                                if reference not in referenceList:
+                                    referenceList.append(reference)
+
+        if child.dep_ in ['acomp',
+                          'ccomp',
+                          'pcomp',
+                          'xcomp']:
+            for grandchild in child.children:
+                if grandchild.dep_ in ['nsubj', 'nsubjpass'] \
+                   and grandchild.text.lower() not in reflexives:
+                    references = ResolveReference(grandchild, hdoc)
+                    for reference in references:
+                        if reference not in referenceList:
+                            referenceList.append(reference)
+    return referenceList
+
+
+def containsDistinctReference(tok1: Token, tok2: Token, hdoc: Doc):
+    referenceList = getDistinctClauseReferences(tok1, hdoc)
+    references = ResolveReference(tok2, hdoc)
+    for reference in references:
+        if reference in referenceList:
+            return True
+    return False
 
 
 def getLinkedNodes(tok: Token):
@@ -1334,6 +1459,32 @@ def is_definite_nominal(token):
     return False
 
 
+core_temporal_preps = ['in',
+                       'on',
+                       'over',
+                       'upon',
+                       'at',
+                       'before',
+                       'after',
+                       'during',
+                       'since']
+
+function_word_tags = ['TO',
+                      'MD',
+                      'IN',
+                      'SCONJ',
+                      'WRB',
+                      'WDT',
+                      'WP',
+                      'WP$',
+                      'EX',
+                      'ADP',
+                      'JJR',
+                      'JJS',
+                      'RBR',
+                      'RBS']
+
+
 def temporalPhrase(tok: Token):
 
     # special case for misparse of phrases like 'during
@@ -1397,24 +1548,16 @@ def temporalPhrase(tok: Token):
             return tok.sent.start, scope
 
         if tok.dep_ in ['prep', 'mark'] \
-           and tok.text.lower() in ['in',
-                                    'on',
-                                    'over',
-                                    'upon',
-                                    'at',
-                                    'before',
-                                    'after',
-                                    'during',
-                                    'since']:
+           and tok.text.lower() in core_temporal_preps:
             if tok.dep_ == 'mark':
                 return tok.i, [tok.i]
 
             for child in tok.children:
                 if child.dep_ in ['pobj', 'pcomp']:
                     if is_temporal(child) \
-                       or (is_event(tok) \
+                       or (is_event(tok)
                            and tok.text.lower() != 'in') \
-                       or (child.pos_ == 'VERB' \
+                       or (child.pos_ == 'VERB'
                            and tok.text.lower() != 'in'):
                         scope = []
                         for sub in tok.subtree:
@@ -1527,7 +1670,8 @@ def is_event(tok: Token):
                             if word.synset().pos() == 'v':
                                 return True
     return False
-    
+
+
 content_tags = ['NN',
                 'NNS',
                 'NNP',
@@ -1554,25 +1698,25 @@ content_tags = ['NN',
                 'CD']
 
 major_locative_prepositions = ['to',
-                              'from',
-                              'in',
-                              'on',
-                              'at',
-                              'upon',
-                              'over',
-                              'under',
-                              'beneath',
-                              'beyond',
-                              'along',
-                              'against',
-                              'through',
-                              'throughout',
-                              'by',
-                              'near',
-                              'into',
-                              'onto',
-                              'off',
-                              'out']
+                               'from',
+                               'in',
+                               'on',
+                               'at',
+                               'upon',
+                               'over',
+                               'under',
+                               'beneath',
+                               'beyond',
+                               'along',
+                               'against',
+                               'through',
+                               'throughout',
+                               'by',
+                               'near',
+                               'into',
+                               'onto',
+                               'off',
+                               'out']
 
 all_locative_prepositions = ['above',
                              'across',
@@ -1617,57 +1761,57 @@ all_locative_prepositions = ['above',
                              'yonder']
 
 deictics = ['i',
-             'me',
-             'my',
-             'mine',
-             'myself',
-             'we',
-             'us',
-             'our',
-             'ours',
-             'ourselves',
-             'you',
-             'your',
-             'yours',
-             'yourself',
-             'yourselves',
-             'here',
-             'there',
-             'hither',
-             'thither',
-             'yonder',
-             'yon',
-             'now',
-             'then',
-             'anon',
-             'today',
-             'tomorrow',
-             'yesterday',
-             'this',
-             'that',
-             'these',
-             'those'
-             ]
+            'me',
+            'my',
+            'mine',
+            'myself',
+            'we',
+            'us',
+            'our',
+            'ours',
+            'ourselves',
+            'you',
+            'your',
+            'yours',
+            'yourself',
+            'yourselves',
+            'here',
+            'there',
+            'hither',
+            'thither',
+            'yonder',
+            'yon',
+            'now',
+            'then',
+            'anon',
+            'today',
+            'tomorrow',
+            'yesterday',
+            'this',
+            'that',
+            'these',
+            'those'
+            ]
 
 adj_noun_or_verb = ['NN',
-                   'NNS',
-                   'NNP',
-                   'NNPS',
-                   'VB',
-                   'VBD',
-                   'VBG',
-                   'VBN',
-                   'VBP',
-                   'VBZ',
-                   'JJ',
-                   'JJR',
-                   'JJS',
-                   'RP',
-                   'GW',
-                   'NOUN',
-                   'PROPN',
-                   'VERB',
-                   'ADJ']
+                    'NNS',
+                    'NNP',
+                    'NNPS',
+                    'VB',
+                    'VBD',
+                    'VBG',
+                    'VBN',
+                    'VBP',
+                    'VBZ',
+                    'JJ',
+                    'JJR',
+                    'JJS',
+                    'RP',
+                    'GW',
+                    'NOUN',
+                    'PROPN',
+                    'VERB',
+                    'ADJ']
 
 possessive_or_determiner = ['PRP',
                             'PRP$',
@@ -1714,7 +1858,17 @@ personal_or_indefinite_pronoun = ['i',
                                   'themselves',
                                   'one',
                                   'oneself',
-                                  'oneselves']
+                                  'oneselves'
+                                  'anothers',
+                                  'others',
+                                  'another',
+                                  'some',
+                                  'many'
+                                  'few',
+                                  'none',
+                                  'who',
+                                  'whom',
+                                  'whoever']
 
 loc_sverbs = ['contain',
               'cover',
@@ -1736,12 +1890,65 @@ loc_overbs = ['abandon',
               'near']
 
 locative_adverbs = ['here',
-                   'there',
-                   'where',
-                   'somewhere',
-                   'anywhere']
+                    'there',
+                    'where',
+                    'somewhere',
+                    'anywhere']
 
 existential_there = 'EX'
+
+prehead_modifiers = ['mark',
+                     'nsubj',
+                     'nsubjpass',
+                     'aux',
+                     'neg',
+                     'det',
+                     'poss']
+
+quantifying_determiners = ['any',
+                           'all',
+                           'no',
+                           'each',
+                           'every',
+                           'little',
+                           'some',
+                           'few',
+                           'more',
+                           'most']
+
+subject_or_object_nom = ['nsubj',
+                         'nsubjpass',
+                         'dobj']
+
+clausal_complements = ['csubj',
+                       'ccomp',
+                       'xcomp',
+                       'acl',
+                       'oprd']
+
+complements = ['csubj',
+               'ccomp',
+               'nsubj',
+               'nsubjpass',
+               'dobj',
+               'xcomp',
+               'acl',
+               'oprd',
+               'attr',
+               'acomp']
+
+
+def clausal_subject_or_complement(tok):
+    if (tok.dep_ in ['xcomp', 'oprd', 'csubj']
+        or (tok.dep_ in ['ccomp', 'acl']
+            and tensed_clause(tok))):
+        return True
+    else:
+        return False
+
+
+adjectival_predicates = ['attr', 'oprd', 'acomp', 'amod']
+
 
 def sylco(word):
     """
@@ -1920,9 +2127,9 @@ def sylco(word):
     # calculate the output
     return sylcount
 
+
 def alphanum_word(word: str):
     if not re.match('[-A-Za-z0-9\'.]', word) or re.match('[-\'.]+', word):
         return False
     else:
         return True
-

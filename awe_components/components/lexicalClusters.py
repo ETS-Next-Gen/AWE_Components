@@ -386,7 +386,7 @@ def mainClusterSpans(hdoc):
      throughout the whole document. (Note that the clusters include resolved
      pronominal referents clustered using the vectors of their antecedents.)
     """
-    
+
     if hdoc._.clusterInfo is not None \
        and len(hdoc._.clusterInfo) > 0:
         offsets = hdoc._.clusterInfo[0][3]
@@ -572,7 +572,7 @@ Doc.set_extension("devwords",
 def dcwrdlen(tokens):
     return len([x.text.lower()
                 for x in developmentContentWords(tokens)
-               ]) / (len(tokens) + .01)
+                ]) / (len(tokens) + .01)
     # +.01 to avoid errors if empty
 
 
@@ -591,7 +591,7 @@ def mnDwrdNSyll(tokens):
                      [int(x._.nSyll)
                       for x in developmentContentWords(tokens)
                       if x._.nSyll is not None],
-                      summaryType=FType.MEAN)
+                     summaryType=FType.MEAN)
 
 
 Doc.set_extension("mean_devword_nsyll",

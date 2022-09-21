@@ -20,6 +20,10 @@ from ..errors import *
 from importlib import resources
 
 
+def defineMorpholex():
+    from awe_components.components.lexicalFeatures import morpholex
+
+
 @Language.factory("viewpointfeatures", default_config={"fast": False})
 def ViewpointFeatures(nlp, name, fast: bool):
     return ViewpointFeatureDef(fast)
@@ -38,13 +42,24 @@ class ViewpointFeatureDef:
     with resources.path('awe_lexica.json_data',
                         'stancePerspectiveVoc.json') as filepath:
         STANCE_PERSPECTIVE_PATH = filepath
- 
+
+    with resources.path('awe_lexica.json_data',
+                        'morpholex.json') as filepath:
+        MORPHOLEX_PATH = filepath
+
     stancePerspectiveVoc = {}
+    morpholex = {}
+    is_nominalization = {}
 
     calculatePerspective = True
 
     def package_check(self, lang):
         if not os.path.exists(self.STANCE_PERSPECTIVE_PATH):
+            raise LexiconMissingError(
+                "Trying to load AWE Workbench Syntaxa and Discourse Feature \
+                 Module without supporting datafile {}".format(filepath)
+            )
+        if not os.path.exists(self.MORPHOLEX_PATH):
             raise LexiconMissingError(
                 "Trying to load AWE Workbench Syntaxa and Discourse Feature \
                  Module without supporting datafile {}".format(filepath)
@@ -58,6 +73,31 @@ class ViewpointFeatureDef:
         self.stancePerspectiveVoc = \
             srsly.read_json(self.STANCE_PERSPECTIVE_PATH)
 
+        # would really rather not reimport, but
+        # importing from lexicalFeatures is a bit complicated.
+        # TBD: fix this
+        self.morpholex = \
+            srsly.read_json(self.MORPHOLEX_PATH)
+
+        # Nominalizations are by definition not concrete
+
+        for token in self.morpholex:
+            morpholexsegm = \
+                self.morpholex[token]['MorphoLexSegm']
+            if morpholexsegm.endswith('>ship>') \
+               or morpholexsegm.endswith('>hood>') \
+               or morpholexsegm.endswith('>ness>') \
+               or morpholexsegm.endswith('>less>') \
+               or morpholexsegm.endswith('>ion>') \
+               or morpholexsegm.endswith('>tion>') \
+               or morpholexsegm.endswith('>ity>') \
+               or morpholexsegm.endswith('>ty>') \
+               or morpholexsegm.endswith('>cy>') \
+               or morpholexsegm.endswith('>al>') \
+               or morpholexsegm.endswith('>ance>'):
+                self.is_nominalization[token] = True
+        self.morpholex = None
+
     def __call__(self, doc):
         """
          Call the spacy component and process the document to register
@@ -68,9 +108,28 @@ class ViewpointFeatureDef:
             # Add attributes specified in the stance lexicon
             self.setLexiconAttributes(token, doc)
 
+        # Add general rules for vwp_abstract, above and beyond
+        # any special cases set from the stancePerspectiveVoc
+        # dictionary
+        for token in doc:
+            # Low concreteness or in abstract traits
+            # or being a nominalization means an abstract word
+            if (token._.concreteness is not None
+                and token._.concreteness < 3.5) \
+               or token._.abstract_trait \
+               or token.text.lower() in self.is_nominalization:
+                token._.vwp_abstract = True
+
+        for token in doc:
+
             # Mark implicit subject relationships within each clause
             if isRoot(token):
                 self.markImplicitSubject(token, doc)
+
+            # Add corrected antecedents to the parse tree
+            if token.pos_ == 'PRON':
+                antecedents = ResolveReference(token, doc)
+                token._.antecedents = antecedents
 
         # Mark sentiment properly under scope of negation, using
         # sentiWord weights as base lexical sentiment polarities
@@ -129,6 +188,173 @@ class ViewpointFeatureDef:
         ''' Return attribution flags for all tokens in document
         '''
         return [token._.vwp_attribution for token in tokens]
+
+    def subjectiveWord(self, token):
+        if token.text in ['?', '!'] \
+           or token._.vwp_evaluation \
+           or (token._.vwp_evaluated_role
+               and token.pos_ == 'NOUN') \
+           or ((token._.vwp_emotion
+               or token._.vwp_character)
+               and token._.has_governing_subject
+               and token.doc[token._.governing_subject]._.animate) \
+           or token._.vwp_hedge \
+           or (token._.vwp_emotional_impact
+               and (getLogicalObject(token) is None
+                    or getLogicalObject(token)._.animate)) \
+           or token._.vwp_possibility \
+           or (token._.vwp_plan
+               and token._.has_governing_subject
+               and not in_past_tense_scope(token)) \
+           or token._.vwp_future:
+            return True
+        return False
+
+    def s_o_f(self, tokens):
+        return self.statements_of_fact(tokens, ' == 0')
+
+    def statements_of_fact(self, tokens, relation):
+        factList = []
+        j = 0
+        nextRoot = 0
+        currentHead = None
+        for i in range(0, len(tokens)):
+            if i < nextRoot:
+                continue
+
+            if tokens[i]._.vwp_quoted:
+                continue
+
+            if isRoot(tokens[i]) \
+               and not (tokens[i].dep_ == 'conj'
+                        and tensed_clause(tokens[i].head)
+                        and 'MD' in [child.tag_
+                                     for child
+                                     in tokens[i].head.children]):
+                numSubjective = 0
+                currentHead = tokens[i]
+
+                if self.subjectiveWord(tokens[i]) \
+                   and len(tokens[i]._.vwp_perspective) == 0:
+                    numSubjective += 1
+
+                if len(tokens[i]._.vwp_perspective) > 0 \
+                   and (tokens[tokens[i]._.vwp_perspective[0]
+                               ].text.lower()
+                        in first_person_pronouns
+                        or tokens[tokens[i]._.vwp_perspective[0]
+                                  ].text.lower()
+                        in second_person_pronouns) \
+                   and (self.subjectiveWord(tokens[i])):
+                    numSubjective += 1
+
+                # Use of potential viewpoint predicates with first or second
+                # person viewpoint governors in root position is a mark of
+                # subjectivity
+                if isRoot(tokens[i]) \
+                   and not tokens[i]._.vwp_emotional_impact \
+                   and (tokens[i]._.vwp_argument
+                        or tokens[i]._.vwp_cognitive
+                        or tokens[i]._.vwp_communication
+                        or tokens[i]._.vwp_emotion) \
+                    and tokens[i]._.has_governing_subject \
+                    and (tokens[tokens[i]._.governing_subject
+                                ].text.lower() in first_person_pronouns
+                         or tokens[tokens[i]._.governing_subject
+                                   ].text.lower() in second_person_pronouns):
+                    numSubjective += 1
+
+                if isRoot(tokens[i]) \
+                   and tokens[i]._.vwp_emotional_impact \
+                   and getLogicalObject(tokens[i]) is not None \
+                   and (getLogicalObject(tokens[i]).text.lower()
+                        in first_person_pronouns
+                        or getLogicalObject(tokens[i]).text.lower()
+                        in second_person_pronouns):
+                    numSubjective += 1
+
+                # Special case: imperatives are implicitly subjective
+                # even though there is no explicit evaluation word
+                if tokens[i] == self.getHeadDomain(tokens[i]) \
+                   and tokens[i].text.lower() == tokens[i].lemma_ \
+                   and not in_past_tense_scope(tokens[i]) \
+                   and 'expl' not in [left.dep_ for left in tokens[i].lefts] \
+                   and getSubject(tokens[i]) is None:
+                    numSubjective += 1
+
+                for child in tokens[i].subtree:
+                    if child == tokens[i]:
+                        continue
+
+                    if child._.vwp_quoted:
+                        continue
+
+                    if isRoot(child) \
+                       and child.dep_ in ['ROOT', 'conj'] \
+                       and child != tokens[i] \
+                       and tensed_clause(child) \
+                       and getSubject(child) is not None \
+                       and not (child.dep_ == 'conj'
+                                and 'SCONJ' in [gchild.pos_
+                                                for gchild
+                                                in tokens[i].children]) \
+                       and not (child.dep_ == 'conj'
+                                and tensed_clause(child.head)
+                                and 'MD' in [gchild.tag_
+                                             for gchild
+                                             in child.head.children]):
+                        currentHead = child
+                        break
+
+                    if self.subjectiveWord(child) \
+                       and len(child._.vwp_perspective) == 0:
+                        numSubjective += 1
+                        break
+
+                    if len(child._.vwp_perspective) > 0 \
+                       and (tokens[child._.vwp_perspective[0]].text.lower()
+                            in first_person_pronouns
+                            or tokens[child._.vwp_perspective[0]].text.lower()
+                            in second_person_pronouns) \
+                       and self.subjectiveWord(child):
+                        numSubjective += 1
+                        break
+
+                    # Special case: cognitive, communication or
+                    # argument predicates as subjects of the
+                    # domain head are implicitly subjective
+                    if child.dep_ in ['nsubj',
+                                      'nsubjpass',
+                                      'csubj',
+                                      'csubjpass'] \
+                       and (len(child._.vwp_perspective) == 0
+                            or (tokens[child._.vwp_perspective[0]
+                                       ].text.lower()
+                                in first_person_pronouns)
+                            or (tokens[child._.vwp_perspective[0]
+                                       ].text.lower()
+                                in second_person_pronouns)) \
+                       and not child._.vwp_sourcetext \
+                       and (child._.vwp_communication
+                            or child._.vwp_cognitive
+                            or child._.vwp_argument):
+                        numSubjective += 1
+
+                    if child._.vwp_possibility \
+                       and child == self.getHeadDomain(child):
+                        numSubjective += 1
+                        break
+                if eval("numSubjective " + relation):
+                    start, end = rootTree(currentHead,
+                                          currentHead.i,
+                                          currentHead.i)
+                    factList.append([start, end+1])
+                    nextRoot = end + 1
+                    numSubjective = 0
+        return factList
+
+    def statements_of_opinion(self, tokens):
+        return self.statements_of_fact(tokens, " > 0")
 
     def sourceflags(self, tokens):
         ''' Return source flags for all tokens in document
@@ -321,7 +547,7 @@ class ViewpointFeatureDef:
         return [token.i for token in tokens if token._.vwp_argumentation]
 
     def listargs1(self, tokens):
-        ''' Return list of token indexes for words that meet the standard 
+        ''' Return list of token indexes for words that meet the standard
             for being explicit argumentation words
         '''
         return [token.i for token in tokens
@@ -419,137 +645,142 @@ class ViewpointFeatureDef:
                                           token._.governing_subject
                                           ]._.vwp_communication)))))]
 
-
     extensions = [{"name": "vwp_claims",
                    "getter": "claimflags",
                    "type": "docspan"},
                   {"name": "vwp_discussions",
                    "getter": "discussionflags",
                    "type": "docspan"},
-                   {"name": "vwp_perspectives",
+                  {"name": "vwp_perspectives",
                    "getter": "perspectiveflags",
                    "type": "docspan"},
-                   {"name": "vwp_attributions",
+                  {"name": "vwp_attributions",
                    "getter": "attributionflags",
                    "type": "docspan"},
-                   {"name": "vwp_sources",
+                  {"name": "vwp_sources",
                    "getter": "sourceflags",
                    "type": "docspan"},
-                   {"name": "vwp_cites",
+                  {"name": "vwp_cites",
                    "getter": "citeflags",
                    "type": "docspan"},
-                   {"name": "propn_egocentric",
+                  {"name": "propn_egocentric",
                    "getter": "propn_egocentric",
                    "type": "docspan"},
-                   {"name": "propn_allocentric",
+                  {"name": "propn_allocentric",
                    "getter": "propn_allocentric",
                    "type": "docspan"},
-                   {"name": "vwp_emotionwords",
+                  {"name": "vwp_emotionwords",
                    "getter": "emowd",
                    "type": "docspan"},
-                   {"name": "vwp_characterwords",
+                  {"name": "vwp_characterwords",
                    "getter": "charwd",
                    "type": "docspan"},
-                   {"name": "subjectivity_ratings",
+                  {"name": "subjectivity_ratings",
                    "getter": "subj_rtg",
                    "type": "docspan"},
-                   {"name": "mean_subjectivity",
+                  {"name": "mean_subjectivity",
                    "getter": "mnsubj",
                    "type": "docspan"},
-                   {"name": "median_subjectivity",
+                  {"name": "median_subjectivity",
                    "getter": "mdsubj",
                    "type": "docspan"},
-                   {"name": "min_subjectivity",
+                  {"name": "min_subjectivity",
                    "getter": "minsubj",
                    "type": "docspan"},
-                   {"name": "max_subjectivity",
+                  {"name": "max_subjectivity",
                    "getter": "maxsubj",
                    "type": "docspan"},
-                   {"name": "stdev_subjectivity",
+                  {"name": "stdev_subjectivity",
                    "getter": "stdsubj",
                    "type": "docspan"},
-                   {"name": "polarity_ratings",
+                  {"name": "polarity_ratings",
                    "getter": "pol_rtg",
                    "type": "docspan"},
-                   {"name": "mean_polarity",
+                  {"name": "mean_polarity",
                    "getter": "mnpol",
                    "type": "docspan"},
-                   {"name": "median_polarity",
+                  {"name": "median_polarity",
                    "getter": "mdpol",
                    "type": "docspan"},
-                   {"name": "min_polarity",
+                  {"name": "min_polarity",
                    "getter": "minpol",
                    "type": "docspan"},
-                   {"name": "max_polarity",
+                  {"name": "max_polarity",
                    "getter": "mxpol",
                    "type": "docspan"},
-                   {"name": "stdev_polarity",
+                  {"name": "stdev_polarity",
                    "getter": "stdpol",
                    "type": "docspan"},
-                   {"name": "sentiment_ratings",
+                  {"name": "sentiment_ratings",
                    "getter": "snt_rtg",
                    "type": "docspan"},
-                   {"name": "mean_sentiment",
+                  {"name": "mean_sentiment",
                    "getter": "mnsent",
                    "type": "docspan"},
-                   {"name": "median_sentiment",
+                  {"name": "median_sentiment",
                    "getter": "mdsent",
                    "type": "docspan"},
-                   {"name": "min_sentiment",
+                  {"name": "min_sentiment",
                    "getter": "minsent",
                    "type": "docspan"},
-                   {"name": "max_sentiment",
+                  {"name": "max_sentiment",
                    "getter": "mxsent",
                    "type": "docspan"},
-                   {"name": "stdev_sentiment",
+                  {"name": "stdev_sentiment",
                    "getter": "stdsent",
                    "type": "docspan"},
-                   {"name": "tone_ratings",
+                  {"name": "tone_ratings",
                    "getter": "snt_tone",
                    "type": "docspan"},
-                   {"name": "mean_tone",
+                  {"name": "mean_tone",
                    "getter": "mntone",
                    "type": "docspan"},
-                   {"name": "median_tone",
+                  {"name": "median_tone",
                    "getter": "mdtone",
                    "type": "docspan"},
-                   {"name": "min_tone",
+                  {"name": "min_tone",
                    "getter": "mintone",
                    "type": "docspan"},
-                   {"name": "max_tone",
+                  {"name": "max_tone",
                    "getter": "mxtone",
                    "type": "docspan"},
-                   {"name": "stdev_tone",
+                  {"name": "stdev_tone",
                    "getter": "stdtone",
                    "type": "docspan"},
-                   {"name": "vwp_argumentwords",
+                  {"name": "vwp_argumentwords",
                    "getter": "listargs1",
                    "type": "docspan"},
-                   {"name": "vwp_arguments",
+                  {"name": "vwp_arguments",
                    "getter": "listargs",
                    "type": "docspan"},
-                   {"name": "vwp_explicit_arguments",
+                  {"name": "vwp_explicit_arguments",
                    "getter": "explistargs",
                    "type": "docspan"},
-                   {"name": "propn_argument_words",
+                  {"name": "propn_argument_words",
                    "getter": "listargs2",
                    "type": "docspan"},
-                   {"name": "vwp_interactives",
+                  {"name": "vwp_statements_of_fact",
+                   "getter": "s_o_f",
+                   "type": "docspan"},
+                  {"name": "vwp_statements_of_opinion",
+                   "getter": "statements_of_opinion",
+                   "type": "docspan"},
+                  {"name": "vwp_interactives",
                    "getter": "inter",
                    "type": "docspan"},
-                   {"name": "propn_interactive",
+                  {"name": "propn_interactive",
                    "getter": "oral",
                    "type": "docspan"},
-                   {"name": "vwp_in_direct_speech",
+                  {"name": "vwp_in_direct_speech",
                    "getter": "inds",
                    "type": "docspan"},
-                   {"name": "propn_direct_speech",
+                  {"name": "propn_direct_speech",
                    "getter": "propn_direct_speech",
                    "type": "docspan"},
-                   {"name": "governing_subjects",
+                  {"name": "governing_subjects",
                    "getter": "govsubj",
                    "type": "docspan"},
-                   ]
+                  ]
 
     def add_extensions(self):
 
@@ -559,7 +790,7 @@ class ViewpointFeatureDef:
         """
 
         ##################################################
-        # Register extensions for all the categories in  # 
+        # Register extensions for all the categories in  #
         # the stance lexicon                             #
         ##################################################
         for wrd in self.stancePerspectiveVoc:
@@ -576,16 +807,16 @@ class ViewpointFeatureDef:
             if extension['type'] == 'docspan':
                 if not Doc.has_extension(extension['name']):
                     Doc.set_extension(extension['name'],
-                                      getter=eval('self.' 
+                                      getter=eval('self.'
                                                   + extension['getter']))
                 if not Span.has_extension(extension['name']):
                     Span.set_extension(extension['name'],
-                                       getter=eval('self.' 
+                                       getter=eval('self.'
                                                    + extension['getter']))
             if extension['type'] == 'token':
                 if not Token.has_extension(extension['name']):
                     Token.set_extension(extension['name'],
-                                        getter=eval('self.' 
+                                        getter=eval('self.'
                                                     + extension['getter']))
 
         ########################
@@ -596,6 +827,12 @@ class ViewpointFeatureDef:
         # to this token
         if not Token.has_extension('vwp_perspective'):
             Token.set_extension('vwp_perspective', default=None)
+
+        # Special index that tracks the perspective of root words for
+        # whole sentences. Default is empty list, implicitly the speaker.
+        # Only filled when whole-clause viewpoint is signaled explicitly
+        if not Token.has_extension('head_perspective'):
+            Token.set_extension('head_perspective', default=[])
 
         if not Token.has_extension('vwp_attribution'):
             Token.set_extension('vwp_attribution', default=False)
@@ -613,6 +850,9 @@ class ViewpointFeatureDef:
             Token.set_extension('vwp_discussion',
                                 default=False,
                                 force=True)
+
+        if not Token.has_extension('antecedents'):
+            Token.set_extension('antecedents', default=None, force=True)
 
         # Mapping of tokens to viewpoints for the whole document
         #
@@ -665,7 +905,6 @@ class ViewpointFeatureDef:
         # animate entity referent.
         if not Doc.has_extension('vwp_emotion_states'):
             Doc.set_extension('vwp_emotion_states', default=None)
-
 
         # Identification of character markers that attribute
         # character attributes to agents
@@ -781,14 +1020,12 @@ class ViewpointFeatureDef:
         if not Doc.has_extension('vwp_tense_changes'):
             Doc.set_extension('vwp_tense_changes', default=None)
 
-
     def __init__(self, fast: bool, lang="en"):
         super().__init__()
         self.package_check(lang)
         self.load_lexicon(lang)
         self.calculatePerspective = not fast
         self.add_extensions()
-
 
     def synsets(self, token):
         return wordnet.synsets(token.orth_)
@@ -804,6 +1041,41 @@ class ViewpointFeatureDef:
                     Token.set_extension('vwp_' + item, default=False)
                 token._.set('vwp_' + item, True)
 
+                # Rules and special cases. TBD: introduce mechanism
+                # for specifying these kinds of exceptions
+                if token._.vwp_evaluated_role:
+                    token._.vwp_evaluation = True
+
+                if token.dep_ == 'amod' \
+                   and token.text.lower() == 'certain':
+                    token._.vwp_evaluation = False
+                    token._.vwp_likelihood = False
+                    token._.vwp_probability = False
+
+                # modal have to
+                if token.text.lower() in ['have',
+                                          'has',
+                                          'dare',
+                                          'dares',
+                                          'ought',
+                                          'going',
+                                          'need',
+                                          'needs'] \
+                   and token.i+1 < len(doc) \
+                   and token.nbor().tag_ == 'TO':
+                    token._.vwp_evaluation = True
+
+                # plan words with modal complements
+                if token.tag_ == 'TO' \
+                   and token.head.pos_ in ['NOUN', 'VERB', 'ADJ'] \
+                   and token.head.head._.vwp_plan:
+                    token._.vwp_evaluation = True
+
+                # plan words asserted as a predicate
+                if token._.vwp_plan \
+                   and token.dep_ in ['attr', 'oprd']:
+                    token.head._.vwp_evaluation = True
+
         # for now only requiring string match for bigram or trigram
         # entries. TO-DO: use dep_ of head of matched phrase to pick
         # the POS
@@ -817,8 +1089,7 @@ class ViewpointFeatureDef:
                                                 + item,
                                                 default=False)
                         token._.set('vwp_' + item, True)
-                        doc[token.i+1]._.set('vwp_'
-                                                 + item, True)
+                        doc[token.i+1]._.set('vwp_' + item, True)
         if token.i < len(doc) - 2:
             trigram = (token.text.lower()
                        + '_'
@@ -870,6 +1141,16 @@ class ViewpointFeatureDef:
             return True
         return False
 
+    def find_abstract_trait_object(self, tok: Token):
+        subj = None
+        if 'of' in [child.lemma_ for child in tok.subtree] \
+           and (self.viewpointPredicate(tok) or tok._.abstract_trait):
+            for child in tok.subtree:
+                if child.lemma_ == 'of':
+                    subj = getPrepObject(child, ['of'])
+                    break
+        return subj
+
     def findViewpoint(self, predicate, tok: Token, lastDep, lastTok, hdoc):
         """
          Locate the explicit or implicit subjects of viewpoint-controlling
@@ -877,6 +1158,8 @@ class ViewpointFeatureDef:
          controlling animate nominal as being within that nominal's viewpoint
          scope.
         """
+
+        subj = None
 
         # Dative constructions like 'obvious to me' or 'give me
         # the belief' express viewpoint. The dative NP ('me') is
@@ -902,27 +1185,15 @@ class ViewpointFeatureDef:
 
         # But more generally it's the subject (or possessive of a noun)
         # that takes viewpoint for viewpint-taking predicates
-        else:
-            if tok._.vwp_emotional_impact \
-               and 'nsubjpass' in [child.dep_ for child in tok.children] \
-                   or 'poss' in [child.dep_ for child in tok.children]:
-                subj = getPassiveSubject(tok)
-            elif ('nsubj' in [child.dep_ for child in tok.children]
-                  or 'poss' in [child.dep_ for child in tok.children]):
-                subj = getActiveSubject(tok)
+        if tok._.vwp_emotional_impact:
+            subj = getLogicalObject(tok)
+            if subj is not None:
+                return subj
             else:
                 subj = getSubject(tok)
 
-        # However, if there is no possessive, of-PPs can function as
-        # implied viewpoint. Either for viewpoint predicates or for
-        # abstract trait nouns (e.g., attributes, quantities, parts,
-        # possessions, or groups)
-        if subj is None and 'of' in [child.lemma_ for child in tok.children] \
-           and (self.viewpointPredicate(tok) or tok._.abstract_trait):
-            for child in tok.children:
-                if child.lemma_ == 'of':
-                    subj = getPrepObject(child, ['of'])
-                    break
+        if subj is None:
+            subj = self.find_abstract_trait_object(tok)
 
         if subj is not None:
 
@@ -986,11 +1257,12 @@ class ViewpointFeatureDef:
                 # (the speaker's), with an unspecified object
                 # viewpoint of who is pleased.
                 return None
-            subj = self.findViewpoint(predicate,
-                                      tok.head,
-                                      tok.dep_,
-                                      tok,
-                                      hdoc)
+            if tok.head != tok.head.head:
+                subj = self.findViewpoint(predicate,
+                                          tok.head,
+                                          tok.dep_,
+                                          tok,
+                                          hdoc)
             return subj
 
         # Allow light verbs to include their objects in the scope
@@ -1029,34 +1301,19 @@ class ViewpointFeatureDef:
          and then sets the vwp_perspective extension attribute
          for a token to point to the right referent.
         """
-        antecedent = ResolveReference(subj, hdoc)
-        if antecedent is None or len(antecedent) == 0:
-            antecedent = [subj.i]
-        if self.potentialViewpoint(hdoc[antecedent[0]]):
-            token._.vwp_perspective = [ant for ant in antecedent]
 
-        # patch for animate subjects somehow missed at this point
-        if token._.vwp_perspective is None \
-           and token._.governing_subject is not None \
-           and hdoc[token._.governing_subject]._.animate \
-           and (token._.vwp_cognitive
-                or token._.vwp_communication
-                or token._.vwp_argument
-                or token._.vwp_plan
-                or token._.vwp_emotion):
-            token._.vwp_perspective = [token._.governing_subject]
+        # really just going for consistency here. If it's
+        # explicit 1st person perspective, we want to mark
+        # everything in the domain as explicit rather than
+        # implicit first person perspective
+        if token._.governing_subject is not None \
+           and hdoc[token._.governing_subject
+                    ].text.lower() in first_person_pronouns:
+            token._.head_perspective = \
+                [token._.governing_subject]
 
-        # Make sure that the viewpoint node is marked as the same
-        # perspective as the dependent predicate
-        if token._.vwp_perspective is not None:
-            for item in token._.vwp_perspective:
-                hdoc[item]._.vwp_perspective = token._.vwp_perspective
-                head = hdoc[item].head
-                while head.dep_ in ['poss', 'nsubj'] and head != head.head:
-                    head.head._.vwp_perspective = token._.vwp_perspective
-                    head = head.head
-                if isRoot(head):
-                    head._.vwp_perspective = token._.vwp_perspective
+        subj._.vwp_perspective = [subj.i]
+        token._.vwp_perspective = [subj.i]
 
     def markAttribution(self, tok, hdoc):
         if (tok.dep_ == 'nsubj'
@@ -1079,18 +1336,7 @@ class ViewpointFeatureDef:
                      or tok.head._.vwp_think)) \
             and not tok.left_edge.tag_.startswith('W') \
             and (hdoc[tok.head._.governing_subject].text.lower()
-                 not in ['i',
-                         'me',
-                         'my',
-                         'mine',
-                         'we',
-                         'us',
-                         'our',
-                         'ours',
-                         'you',
-                         'your',
-                         'yours',
-                         'one']) \
+                 not in personal_or_indefinite_pronoun) \
             and (hdoc[tok.head._.governing_subject]._.animate
                  or (hdoc[tok.head._.governing_subject].text.lower()
                      in ['they',
@@ -1210,21 +1456,26 @@ class ViewpointFeatureDef:
                     lastRoot = currentRoot
                 currentRoot = getRoot(tok)
 
-            # Special case: quote introduced by tag word at end of previous sentence
+            # Special case: quote introduced by tag word
+            # at end of previous sentence
             target = tok.head
             if tok == currentRoot:
                 left = currentRoot.left_edge
                 start = currentRoot.left_edge
-                while left.i>0 and (left.tag_ == '_SP' or left.dep_ == 'punct'):
-                     left = left.nbor(-1)
-                while start.i+1<len(hdoc) and start.tag_ == '_SP':
-                     start = start.nbor()
+                while (left.i > 0
+                       and (left.tag_ == '_SP'
+                            or left.dep_ == 'punct')):
+                    left = left.nbor(-1)
+                while (start.i + 1 < len(hdoc)
+                       and start.tag_ == '_SP'):
+                    start = start.nbor()
                 target = left
 
-            # If we match the special case with the taq word being a verb or speaking, 
-            # or else match the general case where the complement of a verb of speaking
-            # is a quote, then we mark direct speech
-            if (tok == currentRoot 
+            # If we match the special case with the taq word
+            # being a verb or speaking, or else match the
+            # general case where the complement of a verb of
+            # speaking is a quote, then we mark direct speech
+            if (tok == currentRoot
                 and quotationMark(start)
                 and not left._.vwp_plan
                 and not left.head._.vwp_plan
@@ -1234,170 +1485,189 @@ class ViewpointFeatureDef:
                      or left.head._.vwp_communication
                      or left.head._.vwp_cognitive
                      or left.head._.vwp_argument)) \
-                or (tok.dep_ in ['ccomp', 'csubjpass', 'acl', 'xcomp', 'intj', 'nsubj'] \
-                    and tok.head.pos_ in ['VERB', 'NOUN', 'ADJ', 'ADV'] \
-                    and not tok.head._.vwp_quoted \
-                    and not tok.head._.vwp_plan \
+                or (tok.dep_ in ['ccomp',
+                                 'csubjpass',
+                                 'acl',
+                                 'xcomp',
+                                 'intj',
+                                 'nsubj']
+                    and tok.head.pos_ in ['VERB',
+                                          'NOUN',
+                                          'ADJ',
+                                          'ADV']
+                    and not tok.head._.vwp_quoted
+                    and not tok.head._.vwp_plan
                     and (tok.head._.vwp_communication
                          or tok.head._.vwp_cognitive
                          or tok.head._.vwp_argument)):
 
-               context = [child for child in target.children]
-               if len(context) > 0 and context[0].i > 0:
-                   leftnbor = context[0].nbor(-1)
-                   if quotationMark(leftnbor):
-                       context.append(leftnbor)
-               if len(context) > 0 and context[0].i + 1 < len(hdoc):
-                   rightnbor = context[0].nbor()
-                   if quotationMark(rightnbor):
-                       context.append(rightnbor)
+                context = [child for child in target.children]
+                if len(context) > 0 and context[0].i > 0:
+                    leftnbor = context[0].nbor(-1)
+                    if quotationMark(leftnbor):
+                        context.append(leftnbor)
+                if len(context) > 0 and context[0].i + 1 < len(hdoc):
+                    rightnbor = context[0].nbor()
+                    if quotationMark(rightnbor):
+                        context.append(rightnbor)
 
-               for child in context:
+                for child in context:
 
-                   # Detect direct speech
-                   
-                   # Reference to direct speech in previous sentence
-                   if (tok == currentRoot and target != tok.head):
-                       if target._.has_governing_subject:
-                           thisDom = target
-                       else:
-                           dom = target.head
-                           while not dom._.has_governing_subject:
-                               dom = dom.head
-                           thisDom = dom
-                       speaker_refs = []
-                       addressee_refs = []
-                       if thisDom._.has_governing_subject:
-                           for item in ResolveReference(hdoc[thisDom._.governing_subject], hdoc):
-                               speaker_refs.append(item)
-                           if thisDom in hdoc[thisDom._.governing_subject].subtree:
-                               thisDom = hdoc[thisDom._.governing_subject]
-                           thisDom._.vwp_speaker_refs = speaker_refs
-                           
-                           # Mark the addressee for the local domain,
-                           # which will be the object of the preposition
-                           # 'to' or the direct object
-                           addressee_refs = self.markAddresseeRefs(thisDom, tok, addressee_refs)
-                           thisDom._.vwp_addressee_refs = addressee_refs
+                    # Detect direct speech
 
-                       thisDom._.vwp_direct_speech = True
-                       break
-                   
-                   # we need punctuation BETWEEN the head and
-                   # the complement for this to be indirect speech
-                   elif (child.dep_ == 'punct'
-                          and (child.i < tok.i and tok.i < target.i and tok.dep_=='nsubj' and tok.pos_ == 'VERB'
-                               or target.i < child.i and child.i < tok.i
-                               or target.i > child.i and child.i > tok.i)):
+                    # Reference to direct speech in previous sentence
+                    if (tok == currentRoot and target != tok.head):
+                        if target._.has_governing_subject:
+                            thisDom = target
+                        else:
+                            dom = target.head
+                            while not dom._.has_governing_subject:
+                                dom = dom.head
+                            thisDom = dom
+                        speaker_refs = []
+                        addressee_refs = []
+                        if thisDom._.has_governing_subject:
+                            for item in ResolveReference(hdoc[thisDom._.governing_subject], hdoc):
+                                speaker_refs.append(item)
+                            if thisDom in hdoc[thisDom._.governing_subject
+                                               ].subtree:
+                                thisDom = hdoc[thisDom._.governing_subject]
+                            thisDom._.vwp_speaker_refs = speaker_refs
 
-                       if isRoot(target):
-                           speaker_refs = []
-                           addressee_refs = []
+                            # Mark the addressee for the local domain,
+                            # which will be the object of the preposition
+                            # 'to' or the direct object
+                            addressee_refs = \
+                                self.markAddresseeRefs(thisDom,
+                                                       tok,
+                                                       addressee_refs)
+                            thisDom._.vwp_addressee_refs = addressee_refs
 
-                       # Mark the speaker for the local domain, which will
-                       # be the subject or agent, if one is available, and
-                       # interpret first person pronouns within the local
-                       # domain as referring to the subject of the domain
-                       # predicate
-                       subj = getSubject(target)
+                        thisDom._.vwp_direct_speech = True
+                        break
 
-                       # TO-DO: add support for controlled subjects
-                       # ("This is wrong", Jenna wanted to say.")
+                    # we need punctuation BETWEEN the head and
+                    # the complement for this to be indirect speech
+                    elif (child.dep_ == 'punct'
+                          and ((child.i < tok.i
+                                and tok.i < target.i
+                                and tok.dep_ == 'nsubj'
+                                and tok.pos_ == 'VERB')
+                               or (target.i < child.i
+                                   and child.i < tok.i)
+                               or (target.i > child.i
+                                   and child.i > tok.i))):
 
-                       # Demoted subject of passive sentence
-                       if subj is None:
-                           subj = getPrepObject(tok, ['by'])
+                        if isRoot(target):
+                            speaker_refs = []
+                            addressee_refs = []
 
-                       # Inverted subject construction 
-                       # ('spare me, begged the poor mouse')
-                       if subj == tok and getObject(target) is not None:
-                           subj = getObject(target)
+                        # Mark the speaker for the local domain, which will
+                        # be the subject or agent, if one is available, and
+                        # interpret first person pronouns within the local
+                        # domain as referring to the subject of the domain
+                        # predicate
+                        subj = getSubject(target)
 
-                       # Mark this predicate as involving direct speech
-                       # (complement clause with dependent punctuation is
-                       # our best indicator of direct speech. That means
-                       # we'll run into trouble when students do not punctuate
-                       # correctly, but there's nothing to be done about it
-                       # short of training a classifier on erroneous student
-                       # writing.)
-                        
-                       if subj is not None \
-                          and (subj._.animate
-                               or subj._.vwp_sourcetext
-                               or subj.text.lower() in ['they', 'it']
-                               or subj.pos_ == 'PROPN'):
-                           target._.vwp_direct_speech = True
-                       else:
-                           continue
+                        # TO-DO: add support for controlled subjects
+                        # ("This is wrong", Jenna wanted to say.")
 
-                       # If the quote doesn't encompass the complement,
-                       # this isn't direct speech
-                       if quotationMark(child) and not tok._.vwp_quoted:
-                           continue
+                        # Demoted subject of passive sentence
+                        if subj is None:
+                            subj = getPrepObject(tok, ['by'])
 
-                       # Record the speaker as being the subject
-                       if subj is not None:
-                           target._.vwp_speaker = [subj.i]
-                           tok._.vwp_speaker = [subj.i]
-                           if subj.i not in speaker_refs:
-                               speaker_refs.append(subj.i)
-                           subjAnt = [hdoc[loc] for loc
-                                      in ResolveReference(subj, hdoc)]
-                           if subjAnt is not None:
-                               for ref in subjAnt:
-                                   if ref.i not in target._.vwp_speaker:
-                                       target._.vwp_speaker.append(ref.i)
-                                   if ref.i not in tok._.vwp_speaker:
-                                       tok._.vwp_speaker.append(ref.i)
-                                   if ref.i not in speaker_refs:
-                                       speaker_refs.append(ref.i)
+                        # Inverted subject construction
+                        # ('spare me, begged the poor mouse')
+                        if subj == tok and getObject(target) is not None:
+                            subj = getObject(target)
 
-                       elif isRoot(tok.head):
-                           target._.vwp_speaker = []
-                           tok._.vwp_speaker = []
+                        # Mark this predicate as involving direct speech
+                        # (complement clause with dependent punctuation is
+                        # our best indicator of direct speech. That means
+                        # we'll run into trouble when students do not punctuate
+                        # correctly, but there's nothing to be done about it
+                        # short of training a classifier on erroneous student
+                        # writing.)
 
-                       # Mark the addressee for the local domain,
-                       # which will be the object of the preposition
-                       # 'to' or the direct object
-                       addressee_refs = self.markAddresseeRefs(target, tok, addressee_refs)
-                       
-                       # If it does not conflict with the syntactic
-                       # assignment, direct speech status is inherited
-                       # from the node we detect as involving direct
-                       # speech.
-                       for descendant in target.subtree:
-                           if descendant._.vwp_quoted:
-                               # TO-DO: add block to prevent inheritance
-                               # for embedded direct speech
-                               if descendant.text.lower() in \
-                                  first_person_pronouns \
-                                  and len(list(descendant.children)) == 0:
-                                   descendant._.vwp_speaker = \
-                                       target._.vwp_speaker
-                                   if descendant.i not in speaker_refs \
-                                      and descendant.i not in addressee_refs:
-                                       speaker_refs.append(descendant.i)
-                       target._.vwp_speaker_refs = speaker_refs
+                        if subj is not None \
+                           and (subj._.animate
+                                or subj._.vwp_sourcetext
+                                or subj.text.lower() in ['they', 'it']
+                                or subj.pos_ == 'PROPN'):
+                            target._.vwp_direct_speech = True
+                        else:
+                            continue
 
-                       # direct speech should be treated as quoted even if
-                       # it isn't in quotation marks, as in 'This is good, I thought'
-                       for descendant in tok.subtree:
-                           descendant._.vwp_quoted = True
+                        # If the quote doesn't encompass the complement,
+                        # this isn't direct speech
+                        if quotationMark(child) and not tok._.vwp_quoted:
+                            continue
 
-                       for descendant in tok.subtree:
-                           if descendant._.vwp_quoted:
-                               if (descendant.text.lower()
-                                   in second_person_pronouns
-                                   and len(list(descendant.children)) == 0
-                                   and descendant.i not in speaker_refs) \
-                                  or (descendant.dep_ == 'vocative'
-                                      and descendant.pos_ == 'NOUN'):
-                                   descendant._.vwp_addressee = \
-                                       tok.head._.vwp_addressee
-                                   if descendant.i not in addressee_refs:
-                                       addressee_refs.append(descendant.i)
-                       target._.vwp_addressee_refs = addressee_refs
-                       break
+                        # Record the speaker as being the subject
+                        if subj is not None:
+                            target._.vwp_speaker = [subj.i]
+                            tok._.vwp_speaker = [subj.i]
+                            if subj.i not in speaker_refs:
+                                speaker_refs.append(subj.i)
+                            subjAnt = [hdoc[loc] for loc
+                                       in ResolveReference(subj, hdoc)]
+                            if subjAnt is not None:
+                                for ref in subjAnt:
+                                    if ref.i not in target._.vwp_speaker:
+                                        target._.vwp_speaker.append(ref.i)
+                                    if ref.i not in tok._.vwp_speaker:
+                                        tok._.vwp_speaker.append(ref.i)
+                                    if ref.i not in speaker_refs:
+                                        speaker_refs.append(ref.i)
+
+                        elif isRoot(tok.head):
+                            target._.vwp_speaker = []
+                            tok._.vwp_speaker = []
+
+                        # Mark the addressee for the local domain,
+                        # which will be the object of the preposition
+                        # 'to' or the direct object
+                        addressee_refs = \
+                            self.markAddresseeRefs(target, tok, addressee_refs)
+
+                        # If it does not conflict with the syntactic
+                        # assignment, direct speech status is inherited
+                        # from the node we detect as involving direct
+                        # speech.
+                        for descendant in target.subtree:
+                            if descendant._.vwp_quoted:
+                                # TO-DO: add block to prevent inheritance
+                                # for embedded direct speech
+                                if descendant.text.lower() in \
+                                   first_person_pronouns \
+                                   and len(list(descendant.children)) == 0:
+                                    descendant._.vwp_speaker = \
+                                        target._.vwp_speaker
+                                    if descendant.i not in speaker_refs \
+                                       and descendant.i not in addressee_refs:
+                                        speaker_refs.append(descendant.i)
+                        target._.vwp_speaker_refs = speaker_refs
+
+                        # direct speech should be treated as quoted even if
+                        # it isn't in quotation marks, as in 'This is good,
+                        # I thought'
+                        for descendant in tok.subtree:
+                            descendant._.vwp_quoted = True
+
+                        for descendant in tok.subtree:
+                            if descendant._.vwp_quoted:
+                                if (descendant.text.lower()
+                                    in second_person_pronouns
+                                    and len(list(descendant.children)) == 0
+                                    and descendant.i not in speaker_refs) \
+                                   or (descendant.dep_ == 'vocative'
+                                       and descendant.pos_ == 'NOUN'):
+                                    descendant._.vwp_addressee = \
+                                        tok.head._.vwp_addressee
+                                    if descendant.i not in addressee_refs:
+                                        addressee_refs.append(descendant.i)
+                        target._.vwp_addressee_refs = addressee_refs
+                        break
 
             if (currentRoot is not None
                 and lastRoot is not None
@@ -1583,39 +1853,93 @@ class ViewpointFeatureDef:
           'Bill' governs 'unlikely', so the judgment of unlikelihood is
           attributed to Bill and not to the speaker.
         """
+
+        subj = None
+
         for token in hdoc:
 
-            subj = None
+            # Evaluated role words when root of a domain take the
+            # perspective of that domain (e.g., John deserves a raise)
+            if token._.vwp_evaluated_role \
+               and isRoot(token):
+                token._.vwp_perspective = token._.head_perspective
+                continue
 
-            # Possessives for viewpoint predicates define viewpoint
-            if token._.animate and token.dep_ == 'poss' \
-               and (token.head._.vwp_cognitive
-                    or token.head._.vwp_communication
-                    or token.head._.vwp_argument
-                    or token.head._.vwp_plan
-                    or token.head._.vwp_emotion
-                    or token.head._.vwp_emotional_impact):
-                self.registerViewpoint(hdoc, token, token)
-                self.registerViewpoint(hdoc, token.head, token)
-
-            # Special case: Sentence-modifying prepositional phrases
-            # to 'for me', 'to me', 'according to me' establish viewpoint
-            # for their objects for that clause
-            if isRoot(token) or token.dep_ == 'ccomp' \
-               or token.dep_ == 'csubj' or token.dep_ == 'csubjpass':
-                subj = getPrepObject(token, ['accord', 'to', 'for', 'in'])
-
-                if subj is not None \
-                   and (subj._.animate or subj._.vwp_sourcetext):
-                    self.registerViewpoint(hdoc, token.head, subj)
+            # Set viewpoint for emotional impact predicates
+            # with an animate logical object
+            if token._.vwp_emotional_impact \
+               and getLogicalObject(token) is not None:
+                obj = getLogicalObject(token)
+                if obj._.animate:
+                    self.registerViewpoint(hdoc, token, obj)
+                    obj._.vwp_perspective = token._.vwp_perspective
+                if obj is not None \
+                   and 'poss' in [child.dep_
+                                  for child
+                                  in obj.children
+                                  if child._.animate]:
+                    for child in obj.children:
+                        if child.dep_ == 'poss' \
+                           and child._.animate:
+                            self.registerViewpoint(hdoc, token, child)
+                            child._.vwp_perspective = token._.vwp_perspective
+                            token._.governing_subject = child.i
+                            continue
+                continue
 
             # Special case (evaluation predicates may take dative arguments)
             # Treat the object of the preposition as the viewpoint controller
-            if token._.vwp_evaluation:
+            if token._.vwp_evaluation \
+               or token._.vwp_emotion \
+               or token._.vwp_emotional_impact:
                 subj = getPrepObject(token, ['to', 'for'])
                 if subj is not None \
                    and (subj._.animate or subj._.vwp_sourcetext):
                     self.registerViewpoint(hdoc, token, subj)
+
+                    # If this is adjectival, we need to mark the matrix
+                    # verb/subject as being in the head's perspective
+                    # because the to-phrase has purely local scope
+                    if token.dep_ in ['acomp', 'oprd', 'attr']:
+                        token.head._.vwp_perspective = \
+                            self.getHeadDomain(token.head
+                                               )._.head_perspective
+                        if getSubject(token) is not None:
+                            getSubject(token)._.vwp_perspective = \
+                                self.getHeadDomain(token.head
+                                                   )._.head_perspective
+
+                    continue
+                elif (self.getHeadDomain(token)._.vwp_perspective is not None
+                      and len(self.getHeadDomain(token
+                                                 )._.vwp_perspective) > 0):
+                    token._.vwp_perspective = \
+                        self.getHeadDomain(token)._.vwp_perspective
+                    continue
+
+            # Special case: Sentence-modifying prepositional phrases
+            # to 'for me', 'to me', 'according to me' establish viewpoint
+            # for their objects for that clause
+            # Prefer sentence-initial if they appear there. Only use
+            # late in the sentence if no viewpoint has yet been established
+            if (token.i < token.head.i
+                or token.head._.vwp_perspective is None
+                or (token.head._.vwp_perspective is not None
+                    and len(token.head._.vwp_perspective) == 0)) \
+               and (isRoot(token)
+                    or token.dep_ == 'ccomp'
+                    or token.dep_ == 'csubj'
+                    or token.dep_ == 'csubjpass'
+                    or token.dep_ == 'dep'
+                    or token.dep_ == 'nsubj'):
+                subj = getPrepObject(token, ['accord', 'to', 'for'])
+                if token.dep_ != 'dep' \
+                   and subj is not None \
+                   and not subj._.location \
+                   and (subj._.animate or subj._.vwp_sourcetext):
+                    self.registerViewpoint(hdoc, token, subj)
+                    self.registerViewpoint(hdoc, token.head, subj)
+                    self.getHeadDomain(token)._.head_perspective = [subj.i]
 
             # Special case (npadvmod expressions like 'way'
             # in expressions like 'The way I see it, ...')
@@ -1630,16 +1954,157 @@ class ViewpointFeatureDef:
                         if subj is not None \
                            and (subj._.animate or subj._.vwp_sourcetext):
                             self.registerViewpoint(hdoc, token, subj)
+                            self.getHeadDomain(token)._.head_perspective = \
+                                [subj.i]
+                            self.getHeadDomain(token)._.head_perspective = \
+                                [subj.i]
                             break
+
+            # Nouns used as predicates take the matrix viewpoint
+            # for their domain
+            if token.dep_ in ['attr', 'dobj'] \
+               and token._.has_governing_subject:
+                token._.vwp_perspective = token._.head_perspective
+                continue
+
+            # Evaluation words as subjects take the viewpoint of the
+            # explicit or implicit speaker/thinker/sayer
+            if token._.vwp_evaluation \
+               and token.dep_ in ['nsubj', 'nsubpass']:
+                # root clause, speaker perspective
+                if token.head == token.head.head \
+                   or (token.head.dep_ == 'conj'
+                       and token.head.head == token.head.head.head):
+                    token._.vwp_perspective = token._.head_perspective
+                    continue
+                else:
+                    subj = self.findViewpoint(token,
+                                              token.head,
+                                              '',
+                                              token,
+                                              hdoc)
+                    if subj is not None \
+                       and (subj._.animate or subj._.vwp_sourcetext):
+                        self.registerViewpoint(hdoc, token, subj)
+                    continue
+
+            # Subjective assessment words that are minor syntactic sisters
+            # to the head of the domain take the viewpoint of the
+            # explicit or implicit speaker/thinker/sayer
+            if (token._.vwp_evaluation
+                or token._.vwp_evaluated_role
+                or token._.vwp_hedge
+                or token._.vwp_possibility
+                or token._.vwp_future
+                or token._.subjectVerbInversion) \
+               and token.dep_ in ['det',
+                                  'aux',
+                                  'auxpass',
+                                  'neg',
+                                  'amod',
+                                  'compound',
+                                  'advmod',
+                                  'npadvmod',
+                                  'cc',
+                                  'punct']:
+                token._.vwp_perspective = \
+                    self.getHeadDomain(token.head)._.head_perspective
+
+                # root clause, speaker perspective
+                if isRoot(token.head):
+                    token._.vwp_perspective = \
+                        token.head._.head_perspective
+
+                if token.head.dep_ == 'conj' \
+                   and isRoot(token.head.head):
+                    token._.vwp_perspective = \
+                        token.head.head._.head_perspective
+                continue
+
+            # Abstract nouns as (prepositional) objects of viewpoint predicates
+            # e.g., I believe in censorship
+            if token.pos_ == 'NOUN' \
+               and token._.vwp_abstract \
+               and token.dep_ == 'pobj' \
+               and (token.head.head._.vwp_argument
+                    or token.head.head._.vwp_cognitive
+                    or token.head.head._.vwp_communication) \
+               and token.head.head._.governing_subject is not None \
+               and hdoc[token.head.head._.governing_subject]._.animate:
+                self.registerViewpoint(hdoc,
+                                       token.head.head,
+                                       hdoc[
+                                            token.head.head._.governing_subject
+                                            ])
+                self.registerViewpoint(hdoc,
+                                       token,
+                                       hdoc[
+                                           token.head.head._.governing_subject
+                                           ])
+
+            # Abstract nouns as (direct) objects of viewpoint predicates
+            # e.g., I detest censorship
+            if token._.vwp_abstract \
+               and token.dep_ == 'dobj' \
+               and (token.head._.vwp_argument
+                    or token.head._.vwp_cognitive
+                    or token.head._.vwp_communication) \
+               and token.head._.governing_subject is not None \
+               and hdoc[token.head._.governing_subject]._.animate:
+                self.registerViewpoint(hdoc,
+                                       token.head,
+                                       hdoc[token.head._.governing_subject])
+                self.registerViewpoint(hdoc,
+                                       token,
+                                       hdoc[token.head._.governing_subject])
+                continue
+
+            # Viewpoint predicates
+            if self.viewpointPredicate(token):
+                # Set viewpoint for non-emotional impact predicates
+                # with an animate governing subject
+                if not token._.vwp_emotional_impact \
+                   and token._.governing_subject is not None:
+                    if token._.vwp_abstract \
+                       and hdoc[token._.governing_subject]._.animate:
+                        self.registerViewpoint(hdoc,
+                                               token,
+                                               hdoc[token._.governing_subject])
+                    if token._.governing_subject is not None \
+                       and 'poss' in [child.dep_
+                                      for child
+                                      in hdoc[token._.governing_subject
+                                              ].children
+                                      if child._.animate]:
+                        for child in hdoc[token._.governing_subject].children:
+                            if child.dep_ == 'poss' \
+                               and child._.animate:
+                                self.registerViewpoint(hdoc, token, child)
+                                token._.governing_subject = child.i
+                                continue
+                    continue
+
+            # Possessives for viewpoint predicates define viewpoint
+            if token._.animate and token.dep_ == 'poss' \
+               and (token.head._.vwp_cognitive
+                    or token.head._.vwp_communication
+                    or token.head._.vwp_argument
+                    or token.head._.vwp_plan
+                    or token.head._.vwp_emotion
+                    or token.head._.vwp_emotional_impact):
+                self.registerViewpoint(hdoc, token, token)
+                self.registerViewpoint(hdoc, token.head, token)
 
             # General case -- find and register viewpoint expressions
             if self.viewpointPredicate(token):
+
                 subj = self.findViewpoint(token,
                                           token,
                                           '',
                                           token,
                                           hdoc)
                 if subj is not None \
+                   and not token._.vwp_emotional_impact \
                    and (subj._.animate or subj._.vwp_sourcetext):
                     self.registerViewpoint(hdoc, token, subj)
 
@@ -1664,7 +2129,7 @@ class ViewpointFeatureDef:
             # Viewpoint predicates that are adverbial sentence-level modifiers
             # establish viewpoint for the whole clause
             while (token.head.pos_ != 'NOUN'
-                   and token != token.head
+                   and isRoot(token)
                    and token._.vwp_perspective is not None
                    and ((token.dep_ == 'advcl'
                          or token.dep_ == 'advmod'
@@ -1673,16 +2138,21 @@ class ViewpointFeatureDef:
                         and not tough_complement(token)
                         and not raising_complement(token))):
                 if token.head._.vwp_perspective is None \
-                   or len(token._.vwp_perspective) == 0:
+                   or len(token.head._.vwp_perspective) == 0:
                     token.head._.vwp_perspective = token._.vwp_perspective
                     token = token.head
                 else:
                     break
+                continue
 
         # Spread the viewpoint assignment to all tokens within
         # the scope of the viewpoint markers we've found
         self.percolateViewpoint(getRoots(hdoc))
 
+        for token in hdoc:
+            if token._.vwp_perspective is None:
+                token._.vwp_perspective = \
+                    self.getHeadDomain(token)._.head_perspective
         return hdoc
 
     def markImplicitSubject(self, item, hdoc):
@@ -1694,210 +2164,293 @@ class ViewpointFeatureDef:
         if item._.has_governing_subject:
             return item._.governing_subject
 
-        if (item.pos_ not in ['VERB', 'ADJ', 'NOUN', 'ADP']
-            or item.pos_ == 'ADV' and not item._.vwp_evaluation
-            or item._.vwp_raising) \
-           and ('ccomp' in [child.dep_ for child in item.children]
-                or 'xcomp' in [child.dep_ for child in item.children]):
-            # we get implicit subjects only for content words and
-            # prepositions for manner but not sentence adverbs
-            # (which should be ._.vwp_evaluation marked) and not
-            # for raising predicates with complements.
-            for child in item.children:
-                self.markImplicitSubject(child, hdoc)
-            if item._.governing_subject is None \
-               and getSubject(item) is not None:
-                item._.has_governing_subject = True
-                item._.governing_subject = getSubject(item).i
-            return None
+        found = False
+        subj = getSubject(item)
+        obj = getObject(item)
 
-        explicitSubj = None
-        # Resolve subject of relative clause
-        if item.dep_ == 'relcl':
-            for token in item.lefts:
-                if token.i < item.i and token.dep_ == 'nsubj':
-                    if token.text.lower() in ['who', 'that', 'which']:
-                        explicitSubj = item.head
-                    else:
-                        explicitSubj = token
-
-        # Default explicit subject resolution
-        elif (item.dep_ == 'acomp'
-              and getSubject(item.head) is not None):
-            explicitSubj = getSubject(item.head)
-        elif (item.dep_ == 'acl'
-              and getSubject(item.head) is not None):
-            explicitSubj = getSubject(item.head)
-        elif explicitSubj is None:
-            explicitSubj = getSubject(item)
-
-        toughPredicateSister = False
-        explicitObj = None
-        for sister in item.head.children:
-            if sister != item and sister._.vwp_tough \
-               and (sister.head == item
-                    or sister.dep_ == 'acomp'
-                    or sister.dep_ == 'xcomp'
-                    or sister.dep_ == 'oprd'
-                    or sister.dep_ == 'attr'
-                    or sister.dep_ == 'advcl'
-                    or sister.dep_ == 'advmod'):
-                toughPredicateSister = True
-            if sister.dep_ == 'dobj':
-                explicitObj = sister
-
-        # xcomp with a commanding object
-        # treats the object as dominating it
-        if item.dep_ == 'xcomp':
-            obj = None
-            for child in item.head.children:
-                if child == item:
-                    break
-                if child.dep_ == 'dobj':
-                    obj = child
-                    break
-            if obj is not None:
-                if getSubject(obj) is not None \
-                   and (obj._.abstract_trait
-                        or obj._.vwp_abstract
-                        or (obj._.concreteness is not None
-                            and obj._.concreteness <= 5.1)):
-                    explicitSubj = getSubject(obj)
-                else:
-                    explicitSubj = obj
-
-        if explicitSubj is not None:
+        ###################################################################
+        # default governing subject is the explicit syntactic subject     #
+        ###################################################################
+        if subj is not None:
             item._.has_governing_subject = True
-            item._.governing_subject = explicitSubj.i
-        elif item.pos_ in ['ADV']:
-            if item.head.pos_ == 'ADJ':
+            item._.governing_subject = subj.i
+            # We do not set found to True because this is potentially
+            # overrideable
+
+        ###################################################################
+        # Assign subject of a relative clause to the modified noun        #
+        # if subject is explicitly or implicitly a relative pronoun       #
+        # but to the explicit subject otherwise                           #
+        ###################################################################
+        if item.dep_ == 'relcl' \
+           and tensed_clause(item):
+            # examples: the idea that upset him
+            # the idea that he suggested /
+            if subj and subj.tag_ in ['WDT', 'WP']:
+                subj = item.head
                 item._.has_governing_subject = True
-                item._.governing_subject = item.head.i
-            elif item.head._.has_governing_subject:
+                item._.governing_subject = subj.i
+                found = True
+            # the idea he gave me /
+            # the idea that I like /
+            # the idea I like
+            elif subj:
                 item._.has_governing_subject = True
-                item._.governing_subject = item.head._.governing_subject
-        elif item.pos_ in ['NOUN'] and item.dep_ == 'advcl':
+                item._.governing_subject = subj.i
+                found = True
+
+        # infinitival adjectival clauses (my plan to win,
+        # I have a plan to win, I developed a plan to win)
+        # take their governing subject from the matrix object
+        # in a double-object construction and from the matrix
+        # subject in other object constructions
+        if not found and item.dep_ == 'acl' \
+           and not tensed_clause(item):
             if item.head._.has_governing_subject:
                 item._.has_governing_subject = True
-                item._.governing_subject = item.head._.governing_subject
-        elif (item.pos_ in ['VERB', 'ADJ', 'ADP']
-              or item.dep_ == 'attr'
-              or item.dep_ == 'oprd'
-              or (item.dep_ == 'pobj'
-                  and item.head.lemma_ in ['like', 'as'])
-              or (item.dep_ == 'pobj'
-                  and item.head.lemma_ == 'of'
-                  and item.head.head._.abstract_trait)
-              or (item.dep_ == 'conj'
-                  and item.head.dep_ in ['attr', 'oprd'])
-              or (item.dep_ == 'conj'
-                  and item.head.pos_ in ['VERB', 'ADJ', 'ADP'])
-              or item._.abstract_trait):
-            head = item.head
-            if head is None:
-                for child in item.children:
-                    self.markImplicitSubject(child, hdoc)
-                if item._.governing_subject is None \
-                   and getSubject(item) is not None:
+                item._.governing_subject = \
+                    item.head._.governing_subject
+                found = True
+            elif item.dep_ in ['dobj', 'pobj']:
+                if matrixobj is not None \
+                   and item != matrixobj:
+                    item._has_governing_subject = True
+                    item._.governing_subject = matrixobj.i
+                    found = True
+                elif matrixsubj is not None:
                     item._.has_governing_subject = True
-                    item._.governing_subject = getSubject(item).i
-                return None
-            # Prepositional phrases governed by a direct object
-            # take the direct object as implicit subject
-            if item.dep_ == 'prep' or item.dep_ == 'oprd' \
-               or item.dep_ == 'conj' and item.head.dep_ == 'oprd':
-                dobj = [token.i for token in
-                        item.head.children if token.dep_ == 'dobj']
-                if len(dobj) > 0:
-                    item._.has_governing_subject = True
-                    item._.governing_subject = dobj[0]
-                else:
-                    item._.has_governing_subject = \
-                        item.head._.has_governing_subject
-                    item._.governing_subject = item.head._.governing_subject
-            # relationships that generally inherit governing
-            # subjects from their heads
-            elif item.dep_ in ['conj', 'cc', 'pobj', 'prep', 'attr',  'dep']:
-                item._.has_governing_subject = \
-                    item.head._.has_governing_subject
-                item._.governing_subject = item.head._.governing_subject
-            elif item.dep_ == 'amod' or item.dep_ == 'nmod':
-                if head.dep_ == 'attr':
-                    item._.has_governing_subject = head._.has_governing_subject
-                    item._.governing_subject = head._.governing_subject
-                elif ((head.dep_ == 'pobj'
-                       and head.head is not None
-                       and head.head.lemma_ in ['like', 'as'])
-                      or (head.dep_ == 'pobj'
-                          and head.head is not None
-                          and head.head.lemma_ == 'of'
-                          and head.head.head is not None
-                          and head.head.head._.abstract_trait
-                          and head.head.head.head is not None
-                          and head.head.head.head.lemma_ in ['like', 'as'])):
-                    item._.has_governing_subject = \
-                        head.head._.has_governing_subject
-                    item._.governing_subject = head.head._.governing_subject
-                    head._.has_governing_subject = \
-                        head.head._.has_governing_subject
-                    head._.governing_subject = head.head._.governing_subject
-                elif (((head._.animate and head._.concreteness is None)
-                      or (head._.concreteness is not None
-                          and head._.concreteness > 5.1))
-                      and not head._.abstract_trait
-                      and not head._.vwp_abstract):
-                    item._.has_governing_subject = True
-                    item._.governing_subject = head.i
-                # governing subject of the adjective is a possessive
-                else:
-                    item._.has_governing_subject = head._.has_governing_subject
-                    item._.governing_subject = head._.governing_subject
+                    item._.governing_subject = matrixsubj.i
+                    found = True
 
-            # Special case: Sentence-modifying prepositional phrases
-            # to 'for me', 'to me', 'according to me't=True
-            elif ((item.dep_ == 'acomp'
-                   or item.dep_ == 'xcomp'
-                   or item.dep_ == 'oprd'
-                   or item.dep_ == 'attr'
-                   or item.dep_ == 'advcl'
-                   or item.dep_ == 'advmod'
-                   or item.dep_ == 'pcomp'
-                   or item.dep_ == 'prep'
-                   or item.dep_ == 'conj'
-                   or isRoot(item))
-                  and not item.head._.vwp_tough):
-                subj = getSubject(head)
-                if explicitObj is not None \
-                   and item.dep_ in ['xcomp', 'oprd', 'advcl']:
-                    item._.has_governing_subject = True
-                    item._.governing_subject = explicitObj.i
-                if subj is not None:
-                    item._.has_governing_subject = True
-                    item._.governing_subject = subj.i
-                elif head._.has_governing_subject:
-                    item._.has_governing_subject = True
-                    item._.governing_subject = head._.governing_subject
+        if item.dep_ == 'conj' and getSubject(item) is not None:
+            found = True
+
+        ###############################################################
+        # Conjuncts inherit their subject                             #
+        # from the first conjunct                                     #
+        ###############################################################
+        dependency = item.dep_
+        matrixitem = item
+        while (matrixitem != matrixitem.head
+               and matrixitem.dep_ == 'conj'
+               and matrixitem != matrixitem.head
+               and (getSubject(matrixitem) is None
+                    or getSubject(matrixitem).tag_ in ['WDT', 'WP'])):
+            matrixitem = matrixitem.head
+
+        # Setup.
+        if matrixitem.head._.has_governing_subject:
+            if hdoc[matrixitem.head._.governing_subject
+                    ]._.has_governing_subject \
+               and not hdoc[matrixitem.head._.governing_subject
+                            ]._.animate \
+               and (hdoc[matrixitem.head._.governing_subject
+                         ]._.concreteness is None
+                    or hdoc[matrixitem.head._.governing_subject
+                            ]._.concreteness < 4):
+                matrixsubj = \
+                    hdoc[hdoc[matrixitem.head._.governing_subject
+                              ]._.governing_subject]
+            else:
+                matrixsubj = hdoc[matrixitem.head._.governing_subject]
+        else:
+            matrixsubj = getSubject(matrixitem.head)
+
+            # Correction to get the head noun
+            # not the subj. relative pronoun for
+            # a relative clause
+            if matrixsubj is not None \
+               and matrixsubj.tag_ in ['WDT', 'WP']:
+                matrixsubj = matrixsubj.head.head
+
+        matrixobj = getObject(matrixitem.head)
+
+        # Now inherit the governing subject from the first conjunct
+        if item.dep_ == 'conj' \
+           and matrixitem._.has_governing_subject:
+            item._.has_governing_subject = True
+            item._.governing_subject = \
+                matrixitem._.governing_subject
+            found = True
+
+        ###################################################################
+        # Embedded non-finite, subjectless predicates take the            #
+        # nearest c-commanding argument as their subject, i.e.,           #
+        # matrix object if present, matrix subject otherwise              #
+        ###################################################################
+        if not tensed_clause(item) \
+           and matrixitem.dep_ in ['attr',
+                                   'oprd',
+                                   'prep',
+                                   'dobj',
+                                   'acomp',
+                                   'ccomp',
+                                   'pcomp',
+                                   'xcomp',
+                                   'dep']:
+
+            if item._.has_governing_subject:
+                found = True
+
+            # Matrix object is the governing subject
+            elif (matrixsubj is not None
+                  and matrixobj is not None
+                  and matrixobj.tag_ not in ['WDT', 'WP']
+                  and item != matrixobj):
+                # Exception: indirect objects (first in two
+                # dobj children) are not subjects of the
+                # true direct object
+                if item.dep_ != 'dobj':
+                    if not containsDistinctReference(item, matrixobj, hdoc) \
+                       or item.dep_ in ['ccomp', 'xcomp']:
+                        item._.has_governing_subject = True
+                        item._.governing_subject = matrixobj.i
+                    else:
+                        item._.has_governing_subject = False
+                    found = True
+
+            # Otherwise, matrix subject is the governing subject
+            # with some restrictions on adjectives and nouns
+            # (either they license raising/tough-movement constructions
+            #  or, for nouns, we allow implicit subjects only in special
+            # cases involving light verbs and abstract traits)
+            elif (matrixsubj is not None
+                  and (matrixobj is None or item != matrixobj)
+                  and (item.pos_ in ['VERB',
+                                     'AUX',
+                                     'ADP']
+                       or (item.pos_ in ['ADJ',
+                                         'NOUN',
+                                         'PROPN',
+                                         'PRON',
+                                         'CD',
+                                         'NUM']
+                           and (item.head._.vwp_tough
+                                or item.head._.vwp_raising
+                                or item.head._.vwp_seem
+                                or item.head._.vwp_cognitive
+                                or item.head._.vwp_emotion
+                                or item.head._.vwp_character
+                                or item.dep_ == 'attr'
+                                or item.dep_ == 'oprd'
+                                or (item.dep_ == 'dobj'
+                                    and (item._.abstract_trait
+                                         or item.head.lemma_
+                                         in getLightVerbs())))))):
+
+                item._.has_governing_subject = True
+                if item.pos_ == 'ADP':
+                    item._.governing_subject = matrixitem.head.i
                 else:
-                    item._.has_governing_subject = False
-                    item._.governing_subject = None
+                    if not containsDistinctReference(item, matrixsubj, hdoc) \
+                       or item.dep_ in ['ccomp', 'xcomp']:
+                        item._.has_governing_subject = True
+                        item._.governing_subject = matrixsubj.i
+                    else:
+                        item._.has_governing_subject = False
+                    found = True
+
+            if matrixsubj is not None \
+               and matrixobj is not None \
+               and (matrixobj.head.lemma_ in getLightVerbs()
+                    or matrixobj.head._.vwp_cognitive
+                    or matrixobj.head._.vwp_emotion):
+                matrixobj._.has_governing_subject = True
+                matrixobj._.governing_subject = matrixsubj.i
+
+        # The governing subject of an attributive adjective
+        # or a preposition or a clause modifying a noun
+        # is the noun is modifies
+        if not found \
+           and item.dep_ in ['amod', 'nmod', 'prep', 'acl'] \
+           and item.head.pos_ in ['NOUN', 'PROPN', 'PRON', 'DET', 'CD', 'NUM']:
+            item._.has_governing_subject = True
+            item._.governing_subject = item.head.i
+            found = True
+
+        # The governing subject of a preposition or adverb
+        # modifying a verb is that verb's governing subject,
+        # except for sentence adverbs (which are listed by type)
+        # and transition words
+        if not found \
+           and (item.dep_ in ['prep', 'advmod', 'neg', 'prt']
+                or item.pos_ == 'ADV'):
+            if item.dep_ in ['neg'] \
+               or item._.vwp_hedge \
+               or item._.transition:
+                item._.has_governing_subject = True
+                item._.governing_subject = item.head.i
+                found = True
+            elif (item.head.pos_ in ['VERB', 'AUX', 'MD']
+                  and item.head._.has_governing_subject
+                  and not item._.vwp_necessity
+                  and not item._.vwp_certainty
+                  and not item._.vwp_probability
+                  and not item._.vwp_importance
+                  and not item._.vwp_risk
+                  and not item._.vwp_expectancy
+                  and not item._.vwp_emphasis
+                  and not item._.vwp_information
+                  and not item._.transition):
+                item._.has_governing_subject = True
+                item._.governing_subject = item.head._.governing_subject
+                found = True
+            # otherwise it is the modified word
+            else:
+                item._.has_governing_subject = True
+                item._.governing_subject = item.head.i
+                found = True
+
+        # Prepositional and object complements that are gerunds w/o
+        # a marked subject take the subject of the closest ancestor
+        # with a subject or object commanding them
+        if not found \
+           and item.dep_ in ['ccomp', 'pcomp'] \
+           and item.tag_ == 'VBG' \
+           and getSubject(item) is None:
+            last = item
+            head = item.head
+            while (head != head.head
+                   and getObject(head) is None
+                   and getSubject(head) is None):
+                last = head
+                head = head.head
+            obj = getObject(head)
+            subj = getSubject(head)
+            if obj is not None and obj != last:
+                item._.has_governing_subject = True
+                item._.governing_subject = obj.i
+                found = True
+            elif subj is not None:
+                item._.has_governing_subject = True
+                item._.governing_subject = subj.i
+                found = True
+
+        # Participles also take the subject of the clause they modify
+        if not found \
+           and item.dep_ in ['advcl'] \
+           and item.tag_ == 'VBG' \
+           and (getSubject(item) is None
+                or item.pos_ != 'VERB'):
+            last = item
+            head = item.head
+            while (head != head.head
+                   and getSubject(head) is None):
+                last = head
+                head = head.head
+            obj = getObject(head)
+            subj = getSubject(head)
+            if obj is not None and obj != last and obj._.has_governing_subject:
+                item._.has_governing_subject = True
+                item._.governing_subject = obj._.governing_subject
+                found = True
+            elif subj is not None and subj._.has_governing_subject:
+                item._.has_governing_subject = True
+                item._.governing_subject = subj._.governing_subject
+                found = True
 
         for child in item.children:
             self.markImplicitSubject(child, hdoc)
-
-        if item._.has_governing_subject:
-            if hdoc[item._.governing_subject]._.abstract_trait:
-                for child in hdoc[item._.governing_subject].children:
-                    if child.lemma_ == 'of':
-                        for grandchild in child.children:
-                            if grandchild.dep_ == 'pobj':
-                                item._.governing_subject = grandchild.i
-                                break
-                        break
-
-        if item._.governing_subject is None \
-           and getSubject(item) is not None:
-            item._.has_governing_subject = True
-            item._.governing_subject = getSubject(item).i
 
         return item._.governing_subject
 
@@ -1905,7 +2458,6 @@ class ViewpointFeatureDef:
         """
         Definition of what nodes count as head domains for viewpoint
         """
-#            and not node._.vwp_suasive \
 
         # e.g., 'make us lazier'
         if node.dep_ in ['ccomp', 'oprd'] \
@@ -1929,7 +2481,10 @@ class ViewpointFeatureDef:
         if not isRoot(node) \
            and node.dep_ not in ['ccomp', 'pcomp', 'csubj', 'csubjpass'] \
            and not (tensed_clause(node)
-                    and node.dep_ in ['advcl', 'relcl', 'conj']) \
+                    and node.dep_ in ['advcl', 'relcl']) \
+           and not (tensed_clause(node)
+                    and node.dep_ == 'conj'
+                    and not self.isHeadDomain(node.head)) \
            and not (node.dep_ == 'acl'
                     and node.tag_ in ['VBD', 'VBN']) \
            and not (node.dep_ == 'acl'
@@ -1957,7 +2512,7 @@ class ViewpointFeatureDef:
             node = node.head
         return node
 
-    def percolateViewpoint(self, nodes: list):
+    def percolateViewpoint(self, nodes: list, barriers=[]):
         """
          Viewpoint is defined relative to head domains (basically,
          tensed clauses). We need to associate each node with the
@@ -1971,62 +2526,92 @@ class ViewpointFeatureDef:
          proposition 'Mary is happy that Bill is going to school'
           is assessed from Jenna's perspective.
         """
+
         for node in nodes:
 
-            if node._.vwp_perspective is None \
-               or len(node._.vwp_perspective) == 0:
-                if not isRoot(self.getHeadDomain(node)):
+            if node.head == self.getHeadDomain(node.head) \
+               and node.head.dep_ == 'conj' \
+               and node.head.i not in barriers:
+                barriers.append(node.head.i)
+            elif (node == self.getHeadDomain(node)
+                  and node.dep_ == 'conj'
+                  and node.head.i not in barriers):
+                barriers.append(node.i)
+            elif (node.dep_ in ['csubj', 'csubjpass']
+                  and node.head.i not in barriers):
+                barriers.append(node.i)
 
-                    node._.vwp_perspective = \
+            if node._.vwp_perspective is None:
+                if not isRoot(self.getHeadDomain(node)) \
+                   and (node != self.getHeadDomain(node)
+                        or node.dep_ not in ['det',
+                                             'aux',
+                                             'auxpass',
+                                             'neg',
+                                             'amod',
+                                             'advmod',
+                                             'npadvmod',
+                                             'cc',
+                                             'punct']):
+
+                    if self.getHeadDomain(node).i not in barriers:
+                        node._.vwp_perspective = \
                             self.getHeadDomain(node).head._.vwp_perspective
+                elif node == self.getHeadDomain(node):
+                    node._.vwp_perspective = \
+                        self.getHeadDomain(node.head)._.head_perspective
                 else:
-                    node._.vwp_perspective = []
+                    node._.vwp_perspective = \
+                        self.getHeadDomain(node)._.head_perspective
             else:
-                if node._.governing_subject is None \
-                   or len(node._.vwp_perspective) == 0 \
-                   and node.head.lemma_ in ['get', 'have', 'make', 'do']:
+                if (node._.governing_subject is None
+                   or len(node._.vwp_perspective)) == 0 \
+                   and node.head.lemma_ in getLightVerbs():
                     node.head._.vwp_perspective = node._.vwp_perspective
             for child in node.children:
 
-                if child._.vwp_perspective is None \
-                   or len(node._.vwp_perspective) == 0:
-                    child._.vwp_perspective = node._.vwp_perspective
+                if child._.vwp_perspective is not None:
+                    self.percolateViewpoint([child], barriers)
+                    continue
 
-                if node != self.getHeadDomain(node) \
-                   and node.i < self.getHeadDomain(node).i:
-                    if not isRoot(self.getHeadDomain(node)) \
-                       and len(child._.vwp_perspective) == 0:
-
-                        child._.vwp_perspective = \
-                                 self.getHeadDomain(
-                                     node).head._.vwp_perspective
-                    else:
-                        if child._.vwp_perspective is None:
-                            child._.vwp_perspective = []
-                elif (child.i < node.i
-                      and child.i < self.getHeadDomain(node).i):
-                    if not isRoot(self.getHeadDomain(node)) \
-                       and len(child._.vwp_perspective) == 0:
-
-                        child._.vwp_perspective = \
-                                self.getHeadDomain(node).head._.vwp_perspective
-                    else:
-                        if child._.vwp_perspective is None:
-                            child._.vwp_perspective = []
-
-                self.percolateViewpoint([child])
-            if node == self.getHeadDomain(node) \
-               and len(node._.vwp_perspective) > 0:
-                for child in node.children:
-                    if child.dep_ in ['mark',
-                                      'nsubj',
-                                      'nsubjpass',
+                if child.dep_ not in ['det',
                                       'aux',
+                                      'auxpass',
                                       'neg',
-                                      'det',
-                                      'poss']:
-                        if child._.vwp_perspective is None:
+                                      'amod',
+                                      'advmod',
+                                      'npadvmod',
+                                      'cc',
+                                      'punct']:
+
+                    found = False
+                    if self.getHeadDomain(child).i not in barriers:
+                        if node._.vwp_perspective is not None:
                             child._.vwp_perspective = node._.vwp_perspective
+                        elif (not found and node != self.getHeadDomain(node)
+                              and node.i < self.getHeadDomain(node).i):
+                            if child._.vwp_perspective is not None \
+                               and not isRoot(self.getHeadDomain(node)) \
+                               and len(child._.vwp_perspective) == 0:
+
+                                child._.vwp_perspective = \
+                                         self.getHeadDomain(
+                                             node).head._.vwp_perspective
+                            elif child._.vwp_perspective is None:
+                                child._.vwp_perspective = \
+                                    self.getHeadDomain(child
+                                                       )._.head_perspective
+                        elif (child.i < node.i
+                              and child.i < self.getHeadDomain(node).i):
+                            if child._.vwp_perspective is None:
+                                child._.vwp_perspective = \
+                                    self.getHeadDomain(child
+                                                       )._.head_perspective
+                else:
+                    child._.vwp_perspective = \
+                        self.getHeadDomain(child)._.head_perspective
+
+                self.percolateViewpoint([child], barriers)
 
     def set_direct_speech_spans(self, hdoc):
         """
@@ -2055,8 +2640,8 @@ class ViewpointFeatureDef:
                     if quotationMark(hdoc[right.i]) \
                        and not hdoc[right.i - 1]._.vwp_quoted:
                         hdoc[right.i]._.vwp_quoted = True
-                        right =  hdoc[right.i - 1]
-                
+                        right = hdoc[right.i - 1]
+
                 # Define spans
                 if speaker is not None \
                    and addressee is not None \
@@ -2251,7 +2836,7 @@ class ViewpointFeatureDef:
 
         theory_of_mind_sentences = []
 
-        #print_parse_tree(hdoc)
+        # print_parse_tree(hdoc)
 
         for token in hdoc:
 
@@ -2485,46 +3070,13 @@ class ViewpointFeatureDef:
             token._.vwp_argumentation = True
             hdoc[token._.governing_subject]._.vwp_argumentation = True
             for child in hdoc[token._.governing_subject].children:
-                if child.lemma_ not in ['in',
-                                        'on',
-                                        'at',
-                                        'upon',
-                                        'over',
-                                        'during',
-                                        'before',
-                                        'after'] \
+                if child.lemma_ not in core_temporal_preps \
                     and (child.pos_ in ['DET', 'AUX']
-                         or child.tag_ in ['TO',
-                                           'MD',
-                                           'IN',
-                                           'SCONJ',
-                                           'WRB',
-                                           'WDT',
-                                           'WP',
-                                           'WP$',
-                                           'EX',
-                                           'ADP',
-                                           'JJR',
-                                           'JJS',
-                                           'RBR',
-                                           'RBS']
+                         or child.tag_ in function_word_tags
                          or (child.tag_ == 'RB'
                              and (child._.vwp_evaluation
                                   or child._.vwp_hedge))
-                         or child.lemma_ in ['I',
-                                             'me',
-                                             'my',
-                                             'mine',
-                                             'we',
-                                             'us',
-                                             'our',
-                                             'ours',
-                                             'you',
-                                             'your',
-                                             'yours',
-                                             'one',
-                                             'someone',
-                                             'anyone']
+                         or child.lemma_ in personal_or_indefinite_pronoun
                          or child._.vwp_argument
                          or child._.vwp_information
                          or child._.vwp_communication
@@ -2541,14 +3093,14 @@ class ViewpointFeatureDef:
 
         if token.dep_ == 'amod' \
            and token._.vwp_evaluation \
-           and token.head.dep_ in ['nsubj', 'nsubjpass', 'dobj'] \
+           and token.head.dep_ in subject_or_object_nom \
            and (isRoot(token.head.head)
                 or token._.vwp_argument
                 or token._.vwp_communication
                 or token._.vwp_cognitive):
             token._.vwp_argumentation = True
 
-        if token.dep_ in ['acomp', 'amod', 'attr', 'oprd'] \
+        if token.dep_ in adjectival_predicates \
            and (token._.vwp_evaluation
                 or token._.vwp_raising
                 or token._.vwp_hedge
@@ -2556,10 +3108,7 @@ class ViewpointFeatureDef:
                 or token._.vwp_communication
                 or token._.vwp_cognitive):
             for child in token.head.children:
-                if child.dep_ in ['csubj',
-                                  'ccomp',
-                                  'xcomp',
-                                  'acl']:
+                if child.dep_ in clausal_complements:
                     if child._.vwp_argument \
                        or child._.vwp_information \
                        or child._.vwp_communication \
@@ -2635,15 +3184,7 @@ class ViewpointFeatureDef:
             token._.vwp_argumentation = True
             token.head._.vwp_argumentation = True
 
-        if token.lemma_ in ['any',
-                            'no',
-                            'each',
-                            'every',
-                            'little',
-                            'some',
-                            'few',
-                            'more',
-                            'most'] \
+        if token.lemma_ in quantifying_determiners \
            and (token.head._.vwp_argument
                 or token.head._.vwp_information
                 or token.head._.vwp_communication
@@ -2678,22 +3219,16 @@ class ViewpointFeatureDef:
            or token._.vwp_argument
            or token._.vwp_evaluation
            or token._.vwp_hedge):
-            if token.dep_ in ['nsubj',
-                              'nsubjpass',
-                              'dobj']:
+            if token.dep_ in subject_or_object_nom:
                 for child in token.head.children:
-                    if child.dep_ in ['csubj',
-                                      'ccomp',
-                                      'xcomp',
-                                      'acl',
-                                      'oprd']:
+                    if child.dep_ in clausal_complements:
                         token._.vwp_argumentation = True
                         token.head._.vwp_argumentation = True
                         for grandchild in child.children:
                             if grandchild.dep_ == 'mark':
                                 grandchild._.vwp_argumentation = True
 
-            if token.dep_ in ['aux', 'advmod', 'npadvmod'] \
+            if token.dep_ in ['aux', 'auxpass', 'advmod', 'npadvmod'] \
                and (isRoot(token.head)
                     and (token.head._.vwp_cognitive
                          or token.head._.vwp_communication
@@ -2706,7 +3241,7 @@ class ViewpointFeatureDef:
                     if child.pos_ in ['AUX', 'ADV']:
                         child._.vwp_argumentation = True
 
-            if token.dep_ in ['aux', 'advmod', 'npadvmod'] \
+            if token.dep_ in ['aux', 'auxpass', 'advmod', 'npadvmod'] \
                and (token._.vwp_evaluation or token._.vwp_hedge):
                 for child in token.head.children:
                     if child.dep_ != 'conj':
@@ -2730,9 +3265,9 @@ class ViewpointFeatureDef:
                                     token._.vwp_argumentation = True
                                     ggrandchild._.vwp_argumentation = True
 
-            if token.dep_ in ['aux', 'advmod', 'npadvmod']:
+            if token.dep_ in ['aux', 'auxpass', 'advmod', 'npadvmod']:
                 for child in token.children:
-                    if child.dep_ in ['attr', 'oprd', 'acomp'] \
+                    if child.dep_ in adjectival_predicates \
                        and (child._.vwp_cognitive
                             or child._.vwp_communication
                             or child._.vwp_argument
@@ -2751,52 +3286,18 @@ class ViewpointFeatureDef:
                or token.head._.vwp_hedge \
                or token.head._.vwp_evaluation:
                 for child in token.children:
-                    if (child.dep_ in ['xcomp', 'oprd', 'csubj']
-                        or (child.dep_ in ['ccomp', 'acl']
-                            and tensed_clause(child))):
+                    if clausal_subject_or_complement(child):
                         token._.vwp_argumentation = True
                         token.head._.vwp_argumentation = True
                         for child in token.head.children:
-                            if child.lemma_ not in ['in',
-                                                    'on',
-                                                    'at',
-                                                    'upon',
-                                                    'over',
-                                                    'during',
-                                                    'before',
-                                                    'after'] \
+                            if child.lemma_ not in core_temporal_preps \
                                and (child.pos_ in ['DET', 'AUX']
-                                    or child.tag_ in ['TO',
-                                                      'MD',
-                                                      'IN',
-                                                      'SCONJ',
-                                                      'WRB',
-                                                      'WDT',
-                                                      'WP',
-                                                      'WP$',
-                                                      'EX',
-                                                      'ADP',
-                                                      'JJR',
-                                                      'JJS',
-                                                      'RBR',
-                                                      'RBS']
+                                    or child.tag_ in function_word_tags
                                     or (child.tag_ == 'RB'
                                         and (child._.vwp_evaluation
                                              or child._.vwp_hedge))
-                                    or child.lemma_ in ['I',
-                                                        'me',
-                                                        'my',
-                                                        'mine',
-                                                        'we',
-                                                        'us',
-                                                        'our',
-                                                        'ours',
-                                                        'you',
-                                                        'your',
-                                                        'yours',
-                                                        'one',
-                                                        'someone',
-                                                        'anyone']
+                                    or child.lemma_
+                                    in personal_or_indefinite_pronoun
                                     or child._.vwp_argument
                                     or child._.vwp_information
                                     or child._.vwp_communication
@@ -2876,8 +3377,7 @@ class ViewpointFeatureDef:
                     token.head._.vwp_argumentation = True
                     child._.vwp_argumentation = True
 
-        if (token.dep_ in
-            ['ccomp', 'dobj', 'xcomp', 'acl', 'oprd', 'attr', 'acomp']
+        if (token.dep_ in complements
             and (token.head._.vwp_argument
                  or token.head._.vwp_information
                  or token.head._.vwp_communication
@@ -2925,13 +3425,7 @@ class ViewpointFeatureDef:
                                  or hdoc[offset]._.vwp_possession
                                  or hdoc[offset]._.vwp_cause
                                  or hdoc[offset]._.vwp_relation
-                                 or hdoc[offset].dep_ == 'xcomp'
-                                 or hdoc[offset].dep_ == 'acl'
-                                 or hdoc[offset].dep_ == 'relcl'
-                                 or hdoc[offset].dep_ == 'oprd'
-                                 or hdoc[offset].dep_ == 'ccomp'
-                                 or hdoc[offset].dep_ == 'csub'
-                                 or hdoc[offset].dep_ == 'csubjpass'))):
+                                 or hdoc[offset].dep_ in complements))):
                         if token._.is_academic \
                            or hdoc[offset]._.is_academic:
                             token._.vwp_argumentation = True
@@ -2950,41 +3444,16 @@ class ViewpointFeatureDef:
                                     child._.vwp_argumentation = True
                                     for grandchild in child.children:
                                         if ((grandchild.pos_ in ['DET', 'AUX']
-                                            or grandchild.tag_ in ['TO',
-                                                                   'MD',
-                                                                   'IN',
-                                                                   'SCONJ',
-                                                                   'WRB',
-                                                                   'WDT',
-                                                                   'ADP',
-                                                                   'WP',
-                                                                   'WP$',
-                                                                   'EX',
-                                                                   'ADP',
-                                                                   'JJR',
-                                                                   'JJS',
-                                                                   'RBR',
-                                                                   'RBS']
-                                            or (grandchild.tag_ == 'RB'
-                                                and (grandchild._.
-                                                     vwp_evaluation
-                                                     or grandchild._.
-                                                     vwp_hedge))
-                                            or grandchild.lemma_
-                                                in ['I',
-                                                    'me',
-                                                    'my',
-                                                    'mine',
-                                                    'we',
-                                                    'us',
-                                                    'our',
-                                                    'ours',
-                                                    'you',
-                                                    'your',
-                                                    'yours',
-                                                    'one',
-                                                    'someone',
-                                                    'anyone'])):
+                                             or grandchild.tag_
+                                             in function_word_tags
+                                             or (grandchild.tag_ == 'RB'
+                                                 and (grandchild._.
+                                                      vwp_evaluation
+                                                      or grandchild._.
+                                                      vwp_hedge))
+                                             or grandchild.lemma_
+                                             in personal_or_indefinite_pronoun
+                                             )):
                                             grandchild._.vwp_argumentation\
                                                 = True
 
@@ -3027,37 +3496,10 @@ class ViewpointFeatureDef:
 
             if token.i + 1 < len(token.doc) \
                and token.nbor(1) is not None \
-               and not token.nbor(1).lemma_ in ['in',
-                                                'on',
-                                                'at',
-                                                'upon',
-                                                'over',
-                                                'during',
-                                                'before',
-                                                'after'] \
+               and not token.nbor(1).lemma_ in core_temporal_preps \
                and ((token.nbor(1).pos_ in ['DET']
-                     and token.nbor(1).lemma_ in ['no',
-                                                  'any',
-                                                  'every',
-                                                  'each',
-                                                  'some',
-                                                  'all',
-                                                  'more',
-                                                  'most'])
-                    or token.nbor(1).tag_ in ['TO',
-                                              'MD',
-                                              'IN',
-                                              'SCONJ',
-                                              'WRB',
-                                              'WDT',
-                                              'WP',
-                                              'WP$',
-                                              'EX',
-                                              'ADP',
-                                              'JJR',
-                                              'JJS',
-                                              'RBR',
-                                              'RBS']
+                     and token.nbor(1).lemma_ in quantifying_determiners)
+                    or token.nbor(1).tag_ in function_word_tags
                     or (token.nbor(1).tag_ == 'RB'
                         and (token.nbor(1)._.vwp_evaluation
                              or token.nbor(1)._.vwp_hedge))
@@ -3073,48 +3515,14 @@ class ViewpointFeatureDef:
                 token.nbor(1)._.vwp_argumentation = True
 
             for child in token.children:
-                if child.lemma_ not in ['in',
-                                        'on',
-                                        'at',
-                                        'upon',
-                                        'over',
-                                        'during',
-                                        'before',
-                                        'after'] \
+                if child.lemma_ not in core_temporal_preps \
                  and child.dep_ != 'conj' \
                  and (child.pos_ in ['DET', 'AUX']
-                      or child.tag_ in ['TO',
-                                        'MD',
-                                        'IN',
-                                        'SCONJ',
-                                        'WRB',
-                                        'WDT',
-                                        'ADP',
-                                        'WP',
-                                        'WP$',
-                                        'EX',
-                                        'ADP',
-                                        'JJR',
-                                        'JJS',
-                                        'RBR',
-                                        'RBS']
+                      or child.tag_ in function_word_tags
                       or (child.tag_ == 'RB'
                           and (child._.vwp_evaluation
                                or child._.vwp_hedge))
-                      or child.lemma_ in ['I',
-                                          'me',
-                                          'my',
-                                          'mine',
-                                          'we',
-                                          'us',
-                                          'our',
-                                          'ours',
-                                          'you',
-                                          'your',
-                                          'yours',
-                                          'one',
-                                          'someone',
-                                          'anyone']
+                      or child.lemma_ in personal_or_indefinite_pronoun
                       or child._.vwp_argument
                       or child._.vwp_information
                       or child._.vwp_communication
@@ -3165,45 +3573,12 @@ class ViewpointFeatureDef:
             if token._.vwp_argumentation \
                and token.tag_ in ['RB', 'MD', 'SCONJ']:
                 for child in token.head.children:
-                    if child.lemma_ not in ['in',
-                                            'on',
-                                            'at',
-                                            'upon',
-                                            'over',
-                                            'during',
-                                            'before',
-                                            'after'] \
-                       and (child.tag_ in ['TO',
-                                           'MD',
-                                           'IN',
-                                           'SCONJ',
-                                           'WRB',
-                                           'WDT',
-                                           'WP',
-                                           'WP$',
-                                           'EX',
-                                           'ADP',
-                                           'JJR',
-                                           'JJS',
-                                           'RBR',
-                                           'RBS']
+                    if child.lemma_ not in core_temporal_preps \
+                       and (child.tag_ in function_word_tags
                             or (child.tag_ == 'RB'
                                 and (child._.vwp_evaluation
                                      or child._.vwp_hedge))
-                            or child.lemma_ in ['I',
-                                                'me',
-                                                'my',
-                                                'mine',
-                                                'we',
-                                                'us',
-                                                'our',
-                                                'ours',
-                                                'you',
-                                                'your',
-                                                'yours',
-                                                'one',
-                                                'someone',
-                                                'anyone']
+                            or child.lemma_ in personal_or_indefinite_pronoun
                             or child._.vwp_argument
                             or child._.vwp_information
                             or child._.vwp_communication
@@ -3253,14 +3628,14 @@ class ViewpointFeatureDef:
 
         # If the subject and the verb disagree on viewpoint, correct
         # the verb to agree with the subject
-        if token.dep_ in ['nsubj', 'nsubjpass', 'csubj', 'csubjpass']:
+        if token._.vwp_perspective is None \
+           and token.dep_ in ['nsubj', 'nsubjpass', 'csubj', 'csubjpass']:
             if token._.vwp_perspective != token.head._.vwp_perspective:
                 token.head._.vwp_perspective = token._.vwp_perspective
 
         # Cleanup for stray cases where no viewpoint was assigned to ROOT
         if isRoot(token) \
-           and (token._.vwp_perspective is None
-                or len(token._.vwp_perspective) == 0):
+           and token._.vwp_perspective is None:
             for child in token.children:
                 if child._.vwp_perspective is not None:
                     token._.vwp_perspective = child._.vwp_perspective
@@ -3268,18 +3643,9 @@ class ViewpointFeatureDef:
 
         # Cleanup -- prepositions should be assigned to the same
         # viewpoint as their head
-        if token.dep_ == 'prep':
+        if token.dep_ == 'prep' \
+           and token._.vwp_perspective is None:
             token._.vwp_perspective = token.head._.vwp_perspective
-
-        # Cleanup-- inherit viewpoint for unassigned nodes
-        # from higher in the tree
-        if token._.vwp_perspective == [] \
-           and isRoot(token):
-            head = token.head
-            while (head._.vwp_perspective == [] and head != head.head
-                   and isRoot(head)):
-                head = head.head
-            token._.vwp_perspective = head._.vwp_perspective
 
         if token._.vwp_perspective is not None \
            and len(token._.vwp_perspective) == 0:
@@ -3866,7 +4232,8 @@ class ViewpointFeatureDef:
                                     if tensed_clause(child)]))
            and ((getSubject(token.head) is None
                  and token.head._.governing_subject is None)
-                or (hdoc[token.head._.governing_subject].lemma_ == 'it'
+                or (token.head._.governing_subject is not None
+                    and hdoc[token.head._.governing_subject].lemma_ == 'it'
                     and (token.head._.vwp_raising
                          or token.head._.vwp_tough
                          or token.head.text.lower()
@@ -3878,39 +4245,53 @@ class ViewpointFeatureDef:
                              'be',
                              'being',
                              'been']))
-                or (hdoc[token.head._.governing_subject]._.animate
-                or hdoc[token.head._.governing_subject]._.vwp_sourcetext
-                or hdoc[token.head._.governing_subject]._.vwp_say
-                or hdoc[token.head._.governing_subject]._.vwp_think
-                or hdoc[token.head._.governing_subject]._.vwp_perceive
-                or hdoc[token.head._.governing_subject]._.vwp_interpret
-                or hdoc[token.head._.governing_subject]._.vwp_argue
-                or hdoc[token.head._.governing_subject]._.vwp_argument
-                or hdoc[token.head._.governing_subject]._.vwp_emotion
-                or (hdoc[token.head._.governing_subject]._.transition
-                    and hdoc[
-                        token.head._.governing_subject]._.transition_category
-                    is not None
-                    and hdoc[
-                        token.head._.governing_subject]._.transition_category
-                    not in ['temporal', 'PARAGRAPH'])
-                or hdoc[token.head._.governing_subject]._.vwp_evaluation))) \
-              or (token.dep_ in ['attr', 'oprd']
-                  and (token.head._.vwp_say
-                       or token.head._.vwp_think
-                       or token.head._.vwp_perceive
-                       or token.head._.vwp_interpret
-                       or token.head._.vwp_argue
-                       or token.head._.vwp_argument
-                       or token.head._.vwp_emotion
-                       or (token._.transition
-                           and token._.transition_category is not None
-                           and token._.transition_category
-                           not in ['temporal', 'PARAGRAPH'])
-                       or token.head._.vwp_evaluation)
-                  and token.head._.governing_subject is not None
-                  and (hdoc[token.head._.governing_subject].dep_ == 'csubj'
-                       or hdoc[token.head._.governing_subject].tag_ == '_SP')):
+                or (token.head._.governing_subject is not None
+                    and (hdoc[token.head._.governing_subject]._.animate
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_sourcetext
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_say
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_think
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_perceive
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_interpret
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_argue
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_argument
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_emotion
+                         or (hdoc[token.head._.governing_subject
+                                  ]._.transition
+                             and hdoc[
+                                      token.head._.governing_subject
+                                      ]._.transition_category
+                             is not None
+                             and hdoc[
+                                      token.head._.governing_subject
+                                      ]._.transition_category
+                             not in ['temporal', 'PARAGRAPH'])
+                         or hdoc[token.head._.governing_subject
+                                 ]._.vwp_evaluation)))) \
+                or (token.dep_ in ['attr', 'oprd']
+                    and (token.head._.vwp_say
+                         or token.head._.vwp_think
+                         or token.head._.vwp_perceive
+                         or token.head._.vwp_interpret
+                         or token.head._.vwp_argue
+                         or token.head._.vwp_argument
+                         or token.head._.vwp_emotion
+                         or (token._.transition
+                             and token._.transition_category is not None
+                             and token._.transition_category
+                             not in ['temporal', 'PARAGRAPH'])
+                         or token.head._.vwp_evaluation)
+                    and token.head._.governing_subject is not None
+                    and (hdoc[token.head._.governing_subject].dep_ == 'csubj'
+                         or hdoc[token.head._.governing_subject
+                                 ].tag_ == '_SP')):
             domHead = self.propDomain(token.head,
                                       token.head._.governing_subject,
                                       hdoc)
@@ -4312,7 +4693,7 @@ class ViewpointFeatureDef:
                   and isRoot(self.getHeadDomain(token))):
                 if domHead not in propositional_attitudes['implicit']:
                     propositional_attitudes['implicit'].append(domHead)
-            elif (token.dep_ == 'aux'
+            elif (token.dep_ in ['aux', 'auxpass']
                   and token._.vwp_evaluation
                   and token.head.pos_ in ['VERB', 'AUX']
                   and isRoot(self.getHeadDomain(token))):
@@ -4429,10 +4810,14 @@ class ViewpointFeatureDef:
                                and childControllers is not None \
                                and controller not in childControllers \
                                and childSubj._.animate \
-                               and not (agent.text.lower() in first_person_pronouns
-                                        and childSubj.text.lower() in first_person_pronouns) \
-                               and not (agent.text.lower() in second_person_pronouns
-                                        and childSubj.text.lower() in second_person_pronouns):
+                               and not (agent.text.lower()
+                                        in first_person_pronouns
+                                        and childSubj.text.lower()
+                                        in first_person_pronouns) \
+                               and not (agent.text.lower()
+                                        in second_person_pronouns
+                                        and childSubj.text.lower()
+                                        in second_person_pronouns):
                                 entry = [token.sent.start,
                                          token.sent.end]
                                 if entry not in theory_of_mind_sentences:
@@ -4863,6 +5248,7 @@ class ViewpointFeatureDef:
 
             # Use of common emphatic adverbs
             elif (token.dep_ == 'advmod'
+                  and token.head.pos_ in ['ADJ', 'ADV', 'VERB']
                   and token.lemma_ in ['absolutely',
                                        'altogether',
                                        'completely',
@@ -4873,6 +5259,7 @@ class ViewpointFeatureDef:
                                        'fully',
                                        'greatly',
                                        'highly',
+                                       'hugely',
                                        'intensely',
                                        'perfectly',
                                        'strongly',
@@ -4880,11 +5267,29 @@ class ViewpointFeatureDef:
                                        'totally',
                                        'utterly',
                                        'very',
+                                       'so',
+                                       'too',
                                        'mainly',
                                        'pretty',
                                        'totally',
                                        'even']):
                 token._.vwp_interactive = True
+                token._.vwp_evaluation = True
+
+            # Use of common emphatic adverbs
+            elif (token.dep_ == 'amod'
+                  and token.head.pos_ in ['NOUN']
+                  and token.lemma_ in ['huge'
+                                       'gigantic',
+                                       'enormous',
+                                       'total',
+                                       'complete'
+                                       'extreme',
+                                       'thorough',
+                                       'perfect'
+                                       ]):
+                token._.vwp_interactive = True
+                token._.vwp_evaluation = True
 
             # Use of verb general evaluation adjectives
             elif (token.pos_ == 'ADJ'
@@ -4909,6 +5314,8 @@ class ViewpointFeatureDef:
                                        'mad',
                                        'funny',
                                        'glad']):
+                # Use of these kinds of expressions
+                # is also evaluative
                 token._.vwp_interactive = True
 
             # Use of common hedge words and phrases
@@ -4931,6 +5338,18 @@ class ViewpointFeatureDef:
                                        'mostly',
                                        'more']):
                 token._.vwp_interactive = True
+            # Expressions like think so, think not
+            elif (token.pos_ == 'VERB'
+                  and (token._.vwp_argument
+                       or token._.vwp_communication
+                       or token._.vwp_cognitive)
+                  and token.i + 1 < len(token.doc)
+                  and token.nbor().text.lower() in ['so', 'not']):
+                token._.vwp_interactive = True
+                token.nbor()._.vwp_interactive = True
+                # Use of this kind of elliptical construction
+                # is also evaluative
+                token.nbor()._.vwp_evaluation = True
             elif (token.lemma_ in ['lot', 'bit', 'while', 'ways']
                   and token.dep_ == 'npadvmod'):
                 token._.vwp_interactive = True
@@ -5040,6 +5459,7 @@ class ViewpointFeatureDef:
             # Use of interjections
             elif token.pos_ == 'INTJ':
                 token._.vwp_interactive = True
+                token._.vwp_evaluation = True
             elif (token.text.lower == 'thank'
                   and doc[token.i + 1].text.lower == 'you'
                   and doc[token.i+2].pos_ == 'PUNCT'
@@ -5522,21 +5942,8 @@ class ViewpointFeatureDef:
         characterList = doc._.nominalReferences[0]
         details = []
         for token in doc:
-        
-            # Nominalizations won't name concrete details
-            morpholex = token._.morpholexsegm
-            if morpholex is not None \
-               and (morpholex.endswith('>ship>')
-                    or morpholex.endswith('>hood>')
-                    or morpholex.endswith('>ness>')
-                    or morpholex.endswith('>less>')
-                    or morpholex.endswith('>ion>')
-                    or morpholex.endswith('>tion>')
-                    or morpholex.endswith('>ity>')
-                    or morpholex.endswith('>ty>')
-                    or morpholex.endswith('>cy>')
-                    or morpholex.endswith('>al>')
-                    or morpholex.endswith('>ance>')):
+
+            if token._.vwp_abstract:
                 continue
 
             # Higher frequency words aren't likely to be concrete details
@@ -5563,8 +5970,7 @@ class ViewpointFeatureDef:
                and getLogicalObject(token)._.animate \
                and token._.vwp_emotional_impact:
                 continue
-            if (token._.vwp_abstract
-                or token._.vwp_evaluation
+            if (token._.vwp_evaluation
                 or token._.vwp_hedge
                 or (token._.abstract_trait
                     and 'of' in [child.text.lower()
