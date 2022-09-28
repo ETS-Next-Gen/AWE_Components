@@ -7,7 +7,6 @@ import os
 import re
 import srsly
 import wordfreq
-import imp
 import statistics
 import awe_lexica
 
@@ -147,56 +146,6 @@ class LexicalFeatureDef(object):
                     without {name} datafile".format(name=path['pathname'])
                 )
 
-    def add_morphological_relatives(self, word, key):
-        sentlist = []
-        # modify the sentiment estimate using word families, but only if
-        # no negative prefix or suffixes are involved in the word we are
-        # taking the sentiment rating from, and it's not in the very high
-        # frequency band.
-        if key in self.family_idx \
-           and str(self.family_idx[key]) in self.family_lists:
-            for item in self.family_lists[str(self.family_idx[key])]:
-                if item in self.nlp.vocab.strings:
-                    itemkey = self.nlp.vocab.strings[item]
-                else:
-                    itemkey = self.nlp.vocab.strings.add(item)
-                if itemkey in self.sentiment \
-                    and wordfreq.zipf_frequency(item, "en") < 5 \
-                    and wordfreq.zipf_frequency(word, "en") < 5 \
-                    and len(item) > 4 and len(word) > 4 \
-                    and (len(item) < len(word)
-                         or (not item.endswith('less')
-                             and not item.endswith('lessness')
-                             and not item.endswith('lessly')
-                             and not item.startswith('un')
-                             and not item.startswith('in')
-                             and not item.startswith('im')
-                             and not item.startswith('dis')
-                             and not item.startswith('mis')
-                             and not item.startswith('anti'))):
-                    sentlist.append(self.sentiment[itemkey])
-
-        if key not in self.sentiment or abs(self.sentiment[key]) <= .2:
-            if len(sentlist) > 1 and statistics.mean(sentlist) > 0:
-                self.sentiment[key] = max(sentlist)
-            elif len(sentlist) > 1 and statistics.mean(sentlist) < 0:
-                self.sentiment[key] = min(sentlist)
-            elif len(sentlist) == 1:
-                self.sentiment[key] = sentlist[0]
-
-        if abs(self.sentiment[key]) <= .2 \
-           and key in self.roots \
-           and wordfreq.zipf_frequency(word, "en") < 5:
-
-            if self.roots[key] in self.nlp.vocab.strings:
-                rootkey = self.nlp.vocab.strings[self.roots[key]]
-            else:
-                rootkey = self.nlp.vocab.strings.add(self.roots[key])
-            if key != rootkey and rootkey in self.roots \
-               and rootkey in self.sentiment \
-               and abs(self.sentiment[rootkey]) > .2:
-                self.sentiment[key] = self.sentiment[rootkey]
-
     def load_lexicons(self):
 
         for path in self.datapaths:
@@ -207,7 +156,6 @@ class LexicalFeatureDef(object):
             # To save memory, use the spacy string hash as key,
             # not the actual text string
             temp = srsly.read_json(path['value'])
-
             for word in temp:
                 if word in self.nlp.vocab.strings:
                     key = self.nlp.vocab.strings[word]
@@ -231,33 +179,167 @@ class LexicalFeatureDef(object):
         # We're using this component as a wrapper to add access
         # to the lexical features. There is no actual processing of the
         # sentences.
-
+        
         return doc
 
     def __init__(self, lang="en"):
         super().__init__()
         self.package_check(lang)
 
+    #####################
+    # Define extensions  #
+    #####################
+
+    extensions = [{"name": "AWE_Info",
+                   "method": "AWE_Info",
+                   "type": "docspan"},
+                  {"name": "token_vectors",
+                   "getter": "token_vectors",
+                   "type": "docspan"},
+                  {"name": "root",
+                   "getter": "root",
+                   "type": "token"},
+                  {"name": "nSyll",
+                   "getter": "nSyll",
+                   "type": "token"},
+                  {"name": "sqrtNChars",
+                   "getter": "sqrtNChars",
+                   "type": "token"},
+                  {"name": "is_latinate",
+                   "getter": "is_latinate",
+                   "type": "token"},
+                  {"name": "is_academic",
+                   "getter": "is_academic",
+                   "type": "token"},
+                  {"name": "family_size",
+                   "getter": "family_size",
+                   "type": "token"},
+                  {"name": "nSenses",
+                   "getter": "nSenses",
+                   "type": "token"},
+                  {"name": "logNSenses",
+                   "getter": "logNSenses",
+                   "type": "token"},
+                  {"name": "morphology",
+                   "getter": "morphology",
+                   "type": "token"},
+                  {"name": "morpholexsegm",
+                   "getter": "morpholexsegm",
+                   "type": "token"},
+                  {"name": "nMorph",
+                   "getter": "nMorph",
+                   "type": "token"},
+                  {"name": "root1_freq_HAL",
+                   "getter": "root1_freq_HAL",
+                   "type": "token"},
+                  {"name": "root2_freq_HAL",
+                   "getter": "root2_freq_HAL",
+                   "type": "token"},
+                  {"name": "root3_freq_HAL",
+                   "getter": "root3_freq_HAL",
+                   "type": "token"},
+                  {"name": "root_famSize",
+                   "getter": "root_famSize",
+                   "type": "token"},
+                  {"name": "root_pfmf",
+                   "getter": "root_pfmf",
+                   "type": "token"},
+                  {"name": "token_freq",
+                   "getter": "token_freq",
+                   "type": "token"},
+                  {"name": "lemma_freq",
+                   "getter": "lemma_freq",
+                   "type": "token"},
+                  {"name": "root_freq",
+                   "getter": "root_freq",
+                   "type": "token"},
+                  {"name": "min_root_freq",
+                   "getter": "min_root_freq",
+                   "type": "token"},
+                  {"name": "max_freq",
+                   "getter": "max_freq",
+                   "type": "token"},
+                  {"name": "concreteness",
+                   "getter": "concreteness",
+                   "type": "token"},
+                  {"name": "sentiword",
+                   "getter": "sentiword",
+                   "type": "token"},
+                  {"name": "abstract_trait",
+                   "getter": "abstract_trait2",
+                   "type": "token"},
+                  {"name": "deictic",
+                   "getter": "deictic",
+                   "type": "token"},
+                  {"name": "animate",
+                   "getter": "animate",
+                   "type": "token"},
+                  {"name": "location",
+                   "getter": "isloc",
+                   "type": "token"}
+                  ]
+
+    def add_extensions(self):
+
+        """
+         Funcion to add extensions that allow us to access the various
+         lexicons this module is designed to support.
+        """
+
+        for extension in self.extensions:
+
+            if extension['type'] == 'docspan':
+
+                if not Doc.has_extension(extension['name']):
+                    if 'getter' in extension:
+                        Doc.set_extension(extension['name'],
+                                          getter=eval('self.'
+                                                      + extension['getter']))
+
+                    elif 'method' in extension:
+                        Doc.set_extension(extension['name'],
+                                          method=eval('self.'
+                                                      + extension['method']))
+                    else:
+                        raise AWE_Workbench_Error('Invalid extension specification ')
+
+                if not Span.has_extension(extension['name']):
+                    if 'getter' in extension:
+                        Span.set_extension(extension['name'],
+                                           getter=eval('self.'
+                                                       + extension['getter']))
+
+                    elif 'method' in extension:
+                        Span.set_extension(extension['name'],
+                                           method=eval('self.'
+                                                       + extension['method']))
+                    else:
+                        raise AWE_Workbench_Error('Invalid extension specification ')
+
+            elif extension['type'] == 'token':
+
+                if 'getter' in extension:
+                    if not Token.has_extension(extension['name']):
+                        Token.set_extension(extension['name'],
+                                            getter=eval('self.'
+                                                        + extension['getter']))
+
+                elif 'method' in extension:
+                    if not Token.has_extension(extension['name']):
+                        Token.set_extension(extension['name'],
+                                            method=eval('self.'
+                                                        + extension['method']))
+                else:
+                    raise AWE_Workbench_Error('Invalid extension specification ')
+            else:
+                raise AWE_Workbench_Error('Invalid extension specification ')
+
     ###############################################
     # Block where we define getter functions used #
     # by spacy attribute definitions.             #
     ###############################################
 
-    def lems(self, tokens):
-        ''' Get the lemmas in the document
-        '''
-        return [t.lemma_
-                if alphanum_word(t.text)
-                else None
-                for t in tokens]
-
-    def typs(self, tokens):
-        ''' Get the unique word types in the document
-        '''
-        return sorted(list(set([t.orth_ for t in tokens
-                      if alphanum_word(t.text)])))
-
-    def rt(self, token):
+    def root(self, token):
         ''' Access the roots dictionary from the token instance
         '''
         if (token.text.lower() in self.nlp.vocab.strings
@@ -267,60 +349,12 @@ class LexicalFeatureDef(object):
             return self.roots[
                 self.nlp.vocab.strings[
                     token.text.lower()]]
+        elif alphanum_word(token.text):
+            return token.lemma_
         else:
             return None
 
-    def mrts(self, tokens):
-        ''' Access the roots dictionary from the Doc instance
-        '''
-        return [self.roots[self.nlp.vocab.strings[token.text.lower()]]
-                if (token.text.lower() in self.nlp.vocab.strings
-                    and alphanum_word(token.text)
-                    and self.nlp.vocab.strings[token.text.lower()]
-                    in self.roots)
-                else token.lemma_
-                if alphanum_word(token.text)
-                else None
-                for token in tokens]
-
-    def typ(self, tokens):
-        '''Document level measure: unique word family type count
-           number of distinct word families in the text
-        '''
-        return len(np.unique([t._.root for t in tokens
-                   if not t.is_stop
-                   and t._.root is not None
-                   and t.pos_ in content_tags
-                   and alphanum_word(t.text)]))
-
-    def lemc(self, tokens):
-        ''' Document level measure: unique lemma count
-        '''
-        return len(np.unique([t.lemma_ for t in tokens
-                   if not t.is_stop
-                   and t.lemma_ is not None
-                   and alphanum_word(t.text)
-                   and t.pos_ in content_tags]))
-
-    def typc(self, tokens):
-        ''' Document level measure: unique word type count
-        '''
-        return len(np.unique([t.text.lower() for t in tokens
-                   if not t.is_stop
-                   and t.text is not None
-                   and t.pos_ in content_tags
-                   and alphanum_word(t.text)]))
-
-    def tokc(self, tokens):
-        ''' Document level measure: unique word token count
-        '''
-        return len([t.text.lower() for t in tokens
-                   if not t.is_stop
-                   and t.text is not None
-                   and t.pos_ in content_tags
-                   and alphanum_word(t.text)])
-
-    def ns(self, token):
+    def nSyll(self, token):
         ''' Get the number of syllables for a Token
             Number of syllables has been validated as a measure
             of vocabulary difficulty
@@ -333,121 +367,12 @@ class LexicalFeatureDef(object):
         else:
             return sylco(token.text.lower())
 
-    def sylls(self, tokens):
-        ''' Access the syllables dictionary from the Doc instance
-        '''
-        return [self.ns(token) for token in tokens]
-
-    def mns(self, tokens):
-        ''' Document level measure: mean number of syllables in
-            a content token
-        '''
-        return summarize(lexFeat(tokens, 'nSyll'),
-                         summaryType=FType.MEAN)
-
-    def mdns(self, tokens):
-        ''' Document level measure: median number of syllables in
-            a content token
-        '''
-        return summarize(lexFeat(tokens, 'nSyll'),
-                         summaryType=FType.MEDIAN)
-
-    def mxns(self, tokens):
-        ''' Document level measure: max number of syllables
-            in a content token
-        '''
-        return summarize(lexFeat(tokens, 'nSyll'),
-                         summaryType=FType.MAX)
-
-    def minns(self, tokens):
-        ''' Document level measure: min number of syllables in
-            a content token
-        '''
-        return summarize(lexFeat(tokens, 'nSyll'),
-                         summaryType=FType.MIN)
-
-    def stdns(self, tokens):
-        ''' Document level measure: std. dev. of number
-            of syllables in a content token
-        '''
-        return summarize(lexFeat(tokens, 'nSyll'),
-                         summaryType=FType.STDEV)
-
-    def nc(self, token):
+    def sqrtNChars(self, token):
         ''' Get the number of characters for a Token
         '''
         return math.sqrt(len(token.text))
 
-    def chars(self, tokens):
-        ''' Access the list of sqr nchars from the Doc instance
-        '''
-        return [token._.sqrtNChars for token in tokens]
-
-    def mnc(self, tokens):
-        ''' Document level measure: mean sqrt of n chars in a
-            content token
-        '''
-        return summarize(lexFeat(tokens, 'sqrtNChars'),
-                         summaryType=FType.MEAN)
-
-    def mdnc(self, tokens):
-        ''' Document level measure: median  sqrt of n chars in a
-            content token
-        '''
-        return summarize(lexFeat(tokens, 'sqrtNChars'),
-                         summaryType=FType.MEDIAN)
-
-    def mxnc(self, tokens):
-        ''' Document level measure: max sqrt of n chars in a
-            content token
-        '''
-        return summarize(lexFeat(tokens, 'sqrtNChars'),
-                         summaryType=FType.MAX)
-
-    def minnc(self, tokens):
-        ''' Document level measure: min  sqrt of n chars in a
-            content token
-        '''
-        return summarize(lexFeat(tokens, 'sqrtNChars'),
-                         summaryType=FType.MIN)
-
-    def stdnc(self, tokens):
-        ''' Get the number of characters for a Token
-        '''
-        return summarize(lexFeat(tokens, 'sqrtNChars'),
-                         summaryType=FType.STDEV)
-
-    def lats(self, tokens):
-        ''' Access the latinates list from the Doc instance
-        '''
-        return [token._.is_latinate for token in tokens]
-
-    def mnlat(self, tokens):
-        ''' Document level measure: proportion of latinate
-            content words
-        '''
-        return summarize(lexFeat(tokens, 'is_latinate'),
-                         summaryType=FType.MEAN)
-
-    def acads(self, tokens):
-        ''' Access the academic status list from the Doc instance
-        '''
-        return [token._.is_academic for token in tokens]
-
-    def mnacad(self, tokens):
-        ''' Document level measure: proportion of content words
-             on targeted academic language/tier II vocabulary lists
-        '''
-        return summarize(lexFeat(tokens, 'is_academic'),
-                         summaryType=FType.MEAN)
-
-    def fmf(self, tokens):
-        ''' Document level measure: list of max freqs for word, lemma or
-             root in document
-        '''
-        return [token._.max_freq for token in tokens]
-
-    def fms(self, token):
+    def family_size(self, token):
         ''' Word Family Sizes as measured by slightly modified version of #
             Paul Nation's word family list.                               #
 
@@ -463,43 +388,7 @@ class LexicalFeatureDef(object):
         else:
             return None
 
-    def fmss(self, tokens):
-        ''' Access the family size dictionary from the Doc instance
-        '''
-        return [token._.family_size for token in tokens]
-
-    def mnfms(self, tokens):
-        ''' Document level measure: mean word family size for content words
-        '''
-        return summarize(lexFeat(tokens, 'family_size'),
-                         summaryType=FType.MEAN)
-
-    def mdfms(self, tokens):
-        ''' Document level measure: median word family size for content words
-        '''
-        return summarize(lexFeat(tokens, 'family_size'),
-                         summaryType=FType.MEDIAN)
-
-    def mxfms(self, tokens):
-        ''' Document level measure: max word family size for content words
-        '''
-        return summarize(lexFeat(tokens, 'family_size'),
-                         summaryType=FType.MAX)
-
-    def minfms(self, tokens):
-        ''' Document level measure: min word family size for content words
-        '''
-        return summarize(lexFeat(tokens, 'family_size'),
-                         summaryType=FType.MIN)
-
-    def stdfms(self, tokens):
-        ''' Document level measure: st dev of word family size
-            for content words
-        '''
-        return summarize(lexFeat(tokens, 'family_size'),
-                         summaryType=FType.STDEV)
-
-    def nsem(self, token):
+    def nSenses(self, token):
         ''' Sense count measures (using WordNet)
 
           The number of senses associated with a word is a measure
@@ -511,7 +400,7 @@ class LexicalFeatureDef(object):
         else:
             return None
 
-    def lognsem(self, token):
+    def logNSenses(self, token):
         ''' The number of senses associated with a word is a measure
             of vocabulary difficulty
         '''
@@ -521,94 +410,18 @@ class LexicalFeatureDef(object):
         else:
             return None
 
-    def senseno(self, tokens):
-        ''' Document level measure: list of number of word senses
-            for each token in doc
+    def morphology(self, token):
+        ''' Access the Morpholex morphological dictionary
         '''
-        return [token._.nSenses for token in tokens]
+        if (token.text is not None
+            and self.nlp.vocab.strings[token.text.lower()]
+                in self.morpholex):
+            return self.morpholex[
+                self.nlp.vocab.strings[
+                    token.text.lower()]]
+        else:
+            return None
 
-    def logsenseno(self, tokens):
-        ''' Document level measure: list of number of word senses
-            for each token in doc
-        '''
-        return [token._.logNSenses for token in tokens]
-
-    def mnsense(self, tokens):
-        ''' Document level measure: mean number of word senses
-        '''
-        return summarize(lexFeat(tokens, 'nSenses'),
-                         summaryType=FType.MEAN)
-
-    def mdsense(self, tokens):
-        ''' Document level measure: median number of word senses
-        '''
-        return summarize(lexFeat(tokens, 'nSenses'),
-                         summaryType=FType.MEDIAN)
-
-    def mxsense(self, tokens):
-        ''' Document level measure: max number of word senses
-        '''
-        return summarize(lexFeat(tokens, 'nSenses'),
-                         summaryType=FType.MAX)
-
-    def minsense(self, tokens):
-        ''' Document level measure: min number of word senses
-        '''
-        return summarize(lexFeat(tokens, 'nSenses'),
-                         summaryType=FType.MIN)
-
-    def stdsense(self, tokens):
-        ''' Document level measure: standard deviation of
-            number of word senses
-        '''
-        return summarize(lexFeat(tokens, 'nSenses'),
-                         summaryType=FType.STDEV)
-
-    def mnlognsense(self, tokens):
-        ''' Document level measure: mean log number of word senses
-        '''
-        return summarize(lexFeat(tokens, 'logNSenses'),
-                         summaryType=FType.MEAN)
-
-    def mdlognsense(self, tokens):
-        ''' Document level measure: median log number of word senses
-        '''
-        return summarize(lexFeat(tokens, 'logNSenses'),
-                         summaryType=FType.MEDIAN)
-
-    def mxlognsense(self, tokens):
-        ''' Document level measure: max of log number of word senses
-        '''
-        return summarize(lexFeat(tokens, 'logNSenses'),
-                         summaryType=FType.MAX)
-
-    def minlognsense(self, tokens):
-        ''' Document level measure: min number of log word senses
-        '''
-        return summarize(lexFeat(tokens, 'logNSenses'),
-                         summaryType=FType.MIN)
-
-    def stdlognsense(self, tokens):
-        ''' Document level measure: standard deviation of log number
-            of word senses
-        '''
-        return summarize(lexFeat(tokens, 'logNSenses'),
-                         summaryType=FType.STDEV)
-
-    def morpho(self, tokens):
-        ''' Morpholex includes information about prefixes and suffixes --
-            such as the size of families and frequency of specific prefixes
-            and suffixes. We're not currently using this information
-            but these are also known to be predictors of vocabulary difficulty
-
-          Access the morpholex dictionary from the Doc instance
-        '''
-        return [self.morpholex[self.nlp.vocab.strings[token.lemma_]]
-                if token.lemma_ is not None
-                and (token.lemma_ in self.nlp.vocab.strings
-                and self.nlp.vocab.strings[token.lemma_]
-                in self.morpholex)
-                else None for token in tokens]
 
     def morpholexsegm(self, token):
         ''' Access a string that identifies roots, prefixes, and
@@ -624,12 +437,7 @@ class LexicalFeatureDef(object):
         else:
             return None
 
-    def morpholexsegms(self, tokens):
-        ''' Return morpholexSegm data for all words in the doc
-        '''
-        return [token._.morpholexsegm for token in tokens]
-
-    def nm(self, token):
+    def nMorph(self, token):
         ''' The number of morphemes in a word is a measure
             of vocabulary difficulty
         '''
@@ -638,48 +446,12 @@ class LexicalFeatureDef(object):
            and alphanum_word(token.text) \
            and self.nlp.vocab.strings[token.text.lower()] \
            in self.nmorph_status:
-            return self.nmorph_status[
-                self.nlp.vocab.strings[token.text.lower()]]
+            return int(self.nmorph_status[
+                self.nlp.vocab.strings[token.text.lower()]])
         else:
             return None
 
-    def morphn(self, tokens):
-        ''' Document level measure: list of number of morphemes
-            for each token in document
-        '''
-        return [token._.nMorph for token in tokens]
-
-    def mnmorph(self, tokens):
-        ''' Document level measure: mean number of morphemes
-        '''
-        return summarize(lexFeat(tokens, 'nMorph'),
-                         summaryType=FType.MEAN)
-
-    def mdmorph(self, tokens):
-        ''' Document level measure: median number of morphemes
-        '''
-        return summarize(lexFeat(tokens, 'nMorph'),
-                         summaryType=FType.MEDIAN)
-
-    def mxmorph(self, tokens):
-        ''' Document level measure: max number of morphemes
-        '''
-        return summarize(lexFeat(tokens, 'nMorph'),
-                         summaryType=FType.MAX)
-
-    def minmorph(self, tokens):
-        ''' Document level measure: mein number of morphemes
-        '''
-        return summarize(lexFeat(tokens, 'nMorph'),
-                         summaryType=FType.MIN)
-
-    def stdmorph(self, tokens):
-        ''' Document level measure: std. dev. of no. morphemes
-        '''
-        return summarize(lexFeat(tokens, 'nMorph'),
-                         summaryType=FType.STDEV)
-
-    def rfqh(self, token):
+    def root1_freq_HAL(self, token):
         ''' The frequency of the 1st root is a measure of
             vocabulary difficulty
         '''
@@ -688,13 +460,13 @@ class LexicalFeatureDef(object):
             and alphanum_word(token.lemma_)
             and self.nlp.vocab.strings[token.lemma_]
                 in self.morpholex):
-            return self.morpholex[
+            return float(self.morpholex[
                self.nlp.vocab.strings[
-                   token.lemma_]]['ROOT1_Freq_HAL']
+                   token.lemma_]]['ROOT1_Freq_HAL'])
         else:
             return None
 
-    def rfqh2(self, token):
+    def root2_freq_HAL(self, token):
         ''' The frequency of the 2nd root is a measure of
             vocabulary difficulty
         '''
@@ -706,13 +478,13 @@ class LexicalFeatureDef(object):
            and 'ROOT2_Freq_HAL' in \
                self.morpholex[
                    self.nlp.vocab.strings[token.lemma_]]:
-            return self.morpholex[self.nlp.vocab.strings[
+            return float(self.morpholex[self.nlp.vocab.strings[
                                   token.lemma_]
-                                  ]['ROOT2_Freq_HAL']
+                                  ]['ROOT2_Freq_HAL'])
         else:
             return None
 
-    def rfqh3(self, token):
+    def root3_freq_HAL(self, token):
         ''' The frequency of the 3rd root is a measure of
             vocabulary difficulty
         '''
@@ -724,98 +496,13 @@ class LexicalFeatureDef(object):
             and 'ROOT3_Freq_HAL' \
                 in self.morpholex[self.nlp.vocab.strings[
                                   token.lemma_]]:
-            return self.morpholex[
+            return float(self.morpholex[
                 self.nlp.vocab.strings[
-                    token.lemma_]]['ROOT3_Freq_HAL']
+                    token.lemma_]]['ROOT3_Freq_HAL'])
         else:
             return None
 
-    def rfsh(self, tokens):
-        ''' Document level measure: list of HAL frequencies
-            for the first root for for each token in document
-        '''
-        retlist = []
-        for token in tokens:
-            if self.min_root_freq(token) is not None:
-                retlist.append(self.min_root_freq(token))
-            else:
-                retlist.append(None)
-        return retlist
-
-    def mnfrh(self, tokens):
-        ''' Document level measure: mean HAL root frequency
-        '''
-        return summarize(tokens._.root_freqs_HAL,
-                         summaryType=FType.MEAN)
-
-    def mdfrh(self, tokens):
-        ''' Document level measure: median HAL root frequency
-        '''
-        return summarize(tokens._.root_freqs_HAL,
-                         summaryType=FType.MEDIAN)
-
-    def mxfrh(self, tokens):
-        ''' Document level measure: max HAL root frequency
-        '''
-        return summarize(tokens._.root_freqs_HAL,
-                         summaryType=FType.MAX)
-
-    def minfrh(self, tokens):
-        ''' Document level measure: min HAL root frequency
-        '''
-        return summarize(tokens._.root_freqs_HAL,
-                         summaryType=FType.MIN)
-
-    def stdfrh(self, tokens):
-        ''' Document level measure: std. dev. of HAL root frequency
-        '''
-        return summarize(tokens._.root_freqs_HAL,
-                         summaryType=FType.STDEV)
-
-    def rfshlg(self, tokens):
-        ''' Document level measure: list of HAL frequencies for the first root
-            for each token in document
-        '''
-        retlist = []
-        for token in tokens:
-            if self.min_root_freq(token) is not None \
-               and self.min_root_freq(token) > 0:
-                retlist.append(math.log(self.min_root_freq(token)))
-            else:
-                retlist.append(None)
-        return retlist
-
-    def mnlgfrh(self, tokens):
-        ''' Document level measure: mean HAL root frequency
-        '''
-        return summarize(tokens._.log_root_freqs_HAL,
-                         summaryType=FType.MEAN)
-
-    def mdlgfrh(self, tokens):
-        ''' Document level measure: median HAL root frequency
-        '''
-        return summarize(tokens._.log_root_freqs_HAL,
-                         summaryType=FType.MEDIAN)
-
-    def mxlgfrh(self, tokens):
-        ''' Document level measure: max HAL root frequency
-        '''
-        return summarize(tokens._.log_root_freqs_HAL,
-                         summaryType=FType.MAX)
-
-    def minlgfrh(self, tokens):
-        ''' Document level measure: min HAL root frequency
-        '''
-        return summarize(tokens._.log_root_freqs_HAL,
-                         summaryType=FType.MIN)
-
-    def stdlgfrh(self, tokens):
-        ''' Document level measure: std. dev. of HAL root frequency
-        '''
-        return summarize(tokens._.log_root_freqs_HAL,
-                         summaryType=FType.STDEV)
-
-    def rfs(self, token):
+    def root_famSize(self, token):
         ''' The family size of the root is a measure of vocabulary
             difficulty
         '''
@@ -824,49 +511,13 @@ class LexicalFeatureDef(object):
             and alphanum_word(token.lemma_)
             and self.nlp.vocab.strings[token.lemma_]
                 in self.morpholex):
-            return self.morpholex[
+            return int(self.morpholex[
                 self.nlp.vocab.strings[
-                    token.lemma_]]['ROOT1_FamSize']
+                    token.lemma_]]['ROOT1_FamSize'])
         else:
             return None
 
-    def rfsz(self, tokens):
-        ''' Document level measure: list of family sizes for the first root for
-            each token in document
-        '''
-        return [token._.root_famSize for token in tokens]
-
-    def mnrfsz(self, tokens):
-        ''' Document level measure: mean root family size
-        '''
-        return summarize(lexFeat(tokens, 'root_famSize'),
-                         summaryType=FType.MEAN)
-
-    def mdrfsz(self, tokens):
-        ''' Document level measure: median root family size
-        '''
-        return summarize(lexFeat(tokens, 'root_famSize'),
-                         summaryType=FType.MEDIAN)
-
-    def mxrfsz(self, tokens):
-        ''' Document level measure: max root family size
-        '''
-        return summarize(lexFeat(tokens, 'root_famSize'),
-                         summaryType=FType.MAX)
-
-    def minrfsz(self, tokens):
-        ''' Document level measure: min root family size
-        '''
-        return summarize(lexFeat(tokens, 'root_famSize'),
-                         summaryType=FType.MIN)
-
-    def stdrfsz(self, tokens):
-        ''' Document level measure: std. dev. of root family size
-        '''
-        return summarize(lexFeat(tokens, 'root_famSize'),
-                         summaryType=FType.STDEV)
-
-    def rpfmf(self, token):
+    def root_pfmf(self, token):
         ''' The percentage of words more frequent in the family size
              is a measure of vocabulary difficulty
         '''
@@ -875,246 +526,54 @@ class LexicalFeatureDef(object):
            and alphanum_word(token.lemma_) \
            and self.nlp.vocab.strings[token.lemma_] \
                 in self.morpholex:
-            return self.morpholex[
+            return float(self.morpholex[
                 self.nlp.vocab.strings[
-                    token.lemma_]]['ROOT1_PFMF']
+                    token.lemma_]]['ROOT1_PFMF'])
         else:
             return None
 
-    def rfszrt(self, tokens):
-        ''' Document level measure: list of pfmfs for the first root for
-            each token in document
-        '''
-        return [token._.root_pfmf for token in tokens]
-
-    def mnrpfmf(self, tokens):
-        ''' Document level measure: mean root pfmf
-        '''
-        return summarize(lexFeat(tokens, 'root_pfmf'),
-                         summaryType=FType.MEAN)
-
-    def mdrpfmf(self, tokens):
-        ''' Document level measure: median root pfmf
-        '''
-        return summarize(lexFeat(tokens, 'root_pfmf'),
-                         summaryType=FType.MEDIAN)
-
-    def mxrpfmf(self, tokens):
-        ''' Document level measure: max root pfmf
-        '''
-        return summarize(lexFeat(tokens, 'root_pfmf'),
-                         summaryType=FType.MAX)
-
-    def minrpfmf(self, tokens):
-        ''' Document level measure: min root pfmf
-        '''
-        return summarize(lexFeat(tokens, 'root_pfmf'),
-                         summaryType=FType.MIN)
-
-    def stdrpfmf(self, tokens):
-        ''' Document level measure: std. dev. of root pfmf
-        '''
-        return summarize(lexFeat(tokens, 'root_pfmf'),
-                         summaryType=FType.STDEV)
-
-    def tf(self, token):
+    def token_freq(self, token):
         ''' Word frequency is a measure of vocabulary difficulty.
             We can calculate word frequency for the specific token
         '''
         if alphanum_word(token.text):
-            return wordfreq.zipf_frequency(token.text.lower(), "en")
+            return float(wordfreq.zipf_frequency(token.text.lower(), "en"))
         else:
             return None
 
-    def lf(self, token):
+    def lemma_freq(self, token):
         ''' Word frequency is a measure of vocabulary difficulty.
             We can calculate word frequency for the lemma
         '''
         if alphanum_word(token.lemma_):
-            return wordfreq.zipf_frequency(token.lemma_, "en")
+            return float(wordfreq.zipf_frequency(token.lemma_, "en"))
         else:
             return None
 
-    def zrf(self, token):
+    def root_freq(self, token):
         ''' Word frequency is a measure of vocabulary difficulty.
             We can calculate word frequency for the word root
         '''
         if token._.root is not None \
            and alphanum_word(token._.root):
-            return wordfreq.zipf_frequency(token._.root, "en")
+            return float(wordfreq.zipf_frequency(token._.root, "en"))
         else:
             return None
 
-    def mff(self, token):
+    def max_freq(self, token):
         ''' Or we can calculate the frequency for the root for a
             whole word family
         '''
         if self.nlp.vocab.strings[token.text.lower()] in self.roots \
            and self.roots[self.nlp.vocab.strings[token.text.lower()]] \
            in self.family_max_freqs:
-            return self.family_max_freqs[
+            return float(self.family_max_freqs[
                 self.roots[self.nlp.vocab.strings[
-                    token.text.lower()]]]
+                    token.text.lower()]]])
         else:
-            return wordfreq.zipf_frequency(token.lemma_, "en")
+            return float(wordfreq.zipf_frequency(token.lemma_, "en"))
 
-    def tkfrq(self, tokens):
-        ''' Document level measure: list of token frequencies
-        '''
-        return [token._.token_freq for token in tokens]
-
-    def lmfrqs(self, tokens):
-        ''' Document level measure: list of lemma frequencies
-        '''
-        return [token._.lemma_freq for token in tokens]
-
-    def rtfrqs(self, tokens):
-        ''' Document level measure: list of root frequencies
-        '''
-        return [token._.root_freq for token in tokens]
-
-    def fmf(self, tokens):
-        ''' Document level measure: list of family level frequencies
-        '''
-        return [token._.max_freq for token in tokens]
-
-    def mnfrq(self, tokens):
-        ''' Document level measure: mean token frequency for content words
-        '''
-        return summarize(lexFeat(tokens, 'token_freq'),
-                         summaryType=FType.MEAN)
-
-    def mdfrq(self, tokens):
-        ''' Document level measure: median token frequency for content words
-        '''
-        return summarize(lexFeat(tokens, 'token_freq'),
-                         summaryType=FType.MEDIAN)
-
-    def mxfrq(self, tokens):
-        ''' Document level measure: max token frequency for content words
-        '''
-        return summarize(lexFeat(tokens, 'token_freq'),
-                         summaryType=FType.MAX)
-
-    def minfrq(self, tokens):
-        ''' Document level measure: min token frequency for content words
-        '''
-        return summarize(lexFeat(tokens, 'token_freq'),
-                         summaryType=FType.MIN)
-
-    def stdfrq(self, tokens):
-        ''' Document level measure: std. dev. of token frequency
-            for content words
-        '''
-        return summarize(lexFeat(tokens, 'token_freq'),
-                         summaryType=FType.STDEV)
-
-    def mnlmfrq(self, tokens):
-        ''' Document level measure: mean lemma frequency for content words
-            (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'lemma_freq'),
-                         summaryType=FType.MEAN)
-
-    def mdlmfrq(self, tokens):
-        ''' Document level measure: median lemma frequency for content words
-            (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'lemma_freq'),
-                         summaryType=FType.MEDIAN)
-
-    def mxlmfrq(self, tokens):
-        ''' Document level measure: max lemma frequency for content words
-            (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'lemma_freq'),
-                         summaryType=FType.MAX)
-
-    def minlmfrq(self, tokens):
-        ''' Document level measure: min lemma frequency for content words
-            (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'lemma_freq'),
-                         summaryType=FType.MIN)
-
-    def stdlmfrq(self, tokens):
-        ''' Document level measure: std. dev of  lemma frequency
-            for content words (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'lemma_freq'),
-                         summaryType=FType.STDEV)
-
-    def mnrtfrq(self, tokens):
-        ''' Document level measure: mean root frequency for content words
-            (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'max_freq'),
-                         summaryType=FType.MEAN)
-
-    def mdrtfrq(self, tokens):
-        ''' Document level measure: median root frequency for content words
-            (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'max_freq'),
-                         summaryType=FType.MEDIAN)
-
-    def mxrtfrq(self, tokens):
-        ''' Document level measure: max root frequency for content words
-            (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'max_freq'),
-                         summaryType=FType.MAX)
-
-    def minrtfrq(self, tokens):
-        ''' Document level measure: min root frequency for content words
-            (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'max_freq'),
-                         summaryType=FType.MIN)
-
-    def stdrtfrq(self, tokens):
-        ''' Document level measure: std. dev of root frequency
-            for content words (counting lemma base frequency)
-        '''
-        return summarize(lexFeat(tokens, 'max_freq'),
-                         summaryType=FType.STDEV)
-
-    def concrs(self, tokens):
-        ''' Access the concreteness status dictionary from the Doc instance
-        '''
-        return [self.concreteness(token) for token in tokens]
-
-    def mncr(self, tokens):
-        ''' Document level measure: mean concreteness of content words
-        '''
-        return summarize(lexFeat(tokens, 'concreteness'),
-                         summaryType=FType.MEAN)
-
-    def mdcr(self, tokens):
-        ''' Document level measure: median concreteness of content words
-        '''
-        return summarize(lexFeat(tokens, 'concreteness'),
-                         summaryType=FType.MEDIAN)
-
-    def mxcr(self, tokens):
-        ''' Document level measure: max concreteness of content words
-        '''
-        return summarize(lexFeat(tokens, 'concreteness'),
-                         summaryType=FType.MAX)
-
-    def mincr(self, tokens):
-        ''' Document level measure: min concreteness of content words
-        '''
-        return summarize(lexFeat(tokens, 'concreteness'),
-                         summaryType=FType.MIN)
-
-    def stdcr(self, tokens):
-        ''' Document level measure: std. dev. of concreteness of content words
-        '''
-        return summarize(lexFeat(tokens, 'concreteness'),
-                         summaryType=FType.STDEV)
-
-    def sent(self, token):
+    def sentiword(self, token):
         '''
           Positive or negative polarity of words as measured by the
           SentiWord database. We also have SpacyTextBlob sentiment,
@@ -1137,7 +596,7 @@ class LexicalFeatureDef(object):
         else:
             return 0
 
-    def atr(self, token):
+    def abstract_trait2(self, token):
         ''' For various purposes we need to know whether a noun
             denotes an abstract trait
         '''
@@ -1146,23 +605,13 @@ class LexicalFeatureDef(object):
         else:
             return None
 
-    def propn_abstract_traits(self, tokens):
-        ''' Proportion of tokens classified as abstract traits
-        '''
-        return sum(self.abstract_traits(tokens)) / len(tokens)
-
-    def isanim(self, token):
+    def animate(self, token):
         ''' For various purposes we need to know whether a noun is animate
         '''
         if alphanum_word(token.text):
             return self.is_animate(token)
         else:
             return None
-
-    def propn_anims(self, tokens):
-        ''' Proportion of tokens classified as animate
-        '''
-        return sum(self.animates(tokens)) / len(tokens)
 
     def isloc(self, token):
         ''' For various purposes we need to know whether a noun is locative
@@ -1172,23 +621,7 @@ class LexicalFeatureDef(object):
         else:
             return None
 
-    def locs(self, tokens):
-        ''' List of location tokens in document
-        '''
-        return [token._.location for token in tokens]
-
-    def propn_locs(self, tokens):
-        ''' Proportion of tokens classified as locations
-        '''
-        return sum([loc for loc in tokens._.locations
-                    if loc is not None]) / len(tokens)
-
-    def propn_deictics(self, tokens):
-        ''' Proportion of tokens classified as deictic
-        '''
-        return sum(self.deictics(tokens))/len(tokens)
-
-    def dtv(self, document):
+    def token_vectors(self, document):
         ''' Extensions to allow us to get vectors for tokens in a spacy
             doc or span
         '''
@@ -1198,427 +631,22 @@ class LexicalFeatureDef(object):
                 and not token.is_stop
                 and token.tag_ in content_tags]
 
-    #####################
-    # Define extensions  #
-    #####################
-
-    extensions = [{"name": "lemmas",
-                   "getter": "lems",
-                   "type": "docspan"},
-                  {"name": "word_types",
-                   "getter": "typs",
-                   "type": "docspan"},
-                  {"name": "morphroot",
-                   "getter": "mrts",
-                   "type": "docspan"},
-                  {"name": "wf_type_count",
-                   "getter": "typ",
-                   "type": "docspan"},
-                  {"name": "lemma_type_count",
-                   "getter": "lemc",
-                   "type": "docspan"},
-                  {"name": "type_count",
-                   "getter": "typc",
-                   "type": "docspan"},
-                  {"name": "token_count",
-                   "getter": "tokc",
-                   "type": "docspan"},
-                  {"name": "nSyllables",
-                   "getter": "sylls",
-                   "type": "docspan"},
-                  {"name": "mean_nSyll",
-                   "getter": "mns",
-                   "type": "docspan"},
-                  {"name": "med_nSyll",
-                   "getter": "mdns",
-                   "type": "docspan"},
-                  {"name": "max_nSyll",
-                   "getter": "mxns",
-                   "type": "docspan"},
-                  {"name": "min_nSyll",
-                   "getter": "minns",
-                   "type": "docspan"},
-                  {"name": "std_nSyll",
-                   "getter": "stdns",
-                   "type": "docspan"},
-                  {"name": "sqrtNChars",
-                   "getter": "chars",
-                   "type": "docspan"},
-                  {"name": "mean_sqnChars",
-                   "getter": "mnc",
-                   "type": "docspan"},
-                  {"name": "med_sqnChars",
-                   "getter": "mdnc",
-                   "type": "docspan"},
-                  {"name": "max_sqnChars",
-                   "getter": "mxnc",
-                   "type": "docspan"},
-                  {"name": "min_sqnChars",
-                   "getter": "minnc",
-                   "type": "docspan"},
-                  {"name": "std_sqnChars",
-                   "getter": "stdnc",
-                   "type": "docspan"},
-                  {"name": "latinates",
-                   "getter": "lats",
-                   "type": "docspan"},
-                  {"name": "propn_latinate",
-                   "getter": "mnlat",
-                   "type": "docspan"},
-                  {"name": "academics",
-                   "getter": "acads",
-                   "type": "docspan"},
-                  {"name": "propn_academic",
-                   "getter": "mnacad",
-                   "type": "docspan"},
-                  {"name": "family_sizes",
-                   "getter": "fmss",
-                   "type": "docspan"},
-                  {"name": "mean_family_size",
-                   "getter": "mnfms",
-                   "type": "docspan"},
-                  {"name": "med_family_size",
-                   "getter": "mdfms",
-                   "type": "docspan"},
-                  {"name": "max_family_size",
-                   "getter": "mxfms",
-                   "type": "docspan"},
-                  {"name": "min_family_size",
-                   "getter": "minfms",
-                   "type": "docspan"},
-                  {"name": "std_family_size",
-                   "getter": "stdfms",
-                   "type": "docspan"},
-                  {"name": "sensenums",
-                   "getter": "senseno",
-                   "type": "docspan"},
-                  {"name": "logsensenums",
-                   "getter": "logsenseno",
-                   "type": "docspan"},
-                  {"name": "mean_nSenses",
-                   "getter": "mnsense",
-                   "type": "docspan"},
-                  {"name": "med_nSenses",
-                   "getter": "mdsense",
-                   "type": "docspan"},
-                  {"name": "max_nSenses",
-                   "getter": "mxsense",
-                   "type": "docspan"},
-                  {"name": "min_nSenses",
-                   "getter": "minsense",
-                   "type": "docspan"},
-                  {"name": "std_nSenses",
-                   "getter": "stdsense",
-                   "type": "docspan"},
-                  {"name": "mean_logNSenses",
-                   "getter": "mnlognsense",
-                   "type": "docspan"},
-                  {"name": "med_logNSenses",
-                   "getter": "mdlognsense",
-                   "type": "docspan"},
-                  {"name": "max_logNSenses",
-                   "getter": "mxlognsense",
-                   "type": "docspan"},
-                  {"name": "min_logNSenses",
-                   "getter": "minlognsense",
-                   "type": "docspan"},
-                  {"name": "std_logNSenses",
-                   "getter": "stdlognsense",
-                   "type": "docspan"},
-                  {"name": "morpholex",
-                   "getter": "morpho",
-                   "type": "docspan"},
-                  {"name": "morpholexSegm",
-                   "getter": "morpholexsegms",
-                   "type": "docspan"},
-                  {"name": "morphnums",
-                   "getter": "morphn",
-                   "type": "docspan"},
-                  {"name": "mean_nMorph",
-                   "getter": "mnmorph",
-                   "type": "docspan"},
-                  {"name": "med_nMorph",
-                   "getter": "mdmorph",
-                   "type": "docspan"},
-                  {"name": "max_nMorph",
-                   "getter": "mxmorph",
-                   "type": "docspan"},
-                  {"name": "min_nMorph",
-                   "getter": "minmorph",
-                   "type": "docspan"},
-                  {"name": "std_nMorph",
-                   "getter": "stdmorph",
-                   "type": "docspan"},
-                  {"name": "root_freqs_HAL",
-                   "getter": "rfsh",
-                   "type": "docspan"},
-                  {"name": "mean_freq_HAL",
-                   "getter": "mnfrh",
-                   "type": "docspan"},
-                  {"name": "med_freq_HAL",
-                   "getter": "mdfrh",
-                   "type": "docspan"},
-                  {"name": "max_freq_HAL",
-                   "getter": "mxfrh",
-                   "type": "docspan"},
-                  {"name": "min_freq_HAL",
-                   "getter": "minfrh",
-                   "type": "docspan"},
-                  {"name": "std_freq_HAL",
-                   "getter": "stdfrh",
-                   "type": "docspan"},
-                  {"name": "log_root_freqs_HAL",
-                   "getter": "rfshlg",
-                   "type": "docspan"},
-                  {"name": "mean_logfreq_HAL",
-                   "getter": "mnlgfrh",
-                   "type": "docspan"},
-                  {"name": "med_logfreq_HAL",
-                   "getter": "mdlgfrh",
-                   "type": "docspan"},
-                  {"name": "max_logfreq_HAL",
-                   "getter": "mxlgfrh",
-                   "type": "docspan"},
-                  {"name": "min_logfreq_HAL",
-                   "getter": "minlgfrh",
-                   "type": "docspan"},
-                  {"name": "std_logfreq_HAL",
-                   "getter": "stdlgfrh",
-                   "type": "docspan"},
-                  {"name": "root_fam_sizes",
-                   "getter": "rfsz",
-                   "type": "docspan"},
-                  {"name": "mean_root_fam_size",
-                   "getter": "mnrfsz",
-                   "type": "docspan"},
-                  {"name": "med_root_fam_size",
-                   "getter": "mdrfsz",
-                   "type": "docspan"},
-                  {"name": "max_root_fam_size",
-                   "getter": "mxrfsz",
-                   "type": "docspan"},
-                  {"name": "min_root_fam_size",
-                   "getter": "minrfsz",
-                   "type": "docspan"},
-                  {"name": "stdd_root_fam_size",
-                   "getter": "stdrfsz",
-                   "type": "docspan"},
-                  {"name": "root_pfmfs",
-                   "getter": "rfszrt",
-                   "type": "docspan"},
-                  {"name": "mean_root_pfmf",
-                   "getter": "mnrpfmf",
-                   "type": "docspan"},
-                  {"name": "med_root_pfmf",
-                   "getter": "mdrpfmf",
-                   "type": "docspan"},
-                  {"name": "max_root_pfmf",
-                   "getter": "mxrpfmf",
-                   "type": "docspan"},
-                  {"name": "min_root_pfmf",
-                   "getter": "minrpfmf",
-                   "type": "docspan"},
-                  {"name": "std_root_pfmf",
-                   "getter": "stdrpfmf",
-                   "type": "docspan"},
-                  {"name": "token_freqs",
-                   "getter": "tkfrq",
-                   "type": "docspan"},
-                  {"name": "lemma_freqs",
-                   "getter": "lmfrqs",
-                   "type": "docspan"},
-                  {"name": "root_freqs",
-                   "getter": "rtfrqs",
-                   "type": "docspan"},
-                  {"name": "max_freqs",
-                   "getter": "fmf",
-                   "type": "docspan"},
-                  {"name": "mean_token_frequency",
-                   "getter": "mnfrq",
-                   "type": "docspan"},
-                  {"name": "median_token_frequency",
-                   "getter": "mdfrq",
-                   "type": "docspan"},
-                  {"name": "max_token_frequency",
-                   "getter": "mxfrq",
-                   "type": "docspan"},
-                  {"name": "min_token_frequency",
-                   "getter": "minfrq",
-                   "type": "docspan"},
-                  {"name": "std_token_frequency",
-                   "getter": "stdfrq",
-                   "type": "docspan"},
-                  {"name": "mean_lemma_frequency",
-                   "getter": "mnlmfrq",
-                   "type": "docspan"},
-                  {"name": "median_lemma_frequency",
-                   "getter": "mdlmfrq",
-                   "type": "docspan"},
-                  {"name": "max_lemma_frequency",
-                   "getter": "mxlmfrq",
-                   "type": "docspan"},
-                  {"name": "min_lemma_frequency",
-                   "getter": "minlmfrq",
-                   "type": "docspan"},
-                  {"name": "std_lemma_frequency",
-                   "getter": "stdlmfrq",
-                   "type": "docspan"},
-                  {"name": "mean_max_frequency",
-                   "getter": "mnrtfrq",
-                   "type": "docspan"},
-                  {"name": "median_max_frequency",
-                   "getter": "mdrtfrq",
-                   "type": "docspan"},
-                  {"name": "max_max_frequency",
-                   "getter": "mxrtfrq",
-                   "type": "docspan"},
-                  {"name": "min_max_frequency",
-                   "getter": "minrtfrq",
-                   "type": "docspan"},
-                  {"name": "std_max_frequency",
-                   "getter": "stdrtfrq",
-                   "type": "docspan"},
-                  {"name": "concretes",
-                   "getter": "concrs",
-                   "type": "docspan"},
-                  {"name": "mean_concreteness",
-                   "getter": "mncr",
-                   "type": "docspan"},
-                  {"name": "med_concreteness",
-                   "getter": "mdcr",
-                   "type": "docspan"},
-                  {"name": "max_concreteness",
-                   "getter": "mxcr",
-                   "type": "docspan"},
-                  {"name": "min_concreteness",
-                   "getter": "mincr",
-                   "type": "docspan"},
-                  {"name": "std_concreteness",
-                   "getter": "stdcr",
-                   "type": "docspan"},
-                  {"name": "abstract_traits",
-                   "getter": "abstract_traits",
-                   "type": "docspan"},
-                  {"name": "propn_abstract_traits",
-                   "getter": "propn_abstract_traits",
-                   "type": "docspan"},
-                  {"name": "animates",
-                   "getter": "animates",
-                   "type": "docspan"},
-                  {"name": "propn_anims",
-                   "getter": "propn_anims",
-                   "type": "docspan"},
-                  {"name": "deictics",
-                   "getter": "deictics",
-                   "type": "docspan"},
-                  {"name": "locations",
-                   "getter": "locs",
-                   "type": "docspan"},
-                  {"name": "propn_locations",
-                   "getter": "propn_locs",
-                   "type": "docspan"},
-                  {"name": "propn_deictics",
-                   "getter": "propn_deictics",
-                   "type": "docspan"},
-                  {"name": "token_vectors",
-                   "getter": "dtv",
-                   "type": "docspan"},
-                  {"name": "root",
-                   "getter": "rt",
-                   "type": "token"},
-                  {"name": "nSyll",
-                   "getter": "ns",
-                   "type": "token"},
-                  {"name": "sqrtNChars",
-                   "getter": "nc",
-                   "type": "token"},
-                  {"name": "is_latinate",
-                   "getter": "is_latinate",
-                   "type": "token"},
-                  {"name": "is_academic",
-                   "getter": "is_academic",
-                   "type": "token"},
-                  {"name": "family_size",
-                   "getter": "fms",
-                   "type": "token"},
-                  {"name": "nSenses",
-                   "getter": "nsem",
-                   "type": "token"},
-                  {"name": "logNSenses",
-                   "getter": "lognsem",
-                   "type": "token"},
-                  {"name": "morpholexsegm",
-                   "getter": "morpholexsegm",
-                   "type": "token"},
-                  {"name": "nMorph",
-                   "getter": "nm",
-                   "type": "token"},
-                  {"name": "root1_freq_HAL",
-                   "getter": "rfqh",
-                   "type": "token"},
-                  {"name": "root2_freq_HAL",
-                   "getter": "rfqh2",
-                   "type": "token"},
-                  {"name": "root3_freq_HAL",
-                   "getter": "rfqh3",
-                   "type": "token"},
-                  {"name": "root_famSize",
-                   "getter": "rfs",
-                   "type": "token"},
-                  {"name": "root_pfmf",
-                   "getter": "rpfmf",
-                   "type": "token"},
-                  {"name": "token_freq",
-                   "getter": "tf",
-                   "type": "token"},
-                  {"name": "lemma_freq",
-                   "getter": "lf",
-                   "type": "token"},
-                  {"name": "root_freq",
-                   "getter": "zrf",
-                   "type": "token"},
-                  {"name": "max_freq",
-                   "getter": "mff",
-                   "type": "token"},
-                  {"name": "concreteness",
-                   "getter": "concreteness",
-                   "type": "token"},
-                  {"name": "sentiword",
-                   "getter": "sent",
-                   "type": "token"},
-                  {"name": "abstract_trait",
-                   "getter": "atr",
-                   "type": "token"},
-                  {"name": "animate",
-                   "getter": "isanim",
-                   "type": "token"},
-                  {"name": "location",
-                   "getter": "isloc",
-                   "type": "token"}
-                  ]
-
-    def add_extensions(self):
-
-        """
-         Funcion to add extensions that allow us to access the various
-         lexicons this module is designed to support.
-        """
-
-        for extension in self.extensions:
-            if extension['type'] == 'docspan':
-                if not Doc.has_extension(extension['name']):
-                    Doc.set_extension(extension['name'],
-                                      getter=eval('self.'
-                                                  + extension['getter']))
-                if not Span.has_extension(extension['name']):
-                    Span.set_extension(extension['name'],
-                                       getter=eval('self.'
-                                                   + extension['getter']))
-            if extension['type'] == 'token':
-                if not Token.has_extension(extension['name']):
-                    Token.set_extension(extension['name'],
-                                        getter=eval('self.'
-                                                    + extension['getter']))
+    def AWE_Info(self, 
+                 document: Doc,
+                 infoType='Token',
+                 indicator='pos_',
+                 filters=[],
+                 transformations=[],
+                 summaryType=None):
+        ''' This function provides a general-purpose API for
+            obtaining information about indicators reported in
+            the AWE Workbench Spacy parse tree. 
+           
+            This is a general-purpose utility. Cloning inside
+            the class to simplify the add_extensions class
+        '''
+        return AWE_Info(document, infoType, indicator, filters,
+                 transformations, summaryType)
 
     attribute = wordnet.synsets('attribute')[1]
     attribute2 = wordnet.synsets('attribute')[2]
@@ -2012,30 +1040,6 @@ class LexicalFeatureDef(object):
 
         return False
 
-    def abstract_traits(self, tokens):
-        """
-        Get a list of the offets of all the abstract trait nominals in the text
-        """
-        abstracts = []
-        for token in tokens:
-            if token._.abstract_trait:
-                abstracts.append(1)
-            else:
-                abstracts.append(0)
-        return abstracts
-
-    def animates(self, tokens):
-        """
-        Get a list of the offets of all the animate nominals in the text
-        """
-        animates = []
-        for token in tokens:
-            if token._.animate:
-                animates.append(1)
-            else:
-                animates.append(0)
-        return animates
-
     def deictic(self, token):
         """
          In a concreteness/animacy/referentiality hierarchy, deictic elements
@@ -2172,3 +1176,53 @@ class LexicalFeatureDef(object):
             return min(int(t1), int(t2), int(t3))
         else:
             return None
+
+    def add_morphological_relatives(self, word, key):
+        sentlist = []
+        # modify the sentiment estimate using word families, but only if
+        # no negative prefix or suffixes are involved in the word we are
+        # taking the sentiment rating from, and it's not in the very high
+        # frequency band.
+        if key in self.family_idx \
+           and str(self.family_idx[key]) in self.family_lists:
+            for item in self.family_lists[str(self.family_idx[key])]:
+                if item in self.nlp.vocab.strings:
+                    itemkey = self.nlp.vocab.strings[item]
+                else:
+                    itemkey = self.nlp.vocab.strings.add(item)
+                if itemkey in self.sentiment \
+                    and wordfreq.zipf_frequency(item, "en") < 5 \
+                    and wordfreq.zipf_frequency(word, "en") < 5 \
+                    and len(item) > 4 and len(word) > 4 \
+                    and (len(item) < len(word)
+                         or (not item.endswith('less')
+                             and not item.endswith('lessness')
+                             and not item.endswith('lessly')
+                             and not item.startswith('un')
+                             and not item.startswith('in')
+                             and not item.startswith('im')
+                             and not item.startswith('dis')
+                             and not item.startswith('mis')
+                             and not item.startswith('anti'))):
+                    sentlist.append(self.sentiment[itemkey])
+
+        if key not in self.sentiment or abs(self.sentiment[key]) <= .2:
+            if len(sentlist) > 1 and statistics.mean(sentlist) > 0:
+                self.sentiment[key] = max(sentlist)
+            elif len(sentlist) > 1 and statistics.mean(sentlist) < 0:
+                self.sentiment[key] = min(sentlist)
+            elif len(sentlist) == 1:
+                self.sentiment[key] = sentlist[0]
+
+        if abs(self.sentiment[key]) <= .2 \
+           and key in self.roots \
+           and wordfreq.zipf_frequency(word, "en") < 5:
+
+            if self.roots[key] in self.nlp.vocab.strings:
+                rootkey = self.nlp.vocab.strings[self.roots[key]]
+            else:
+                rootkey = self.nlp.vocab.strings.add(self.roots[key])
+            if key != rootkey and rootkey in self.roots \
+               and rootkey in self.sentiment \
+               and abs(self.sentiment[rootkey]) > .2:
+                self.sentiment[key] = self.sentiment[rootkey]

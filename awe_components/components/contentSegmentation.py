@@ -19,7 +19,7 @@ def setExtensions():
 
 @Language.component("contentsegmentation")
 def contentsegmentation(doc):
-    if doc._._clinfo is not None:
+    if doc._.clusterInfo is not None:
         setExtensions()
         core_sentences, \
             extended_core_sentences, \

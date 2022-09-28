@@ -103,7 +103,6 @@ class ViewpointFeatureDef:
          Call the spacy component and process the document to register
          viewpoint and stance elements
         """
-
         for token in doc:
             # Add attributes specified in the stance lexicon
             self.setLexiconAttributes(token, doc)
@@ -165,29 +164,11 @@ class ViewpointFeatureDef:
         # Mark explicitly cued cases of direct speech
         # such as 'This is crazy,' Jenna remarked.
         self.directSpeech(doc)
+        
+        self.egocentric(doc)
+        self.allocentric(doc)
 
         return doc
-
-    def claimflags(self, tokens):
-        ''' Return list of words flagged as part of a claim
-        '''
-        [token._.vwp_claim for token in tokens]
-
-    def discussionflags(self, tokens):
-        ''' Return list of words flagged as part of a discussion
-            of a quote/assertion
-        '''
-        return [token._.vwp_discussion for token in tokens]
-
-    def perspectiveflags(self, tokens):
-        ''' Return perspective information for all tokens in document
-        '''
-        return [token._.vwp_perspective for token in tokens]
-
-    def attributionflags(self, tokens):
-        ''' Return attribution flags for all tokens in document
-        '''
-        return [token._.vwp_attribution for token in tokens]
 
     def subjectiveWord(self, token):
         if token.text in ['?', '!'] \
@@ -348,438 +329,147 @@ class ViewpointFeatureDef:
                     start, end = rootTree(currentHead,
                                           currentHead.i,
                                           currentHead.i)
-                    factList.append([start, end+1])
+                    entry = {}
+                    entry['name'] = 'objective'
+                    entry['offset'] = tokens[start].idx
+                    entry['startToken'] = start
+                    entry['endToken'] = end
+                    entry['length'] = tokens[end].idx \
+                        + len(tokens[end].text_with_ws) \
+                        - tokens[start].idx
+                    entry['value'] = entry['length']
+                    entry['text'] = tokens[start:end+1].text
+                    factList.append(entry)
                     nextRoot = end + 1
                     numSubjective = 0
         return factList
 
     def statements_of_opinion(self, tokens):
-        return self.statements_of_fact(tokens, " > 0")
+        theList = self.statements_of_fact(tokens, " > 0")
+        opinionList = []
+        for item in theList:
+             newItem = item
+             newItem['name'] = 'subjective'
+             opinionList.append(newItem)
+        return opinionList
 
-    def sourceflags(self, tokens):
-        ''' Return source flags for all tokens in document
-        '''
-        return [token._.vwp_source for token in tokens]
-
-    def citeflags(self, tokens):
-        ''' Return citation flags for all tokens in document
-        '''
-        return [token._.vwp_cite for token in tokens]
-
-    def emowd(self, tokens):
+    def vwp_emotionword(self, token):
         ''' Return list of emotion words for all tokens in document
         '''
-        return [token._.vwp_emotion
-                or token._.vwp_emotional_impact
-                for token in tokens]
+        if token._.vwp_emotion \
+           or token._.vwp_emotional_impact:
+            return True
+        else:
+            return False
 
-    def charwd(self, tokens):
-        ''' Return list of character trait words for all tokens in document
-        '''
-        return [token._.vwp_character for token in tokens]
-
-    def subj_rtg(self, tokens):
-        ''' Return subjectivity ratings for all tokens in document
-        '''
-        return [token._.subjectivity for token in tokens]
-
-    def mnsubj(self, tokens):
-        ''' Document level measure: mean subjectivity ratings
-        '''
-        return summarize(lexFeat(tokens, 'subjectivity'),
-                         summaryType=FType.MEAN)
-
-    def mdsubj(self, tokens):
-        ''' Document level measure: median subjectivity ratings
-        '''
-        return summarize(lexFeat(tokens, 'subjectivity'),
-                         summaryType=FType.MEDIAN)
-
-    def minsubj(self, tokens):
-        ''' Document level measure: minimum subjectivity ratings
-        '''
-        return summarize(lexFeat(tokens, 'subjectivity'),
-                         summaryType=FType.MIN)
-
-    def maxsubj(self, tokens):
-        ''' Document level measure: max subjectivity ratings
-        '''
-        return summarize(lexFeat(tokens, 'subjectivity'),
-                         summaryType=FType.MAX)
-
-    def stdsubj(self, tokens):
-        ''' Document level measure: standard deviation of subjectivity ratings
-        '''
-        return summarize(lexFeat(tokens, 'subjectivity'),
-                         summaryType=FType.STDEV)
-
-    def pol_rtg(self, tokens):
-        ''' Return list of polarity ratings for all tokens in document
-        '''
-        return [token._.polarity for token in tokens]
-
-    def mnpol(self, tokens):
-        ''' Document level measure: mean polarity ratings
-        '''
-        return summarize(lexFeat(tokens, 'polarity'),
-                         summaryType=FType.MEAN)
-
-    def mdpol(self, tokens):
-        ''' Document level measure: median polarity ratings
-        '''
-        return summarize(lexFeat(tokens, 'polarity'),
-                         summaryType=FType.MEDIAN)
-
-    def minpol(self, tokens):
-        ''' Document level measure: min polarity ratings
-        '''
-        return summarize(lexFeat(tokens, 'polarity'),
-                         summaryType=FType.MIN)
-
-    def mxpol(self, tokens):
-        ''' Document level measure: max polarity ratings
-        '''
-        return summarize(lexFeat(tokens, 'polarity'),
-                         summaryType=FType.MAX)
-
-    def stdpol(self, tokens):
-        ''' Document level measure: std. dev. of polarity ratings
-        '''
-        return summarize(lexFeat(tokens, 'polarity'),
-                         summaryType=FType.STDEV)
-
-    def snt_rtg(self, tokens):
-        ''' Return sentiment ratings for all tokens in document
-        '''
-        return [token._.vwp_sentiment for token in tokens]
-
-    def mnsent(self, tokens):
-        ''' Document level measure: mean sentiment ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_sentiment'),
-                         summaryType=FType.MEAN)
-
-    def mdsent(self, tokens):
-        ''' Document level measure: median sentiment ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_sentiment'),
-                         summaryType=FType.MEDIAN)
-
-    def minsent(self, tokens):
-        ''' Document level measure: min sentiment ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_sentiment'),
-                         summaryType=FType.MIN)
-
-    def mxsent(self, tokens):
-        ''' Document level measure: max sentiment ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_sentiment'),
-                         summaryType=FType.MAX)
-
-    def stdsent(self, tokens):
-        ''' Document level measure: std dev of sentiment ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_sentiment'),
-                         summaryType=FType.STDEV)
-
-    def snt_tone(self, tokens):
-        ''' Return tone ratings for all tokens in document
-        '''
-        return [token._.vwp_tone for token in tokens]
-
-    def mntone(self, tokens):
-        ''' Document level measure: mean tone ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_tone'),
-                         summaryType=FType.MEAN)
-
-    def mdtone(self, tokens):
-        ''' Document level measure: median tone ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_tone'),
-                         summaryType=FType.MEDIAN)
-
-    def mintone(self, tokens):
-        ''' Document level measure: min tone ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_tone'),
-                         summaryType=FType.MIN)
-
-    def mxtone(self, tokens):
-        ''' Document level measure: max tone ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_tone'),
-                         summaryType=FType.MAX)
-
-    def stdtone(self, tokens):
-        ''' Document level measure: std dev of tone ratings
-        '''
-        return summarize(lexFeat(tokens, 'vwp_tone'),
-                         summaryType=FType.STDEV)
-
-    def govsubj(self, tokens):
-        ''' Return list of governing subjectgs for all tokens in document
-        '''
-        return [token._.governing_subject for token in tokens]
-
-    def inds(self, tokens):
-        ''' Return indirect speech status flags for all tokens in document
-        '''
-        return [1 if token._.vwp_in_direct_speech
-                else 0 for token in tokens]
-
-    def oral(self, tokens):
-        ''' Return proportion of text signaling oral/interactive style
-        '''
-        return len([token.i for token in tokens
-                    if token._.vwp_interactive])/len(tokens)
-
-    def inter(self, tokens):
-        ''' Return oral/interactive style flags for all tokens in document
-        '''
-        return [token.i for token in tokens if token._.vwp_interactive]
-
-    def listargs(self, tokens):
-        ''' Return flag indicating that the token is part of a sequence
-            of words that has markers of subjectivity / argumentation
-        '''
-        return [token.i for token in tokens if token._.vwp_argumentation]
-
-    def listargs1(self, tokens):
+    def vwp_argumentword(self, token):
         ''' Return list of token indexes for words that meet the standard
             for being explicit argumentation words
         '''
-        return [token.i for token in tokens
-                if (token._.vwp_argument
-                    or token._.vwp_certainty
-                    or token._.vwp_necessity
-                    or token._.vwp_probability
-                    or token._.vwp_likelihood
-                    or token._.vwp_surprise
-                    or token._.vwp_qualification
-                    or token._.vwp_emphasis
-                    or token._.vwp_accuracy
-                    or token._.vwp_information
-                    or token._.vwp_relevance
-                    or token._.vwp_persuasiveness
-                    or token._.vwp_reservation
-                    or token._.vwp_qualification
-                    or token._.vwp_generalization
-                    or token._.vwp_illocutionary
-                    or token._.vwp_argue)]
+        if token._.vwp_argument \
+           or token._.vwp_certainty \
+           or token._.vwp_necessity \
+           or token._.vwp_probability \
+           or token._.vwp_likelihood \
+           or token._.vwp_surprise \
+           or token._.vwp_qualification \
+           or token._.vwp_emphasis \
+           or token._.vwp_accuracy \
+           or token._.vwp_information \
+           or token._.vwp_relevance \
+           or token._.vwp_persuasiveness \
+           or token._.vwp_reservation \
+           or token._.vwp_qualification \
+           or token._.vwp_generalization \
+           or token._.vwp_illocutionary \
+           or token._.vwp_argue:
+            return token.i
 
-    def listargs2(self, tokens):
-        ''' Return proportion of words in document that belong to
-            subjective/argumentative word sequences
-        '''
-        return len([token.i for token in tokens
-                    if token._.vwp_argumentation]) / len(tokens)
-
-    def explistargs(self, tokens):
+    def vwp_explicit_argument(self, token):
         ''' Return list of indexes to words that belong to argumentation
             sequences and can be classified as subjective/argument language
         '''
-        return [token.i for token in tokens
-                if token._.vwp_argumentation
-                and (token._.vwp_argument
-                     or token._.vwp_certainty
-                     or token._.vwp_necessity
-                     or token._.vwp_probability
-                     or token._.vwp_likelihood
-                     or token._.vwp_surprise
-                     or token._.vwp_risk
-                     or token._.vwp_cause
-                     or token._.vwp_tough
-                     or token._.vwp_qualification
-                     or token._.vwp_emphasis
-                     or token._.vwp_accuracy
-                     or token._.vwp_information
-                     or token._.vwp_relevance
-                     or token._.vwp_persuasiveness
-                     or token._.vwp_reservation
-                     or token._.vwp_qualification
-                     or token._.vwp_generalization
-                     or token._.vwp_illocutionary
-                     or token._.vwp_manner
-                     or token._.vwp_importance
-                     or ((token._.vwp_say
-                          or token._.vwp_interpret
-                          or token._.vwp_perceive
-                          or token._.vwp_think
-                          or token._.vwp_argue
-                          or (token._.vwp_plan
-                              and not token._.vwp_physical
-                              and not token._.vwp_social))
-                         and (not token.pos_ == 'VERB'
-                              or (not token._.has_governing_subject
-                                  and tensed_clause(token))
-                              or (token._.has_governing_subject
-                                  and (tokens[
-                                       token._.governing_subject
-                                       ]._.animate
-                                       or tokens[
-                                          token._.governing_subject
-                                          ].lemma_ in ['this',
-                                                       'that',
-                                                       'it']
-                                       or tokens[
-                                          token._.governing_subject
-                                          ]._.vwp_cognitive
-                                       or tokens[
-                                          token._.governing_subject
-                                          ]._.vwp_plan
-                                       or tokens[
-                                          token._.governing_subject
-                                          ]._.vwp_abstract
-                                       or tokens[
-                                          token._.governing_subject
-                                          ]._.vwp_information
-                                       or tokens[
-                                          token._.governing_subject
-                                          ]._.vwp_possession
-                                       or tokens[
-                                          token._.governing_subject
-                                          ]._.vwp_relation
-                                       or tokens[
-                                          token._.governing_subject
-                                          ]._.vwp_communication)))))]
+        #return [token.i for token in tokens
+        if token._.vwp_argumentation \
+           and (token._.vwp_argument
+                or token._.vwp_certainty
+                or token._.vwp_necessity
+                or token._.vwp_probability
+                or token._.vwp_likelihood
+                or token._.vwp_surprise
+                or token._.vwp_risk
+                or token._.vwp_cause
+                or token._.vwp_tough
+                or token._.vwp_qualification
+                or token._.vwp_emphasis
+                or token._.vwp_accuracy
+                or token._.vwp_information
+                or token._.vwp_relevance
+                or token._.vwp_persuasiveness
+                or token._.vwp_reservation
+                or token._.vwp_qualification
+                or token._.vwp_generalization
+                or token._.vwp_illocutionary
+                or token._.vwp_manner
+                or token._.vwp_importance
+                or ((token._.vwp_say
+                     or token._.vwp_interpret
+                     or token._.vwp_perceive
+                     or token._.vwp_think
+                     or token._.vwp_argue
+                     or (token._.vwp_plan
+                         and not token._.vwp_physical
+                         and not token._.vwp_social))
+                    and (not token.pos_ == 'VERB'
+                         or (not token._.has_governing_subject
+                             and tensed_clause(token))
+                         or (token._.has_governing_subject
+                             and (token.doc[
+                                  token._.governing_subject
+                                  ]._.animate
+                                  or token.doc[
+                                     token._.governing_subject
+                                     ].lemma_ in ['this',
+                                                  'that',
+                                                  'it']
+                                  or token.doc[
+                                     token._.governing_subject
+                                     ]._.vwp_cognitive
+                                  or token.doc[
+                                     token._.governing_subject
+                                     ]._.vwp_plan
+                                  or token.doc[
+                                     token._.governing_subject
+                                     ]._.vwp_abstract
+                                  or token.doc[
+                                     token._.governing_subject
+                                     ]._.vwp_information
+                                  or token.doc[
+                                     token._.governing_subject
+                                     ]._.vwp_possession
+                                  or token.doc[
+                                     token._.governing_subject
+                                     ]._.vwp_relation
+                                  or token.doc[
+                                     token._.governing_subject
+                                     ]._.vwp_communication))))):
+            return True
 
-    extensions = [{"name": "vwp_claims",
-                   "getter": "claimflags",
-                   "type": "docspan"},
-                  {"name": "vwp_discussions",
-                   "getter": "discussionflags",
-                   "type": "docspan"},
-                  {"name": "vwp_perspectives",
-                   "getter": "perspectiveflags",
-                   "type": "docspan"},
-                  {"name": "vwp_attributions",
-                   "getter": "attributionflags",
-                   "type": "docspan"},
-                  {"name": "vwp_sources",
-                   "getter": "sourceflags",
-                   "type": "docspan"},
-                  {"name": "vwp_cites",
-                   "getter": "citeflags",
-                   "type": "docspan"},
-                  {"name": "propn_egocentric",
-                   "getter": "propn_egocentric",
-                   "type": "docspan"},
-                  {"name": "propn_allocentric",
-                   "getter": "propn_allocentric",
-                   "type": "docspan"},
-                  {"name": "vwp_emotionwords",
-                   "getter": "emowd",
-                   "type": "docspan"},
-                  {"name": "vwp_characterwords",
-                   "getter": "charwd",
-                   "type": "docspan"},
-                  {"name": "subjectivity_ratings",
-                   "getter": "subj_rtg",
-                   "type": "docspan"},
-                  {"name": "mean_subjectivity",
-                   "getter": "mnsubj",
-                   "type": "docspan"},
-                  {"name": "median_subjectivity",
-                   "getter": "mdsubj",
-                   "type": "docspan"},
-                  {"name": "min_subjectivity",
-                   "getter": "minsubj",
-                   "type": "docspan"},
-                  {"name": "max_subjectivity",
-                   "getter": "maxsubj",
-                   "type": "docspan"},
-                  {"name": "stdev_subjectivity",
-                   "getter": "stdsubj",
-                   "type": "docspan"},
-                  {"name": "polarity_ratings",
-                   "getter": "pol_rtg",
-                   "type": "docspan"},
-                  {"name": "mean_polarity",
-                   "getter": "mnpol",
-                   "type": "docspan"},
-                  {"name": "median_polarity",
-                   "getter": "mdpol",
-                   "type": "docspan"},
-                  {"name": "min_polarity",
-                   "getter": "minpol",
-                   "type": "docspan"},
-                  {"name": "max_polarity",
-                   "getter": "mxpol",
-                   "type": "docspan"},
-                  {"name": "stdev_polarity",
-                   "getter": "stdpol",
-                   "type": "docspan"},
-                  {"name": "sentiment_ratings",
-                   "getter": "snt_rtg",
-                   "type": "docspan"},
-                  {"name": "mean_sentiment",
-                   "getter": "mnsent",
-                   "type": "docspan"},
-                  {"name": "median_sentiment",
-                   "getter": "mdsent",
-                   "type": "docspan"},
-                  {"name": "min_sentiment",
-                   "getter": "minsent",
-                   "type": "docspan"},
-                  {"name": "max_sentiment",
-                   "getter": "mxsent",
-                   "type": "docspan"},
-                  {"name": "stdev_sentiment",
-                   "getter": "stdsent",
-                   "type": "docspan"},
-                  {"name": "tone_ratings",
-                   "getter": "snt_tone",
-                   "type": "docspan"},
-                  {"name": "mean_tone",
-                   "getter": "mntone",
-                   "type": "docspan"},
-                  {"name": "median_tone",
-                   "getter": "mdtone",
-                   "type": "docspan"},
-                  {"name": "min_tone",
-                   "getter": "mintone",
-                   "type": "docspan"},
-                  {"name": "max_tone",
-                   "getter": "mxtone",
-                   "type": "docspan"},
-                  {"name": "stdev_tone",
-                   "getter": "stdtone",
-                   "type": "docspan"},
-                  {"name": "vwp_argumentwords",
-                   "getter": "listargs1",
-                   "type": "docspan"},
-                  {"name": "vwp_arguments",
-                   "getter": "listargs",
-                   "type": "docspan"},
-                  {"name": "vwp_explicit_arguments",
-                   "getter": "explistargs",
-                   "type": "docspan"},
-                  {"name": "propn_argument_words",
-                   "getter": "listargs2",
-                   "type": "docspan"},
-                  {"name": "vwp_statements_of_fact",
+    extensions = [{"name": "vwp_statements_of_fact",
                    "getter": "s_o_f",
                    "type": "docspan"},
                   {"name": "vwp_statements_of_opinion",
                    "getter": "statements_of_opinion",
                    "type": "docspan"},
-                  {"name": "vwp_interactives",
-                   "getter": "inter",
-                   "type": "docspan"},
-                  {"name": "propn_interactive",
-                   "getter": "oral",
-                   "type": "docspan"},
-                  {"name": "vwp_in_direct_speech",
-                   "getter": "inds",
-                   "type": "docspan"},
-                  {"name": "propn_direct_speech",
-                   "getter": "propn_direct_speech",
-                   "type": "docspan"},
-                  {"name": "governing_subjects",
-                   "getter": "govsubj",
-                   "type": "docspan"},
+                  {"name": "vwp_explicit_argument",
+                   "getter": "vwp_explicit_argument",
+                   "type": "token"},
+                  {"name": "vwp_emotionword",
+                   "getter": "vwp_emotionword",
+                   "type": "token"},
+                  {"name": "vwp_argumentword",
+                   "getter": "vwp_argumentword",
+                   "type": "token"}
                   ]
 
     def add_extensions(self):
@@ -850,6 +540,12 @@ class ViewpointFeatureDef:
             Token.set_extension('vwp_discussion',
                                 default=False,
                                 force=True)
+
+        if not Token.has_extension('vwp_egocentric'):
+            Token.set_extension('vwp_egocentric', default=False)
+
+        if not Token.has_extension('vwp_allocentric'):
+            Token.set_extension('vwp_allocentric', default=False)
 
         if not Token.has_extension('antecedents'):
             Token.set_extension('antecedents', default=None, force=True)
@@ -974,6 +670,10 @@ class ViewpointFeatureDef:
         # List of spans that count as direct speech
         if not Doc.has_extension('vwp_direct_speech_spans'):
             Doc.set_extension('vwp_direct_speech_spans', default=[])
+        # version in the standardized format we use for doc level
+        # spans
+        if not Doc.has_extension('direct_speech_spans'):
+            Doc.set_extension('direct_speech_spans', default=[])
 
         # Flag identifying a nominal that identifies the
         # speaker referenced as 'I/me/my/mine' within a
@@ -2693,7 +2393,22 @@ class ViewpointFeatureDef:
             lastAddressee = span[1]
             lastItem = newItem
         hdoc._.vwp_direct_speech_spans = list(reversed(newSpans))
+        # add the token level flag and do the standard format output       
         for span in newSpans:
+            (speaker, addressee, subspans) = span
+            for subspan in subspans:
+                [left, right] = subspan
+                entry = {}
+                entry['name'] = 'direct speech'
+                entry['offset'] = hdoc[left].idx
+                entry['startToken'] = left
+                entry['endToken'] = right
+                entry['length'] = hdoc[right].idx \
+                    + len(hdoc[right].text_with_ws) \
+                    - hdoc[left].idx
+                entry['value'] = [speaker, addressee]
+                entry['text'] = hdoc[left:right].text
+                hdoc._.direct_speech_spans.append(entry)
             locs = span[2]
             for loc in locs:
                 leftEdge = loc[0]
@@ -2702,21 +2417,7 @@ class ViewpointFeatureDef:
                     if item._.vwp_quoted:
                         item._.vwp_in_direct_speech = True
 
-    def propn_direct_speech(self, hdoc):
-        """
-         Calculate the proportion of tokens in the document
-         that occur within a direct speech segment.
-        """
-        if len(hdoc) == 0:
-            return None
-        totalDirect = 0
-        for span in hdoc._.vwp_direct_speech_spans:
-            for loc in span[2]:
-                if hdoc[loc[0]]._.vwp_quoted or hdoc[loc[1]]._.vwp_quoted:
-                    totalDirect += loc[1]-loc[0]
-        return totalDirect/len(hdoc)
-
-    def propn_egocentric(self, hdoc):
+    def egocentric(self, hdoc):
         """
          Viewpoint domains that contain evaluation language like should
          or perhaps with explicit or implicit first-person viewpoint
@@ -2740,10 +2441,9 @@ class ViewpointFeatureDef:
                     domainList.append(self.getHeadDomain(token).i)
         for token in hdoc:
             if self.getHeadDomain(token).i in domainList:
-                count += 1
-        return count / len(hdoc)
+                token._.vwp_egocentric = True
 
-    def propn_allocentric(self, doc):
+    def allocentric(self, doc):
         count = 0
         domainList = []
         for token in doc:
@@ -2759,14 +2459,7 @@ class ViewpointFeatureDef:
                            in second_person_pronouns):
                         include = False
             if include:
-                count += 1
-        return count / len(doc)
-
-    def mean_subjectivity(self, hdoc):
-        total = 0
-        for token in hdoc:
-            total += token._.subjectivity
-        return total/len(hdoc)
+                token._.vwp_allocentric = True
 
     def set_perspective_spans(self, hdoc, calculatePerspective=True):
         """
@@ -2878,8 +2571,9 @@ class ViewpointFeatureDef:
                                              hdoc,
                                              propositional_attitudes,
                                              hdeps)
-        self.cleanup_propositional_attitudes(propositional_attitudes, hdoc)
-
+        propositional_attitudes = \
+            self.cleanup_propositional_attitudes(propositional_attitudes,
+                                                 hdoc)
         hdoc._.vwp_perspective_spans = pspans
         hdoc._.vwp_stance_markers = stance_markers
         hdoc._.vwp_character_traits = character_markers
@@ -2888,6 +2582,7 @@ class ViewpointFeatureDef:
         hdoc._.vwp_social_awareness = theory_of_mind_sentences
 
     def mark_transition_argument_words(self, hdoc):
+    
         tp = hdoc._.transition_word_profile
         for item in tp[3]:
             if item[4] not in ['temporal', 'PARAGRAPH']:
@@ -3171,7 +2866,7 @@ class ViewpointFeatureDef:
            and (token._.vwp_evaluation
                 or token._.vwp_hedge) \
            and (in_modal_scope(token.head)
-                or not token.head._.pastTenseScope) \
+                or not token.head._.in_past_tense_scope) \
            and (token.head._.vwp_argument
                 or token.head._.vwp_information
                 or token.head._.vwp_communication
@@ -3319,7 +3014,7 @@ class ViewpointFeatureDef:
            and (token._.vwp_evaluation
                 or token._.vwp_hedge) \
            and (in_modal_scope(token.head)
-                or not token.head._.pastTenseScope) \
+                or not token.head._.in_past_tense_scope) \
            and (token.head._.vwp_cognitive
                 or token.head._.vwp_communication
                 or token.head._.vwp_argument
@@ -3332,7 +3027,7 @@ class ViewpointFeatureDef:
            and (token._.vwp_evaluation
                 or token._.vwp_hedge) \
            and (in_modal_scope(token.head.head)
-                or not token.head.head._.pastTenseScope) \
+                or not token.head.head._.in_past_tense_scope) \
            and (token.head.head._.vwp_cognitive
                 or token.head.head._.vwp_communication
                 or token.head.head._.vwp_argument
@@ -3346,7 +3041,7 @@ class ViewpointFeatureDef:
                 or token._.vwp_hedge):
             if (token.head.dep_ == 'pobj'
                 and (in_modal_scope(token.head.head.head)
-                     or not token.head.head.head._.pastTenseScope)
+                     or not token.head.head.head._.in_past_tense_scope)
                 and token.head.head.head is not None
                 and (token.head.head.head._.vwp_cognitive
                      or token.head.head.head._.vwp_communication
@@ -3357,7 +3052,7 @@ class ViewpointFeatureDef:
 
         if token.dep_ == 'prep' \
            and (in_modal_scope(token.head)
-                or not token.head._.pastTenseScope) \
+                or not token.head._.in_past_tense_scope) \
            and (token.head._.vwp_argument
                 or token.head._.vwp_information
                 or token.head._.vwp_communication
@@ -4162,6 +3857,65 @@ class ViewpointFeatureDef:
                 for item in propositional_attitudes['explicit_3'][domain]:
                     for offset in range(item[0][0], item[0][1]):
                         hdoc[offset]._.vwp_discussion = True
+                        
+        # Now let's clean things up to put propositional attitudes
+        # in the format we're standardizing to for sentence scale ranges
+        reformatted = []
+        for item in propositional_attitudes['implicit']:
+            [[left, right], controller, proposition] = item
+            entry = {}
+            entry['name'] = 'propositional attitudes'
+            entry['offset'] = hdoc[left].idx
+            entry['startToken'] = left
+            entry['endToken'] = right
+            entry['length'] = hdoc[right].idx \
+                + len(hdoc[right].text_with_ws) \
+                - hdoc[left].idx
+            entry['value'] = 'implicit'
+            entry['text'] = hdoc[left:right].text
+            reformatted.append(entry)
+        for item in propositional_attitudes['explicit_1']:
+            [[left, right], controller, proposition] = item
+            entry = {}
+            entry['name'] = 'propositional attitudes'
+            entry['offset'] = hdoc[left].idx
+            entry['startToken'] = left
+            entry['endToken'] = right
+            entry['length'] = hdoc[right].idx \
+                + len(hdoc[right].text_with_ws) \
+                - hdoc[left].idx
+            entry['value'] = 'explicit_1'
+            entry['text'] = hdoc[left:right].text
+            reformatted.append(entry)
+        for item in propositional_attitudes['explicit_2']:
+            [[left, right], controller, proposition] = item
+            entry = {}
+            entry['name'] = 'propositional attitudes'
+            entry['offset'] = hdoc[left].idx
+            entry['startToken'] = left
+            entry['endToken'] = right
+            entry['length'] = hdoc[right].idx \
+                + len(hdoc[right].text_with_ws) \
+                - hdoc[left].idx
+            entry['value'] = 'explicit_2'
+            entry['text'] = hdoc[left:right].text
+            reformatted.append(entry)
+        for domain in propositional_attitudes['explicit_3']:
+            for item in propositional_attitudes['explicit_3'][domain]:
+                [[left, right], controller, proposition] = item
+                entry = {}
+                entry['name'] = 'propositional attitudes'
+                entry['offset'] = hdoc[left].idx
+                entry['startToken'] = left
+                entry['endToken'] = right
+                entry['length'] = hdoc[right].idx \
+                    + len(hdoc[right].text_with_ws) \
+                    - hdoc[left].idx
+                entry['value'] = 'explicit_3'
+                entry['text'] = hdoc[left:right].text
+                reformatted.append(entry)
+        return reformatted
+
 
     def propositional_attitudes(self,
                                 token,
@@ -4818,8 +4572,17 @@ class ViewpointFeatureDef:
                                         in second_person_pronouns
                                         and childSubj.text.lower()
                                         in second_person_pronouns):
-                                entry = [token.sent.start,
-                                         token.sent.end]
+
+                                entry = {}
+                                entry['name'] = 'social awareness'
+                                entry['offset'] = hdoc[token.sent.start].idx
+                                entry['startToken'] = token.sent.start
+                                entry['endToken'] = token.sent.end
+                                entry['length'] = hdoc[token.sent.end].idx \
+                                    + len(hdoc[token.sent.end].text_with_ws) \
+                                   - hdoc[token.sent.start].idx
+                                entry['value'] = 'theory of mind sentence'
+                                entry['text'] = hdoc[token.sent.start:token.sent.end].text
                                 if entry not in theory_of_mind_sentences:
                                     theory_of_mind_sentences.append(
                                         entry)

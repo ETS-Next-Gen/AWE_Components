@@ -23,15 +23,21 @@ from ..errors import *
 
 lang = "en"
 
+###################################
+# Register the token and document
+# extensions we need to make cluster
+# information accessible.
+###################################
+Token.set_extension("clusterID", default=None, force=True)
+Doc.set_extension("clusterInfo", default=None, force=True)
+Doc.set_extension("main_cluster_spans", default=None, force=True)
 
 @Language.component("lexicalclusters")
 def assignClusterIDs(hdoc):
-
-    ####################################################################
-    # Use agglomerative clustering to group the words inside a document
-    # into clusters of related words
-    ####################################################################
-
+    '''
+        Use agglomerative clustering to group the words inside a document
+        into clusters of related words
+    '''
     filteredVecs = []
     filteredToks = []
     skippedVecs = []
@@ -127,18 +133,19 @@ def assignClusterIDs(hdoc):
                 lemma = line[1]
                 locus = line[2]
                 clusterID = line[3]
-                hdoc[int(locus)]._._tclust = clusterID
+                hdoc[int(locus)]._.clusterID = clusterID
 
             ###########################################################
             # restructure the data into a form that can be associated #
             # with the document as a whole and associate that record  #
             # with the spacy document                                 #
             ###########################################################
-            hdoc._._clinfo = calculateClusterProfile(hdoc)
+            hdoc._.clusterInfo = calculateClusterProfile(hdoc)
+            mainClusterSpans(hdoc)
 
     except Exception as e:
         print('clustering error\n', e)
-        hdoc._._clinfo = None
+        hdoc._.clusterInfo = None
 
     return hdoc
 
@@ -392,10 +399,22 @@ def mainClusterSpans(hdoc):
         offsets = hdoc._.clusterInfo[0][3]
         start = 0
         spans = []
+        hdoc._.main_cluster_spans = []
         for item in offsets:
+            entry={}
+            entry['name'] = 'clusterspan'
+            entry['offset'] = hdoc[start].idx
+            entry['startToken'] = start
+            entry['endToken'] = item
+            entry['text'] = None
             span = item - start
+            entry['value'] = span
+            entry['length'] = hdoc[item].idx \
+                              + len(hdoc[item].text_with_ws) \
+                              - hdoc[start].idx
             spans.append(span)
             start = span
+        hdoc._.main_cluster_spans.append(entry)
         return spans
     else:
         return []
@@ -429,601 +448,16 @@ def developmentContentWords(hdoc):
                 wordlist.append(token)
     return wordlist
 
+def devword(token):
+    '''
+       Return list of content words that do not appear in the 4 strongest
+       in-document content clusters
+    '''
+    devlist = [token.text for token in developmentContentWords(token.doc)]
+    if token.text in devlist:
+        return True
+    else:
+        return False    
+
+Token.set_extension("devword", getter=devword, force=True)
 
-###################################
-# Register the token and document
-# extensions we need to make this
-# information accessible.
-###################################
-
-Token.set_extension("_tclust", default=None, force=True)
-Doc.set_extension("_clinfo", default=None, force=True)
-
-
-def get_tclust(token):
-    return token._._tclust
-
-
-def set_tclust(token, value):
-    token._._tclust = value
-
-
-def get_clinfo(doc):
-    return doc._._clinfo
-
-
-def set_clinfo(token, value):
-    doc._._clinfo = value
-
-
-Token.set_extension("clusterID", getter=get_tclust, force=True)
-Doc.set_extension("clusterInfo", getter=get_clinfo, force=True)
-Span.set_extension("clusterInfo", getter=get_clinfo, force=True)
-
-##############################################################
-# Mean number of words between instances of the primary topic
-# cluster within the document (or between a cluster word and
-# the document edge)
-##############################################################
-
-
-def mnMainClusterSpan(tokens):
-    return summarize(mainClusterSpans(tokens),
-                     summaryType=FType.MEAN)
-
-
-Doc.set_extension("mean_main_cluster_span",
-                  getter=mnMainClusterSpan,
-                  force=True)
-
-
-################################################################
-# Median number of words between instances of the primary topic
-# cluster within the document (or between a cluster word and the
-# document edge)
-#################################################################
-
-
-def mdMainClusterSpan(tokens):
-    return summarize(mainClusterSpans(tokens),
-                     summaryType=FType.MEDIAN)
-
-
-Doc.set_extension("median_main_cluster_span",
-                  getter=mdMainClusterSpan,
-                  force=True)
-
-
-##################################################################
-# Min number of words between instances of the primary topic
-# cluster within the document (or between a cluster word and the
-# document edge)
-##################################################################
-
-
-def minMainClusterSpan(tokens):
-    return summarize(mainClusterSpans(tokens),
-                     summaryType=FType.MIN)
-
-
-Doc.set_extension("min_main_cluster_span",
-                  getter=minMainClusterSpan,
-                  force=True)
-
-
-#############################################################
-# Max number of words between instances of the primary topic
-# cluster within the document (or between a cluster word and
-# the document edge)
-#############################################################
-
-def maxMainClusterSpan(tokens):
-    return summarize(mainClusterSpans(tokens),
-                     summaryType=FType.MAX)
-
-
-Doc.set_extension("max_main_cluster_span",
-                  getter=maxMainClusterSpan,
-                  force=True)
-
-
-###################################################################
-# St Dev of number of words between instances of the primary topic
-# cluster within the document (or between a cluster word and the
-# document edge)
-###################################################################
-
-
-def stdMainClusterSpan(tokens):
-    return summarize(mainClusterSpans(tokens),
-                     summaryType=FType.STDEV)
-
-
-Doc.set_extension("stdev_main_cluster_span",
-                  getter=stdMainClusterSpan,
-                  force=True)
-
-######################################################################
-# Return list of content words that do not appear in the 4 strongest
-# in-document content clusters
-######################################################################
-
-
-def devlist(tokens):
-    devlist = [token for token in developmentContentWords(tokens)]
-    return [1 if token in devlist else 0 for token in tokens]
-
-
-def dcwrd(tokens):
-    return devlist(tokens)
-
-
-Doc.set_extension("devwords",
-                  getter=dcwrd,
-                  force=True)
-
-
-#####################################################################
-# Return proportion of words in the document that are content words
-# that do not appear in the 4 strongest in-document content clusters
-#####################################################################
-
-
-def dcwrdlen(tokens):
-    return len([x.text.lower()
-                for x in developmentContentWords(tokens)
-                ]) / (len(tokens) + .01)
-    # +.01 to avoid errors if empty
-
-
-Doc.set_extension("propn_devwords",
-                  getter=dcwrdlen,
-                  force=True)
-
-
-###############################################################
-# Mean number of syllables in content words that do not appear
-# in the 4 strongest in-document content clusters
-###############################################################
-
-def mnDwrdNSyll(tokens):
-    return summarize(
-                     [int(x._.nSyll)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSyll is not None],
-                     summaryType=FType.MEAN)
-
-
-Doc.set_extension("mean_devword_nsyll",
-                  getter=mnDwrdNSyll,
-                  force=True)
-
-
-#################################################################
-# Median number of syllables in content words that do not appear
-# in the 4 strongest in-document content clusters
-#################################################################
-
-
-def mdDwrdNSyll(tokens):
-    return summarize([int(x._.nSyll)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSyll is not None
-                      ], summaryType=FType.MEDIAN)
-
-
-Doc.set_extension("median_devword_nsyll",
-                  getter=mdDwrdNSyll,
-                  force=True)
-
-##############################################################
-# Min number of syllables in content words that do not appear
-# in the 4 strongest in-document content clusters
-##############################################################
-
-
-def minDwrdNSyll(tokens):
-    return summarize([int(x._.nSyll)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSyll is not None
-                      ], summaryType=FType.MIN)
-
-
-Doc.set_extension("min_devword_nsyll",
-                  getter=minDwrdNSyll,
-                  force=True)
-
-
-##############################################################
-# Max number of syllables in content words that do not appear
-# in the 4 strongest in-document content clusters
-##############################################################
-
-
-def mxDwrdNSyll(tokens):
-    return summarize([int(x._.nSyll)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSyll is not None
-                      ], summaryType=FType.MAX)
-
-
-Doc.set_extension("max_devword_nsyll",
-                  getter=mxDwrdNSyll,
-                  force=True)
-
-
-######################################################################
-# Std dev. of number of syllables in content words that do not appear
-# in the 4 strongest in-document content clusters
-######################################################################
-
-
-def stdDwrdNSyll(tokens):
-    return summarize([int(x._.nSyll)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSyll is not None
-                      ], summaryType=FType.STDEV)
-
-
-Doc.set_extension("stdev_devword_nsyll",
-                  getter=stdDwrdNSyll,
-                  force=True)
-
-
-###############################################################
-# Mean number of morphemes in content words that do not appear
-# in the 4 strongest in-document content clusters
-###############################################################
-
-
-def mnDwrdNMorph(tokens):
-    return summarize([int(x._.nMorph)
-                      for x in developmentContentWords(tokens)
-                      if x._.nMorph is not None
-                      ], summaryType=FType.MEAN)
-
-
-Doc.set_extension("mean_devword_nmorph",
-                  getter=mnDwrdNMorph,
-                  force=True)
-
-
-#################################################################
-# Median number of morphemes in content words that do not appear
-# in the 4 strongest in-document content clusters
-#################################################################
-
-
-def mdDwrdNMorph(tokens):
-    return summarize([int(x._.nMorph)
-                      for x in developmentContentWords(tokens)
-                      if x._.nMorph is not None
-                      ], summaryType=FType.MEDIAN)
-
-
-Doc.set_extension("median_devword_nmorph",
-                  getter=mdDwrdNMorph,
-                  force=True)
-
-
-###############################################################
-# Min number of morphemes in content words that do not appear
-# in the 4 strongest in-document content clusters
-###############################################################
-
-
-def minDwrdNMorph(tokens):
-    return summarize([int(x._.nMorph)
-                      for x in developmentContentWords(tokens)
-                      if x._.nMorph is not None
-                      ], summaryType=FType.MIN)
-
-
-Doc.set_extension("min_devword_nmorph",
-                  getter=minDwrdNMorph,
-                  force=True)
-
-
-##############################################################
-# Max number of morphemes in content words that do not appear
-# in the 4 strongest in-document content clusters
-##############################################################
-
-
-def mxDwrdNMorph(tokens):
-    return summarize([int(x._.nMorph)
-                      for x in developmentContentWords(tokens)
-                      if x._.nMorph is not None
-                      ], summaryType=FType.MAX)
-
-
-Doc.set_extension("max_devword_nmorph",
-                  getter=mxDwrdNMorph,
-                  force=True)
-
-
-#####################################################################
-# Std dev of number of morphemes in content words that do not appear
-# in the 4 strongest in-document content clusters
-#####################################################################
-
-
-def stdDwrdNMorph(tokens):
-    return summarize([int(x._.nMorph)
-                      for x in developmentContentWords(tokens)
-                      if x._.nMorph is not None
-                      ], summaryType=FType.STDEV)
-
-
-Doc.set_extension("stdev_devword_nmorph",
-                  getter=stdDwrdNMorph,
-                  force=True)
-
-
-############################################################
-# Mean number of senses in content words that do not appear
-# in the 4 strongest in-document content clusters
-############################################################
-
-
-def mnDwrdNSenses(tokens):
-    return summarize([int(x._.nSenses)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSenses is not None
-                      ], summaryType=FType.MEAN)
-
-
-Doc.set_extension("mean_devword_nsenses",
-                  getter=mnDwrdNSenses,
-                  force=True)
-
-
-##############################################################
-# Median number of senses in content words that do not appear
-# in the 4 strongest in-document content clusters
-##############################################################
-
-
-def mdDwrdNSenses(tokens):
-    return summarize([int(x._.nSenses)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSenses is not None
-                      ], summaryType=FType.MEDIAN)
-
-
-Doc.set_extension("median_devword_nsenses",
-                  getter=mdDwrdNSenses,
-                  force=True)
-
-
-###########################################################
-# Min number of senses in content words that do not appear
-# in the 4 strongest in-document content clusters
-###########################################################
-
-
-def minDwrdNSenses(tokens):
-    return summarize([int(x._.nSenses)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSenses is not None
-                      ], summaryType=FType.MIN)
-
-
-Doc.set_extension("min_devword_nsenses",
-                  getter=minDwrdNSenses,
-                  force=True)
-
-
-###########################################################
-# Max number of senses in content words that do not appear
-# in the 4 strongest in-document content clusters
-###########################################################
-
-
-def mxDwrdNSenses(tokens):
-    return summarize([int(x._.nSenses)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSenses is not None
-                      ], summaryType=FType.MAX)
-
-
-Doc.set_extension("max_devword_nsenses",
-                  getter=mxDwrdNSenses,
-                  force=True)
-
-
-##################################################################
-# Std dev of number of senses in content words that do not appear
-# in the 4 strongest in-document content clusters
-##################################################################
-
-
-def stdDwrdNSenses(tokens):
-    return summarize([int(x._.nSenses)
-                      for x in developmentContentWords(tokens)
-                      if x._.nSenses is not None
-                      ], summaryType=FType.STDEV)
-
-
-Doc.set_extension("stdev_devword_nsenses",
-                  getter=stdDwrdNSenses,
-                  force=True)
-
-
-#####################################################
-# Mean frequency of content words that do not appear
-# in the 4 strongest in-document content clusters
-#####################################################
-
-
-def mnDwrdTokFreq(tokens):
-    return summarize([float(x._.token_freq)
-                      for x in developmentContentWords(tokens)
-                      if x._.token_freq is not None
-                      ], summaryType=FType.MEAN)
-
-
-Doc.set_extension("mean_devword_token_freq",
-                  getter=mnDwrdTokFreq,
-                  force=True)
-
-
-#######################################################
-# Median frequency of content words that do not appear
-# in the 4 strongest in-document content clusters
-#######################################################
-
-
-def mdDwrdTokFreq(tokens):
-    return summarize([float(x._.token_freq)
-                      for x in developmentContentWords(tokens)
-                      if x._.token_freq is not None
-                      ], summaryType=FType.MEDIAN)
-
-
-Doc.set_extension("median_devword_token_freq",
-                  getter=mdDwrdTokFreq,
-                  force=True)
-
-
-####################################################
-# Min frequency of content words that do not appear
-# in the 4 strongest in-document content clusters
-####################################################
-
-
-def minDwrdTokFreq(tokens):
-    return summarize([float(x._.token_freq)
-                      for x in developmentContentWords(tokens)
-                      if x._.token_freq is not None
-                      ], summaryType=FType.MIN)
-
-
-Doc.set_extension("min_devword_token_freq",
-                  getter=minDwrdTokFreq,
-                  force=True)
-
-
-####################################################
-# Max frequency of content words that do not appear
-# in the 4 strongest in-document content clusters
-####################################################
-
-
-def mxDwrdTokFreq(tokens):
-    return summarize([float(x._.token_freq)
-                      for x in developmentContentWords(tokens)
-                      if x._.token_freq is not None
-                      ], summaryType=FType.MAX)
-
-
-Doc.set_extension("max_devword_token_freq",
-                  getter=mxDwrdTokFreq,
-                  force=True)
-
-
-###########################################################
-# Std dev of frequency of content words that do not appear
-# in the 4 strongest in-document content clusters
-###########################################################
-
-
-def stdDwrdTokFreq(tokens):
-    return summarize([float(x._.token_freq)
-                      for x in developmentContentWords(tokens)
-                      if x._.token_freq is not None
-                      ], summaryType=FType.STDEV)
-
-
-Doc.set_extension("stdev_devword_token_freq",
-                  getter=stdDwrdTokFreq,
-                  force=True)
-
-
-########################################################
-# Mean concreteness of content words that do not appear
-# in the 4 strongest in-document content clusters
-########################################################
-
-
-def mnDwrdConcr(tokens):
-    return summarize([float(x._.concreteness)
-                      for x in developmentContentWords(tokens)
-                      if x._.concreteness is not None
-                      ], summaryType=FType.MEAN)
-
-
-Doc.set_extension("mean_devword_concreteness",
-                  getter=mnDwrdConcr,
-                  force=True)
-
-
-##########################################################
-# Median concreteness of content words that do not appear
-# in the 4 strongest in-document content clusters
-##########################################################
-
-
-def mdDwrdConcr(tokens):
-    return summarize([float(x._.concreteness)
-                      for x in developmentContentWords(tokens)
-                      if x._.concreteness is not None
-                      ], summaryType=FType.MEDIAN)
-
-
-Doc.set_extension("median_devword_concreteness",
-                  getter=mdDwrdConcr,
-                  force=True)
-
-
-#######################################################
-# Min concreteness of content words that do not appear
-# in the 4 strongest in-document content clusters
-#######################################################
-
-
-def minDwrdConcr(tokens):
-    return summarize([float(x._.concreteness)
-                      for x in developmentContentWords(tokens)
-                      if x._.concreteness is not None
-                      ], summaryType=FType.MEDIAN)
-
-
-Doc.set_extension("min_devword_concreteness",
-                  getter=mdDwrdConcr,
-                  force=True)
-
-
-#######################################################
-# Max concreteness of content words that do not appear
-# in the 4 strongest in-document content clusters
-#######################################################
-
-def mxDwrdConcr(tokens):
-    return summarize([float(x._.concreteness)
-                      for x in developmentContentWords(tokens)
-                      if x._.concreteness is not None
-                      ], summaryType=FType.MAX)
-
-
-Doc.set_extension("max_devword_concreteness",
-                  getter=mxDwrdConcr,
-                  force=True)
-
-
-##############################################################
-# Std dev of concreteness of content words that do not appear
-# in the 4 strongest in-document content clusters
-##############################################################
-
-
-def stdDwrdConcr(tokens):
-    return summarize([float(x._.concreteness)
-                      for x in developmentContentWords(tokens)
-                      if x._.concreteness is not None
-                      ], summaryType=FType.STDEV)
-
-
-Doc.set_extension("stdev_devword_concreteness",
-                  getter=stdDwrdConcr,
-                  force=True)

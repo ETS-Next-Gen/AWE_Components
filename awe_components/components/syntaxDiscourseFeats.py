@@ -4,7 +4,6 @@
 import math
 import os
 import srsly
-import imp
 from varname import nameof
 
 from enum import Enum
@@ -62,7 +61,7 @@ class SyntaxAndDiscourseFeatDef(object):
 
     def __call__(self, doc):
         # We're using this component as a wrapper to add access
-        # to the lexical features. There is no actual parsing of the
+        # to the syntactic features. There is no actual parsing of the
         # sentences, except for a scan to label transition terms.
 
         self.quotedText(doc)
@@ -70,735 +69,38 @@ class SyntaxAndDiscourseFeatDef(object):
 
         return doc
 
-    ##########################################
-    # Define getter functions for attributes #
-    ##########################################
-
-    def nParas(self, tokens):
-        ''' Number of paragraphs in the text
-        '''
-        return len(self.paragraphs(tokens))
-
-    def mnParaLen(self, tokens):
-        ''' Mean length of paragraphs in the document
-        '''
-        return summarize(self.paragraphLengths(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdParaLen(self, tokens):
-        ''' Median length of paragraphs in the document
-        '''
-        return summarize(self.paragraphLengths(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxParaLen(self, tokens):
-        ''' Max length of paragraphs in the document
-        '''
-        return summarize(self.paragraphLengths(tokens),
-                         summaryType=FType.MAX)
-
-    def minParaLen(self, tokens):
-        ''' Min length of paragraphs in the document
-        '''
-        return summarize(self.paragraphLengths(tokens),
-                         summaryType=FType.MIN)
-
-    def stdParaLen(self, tokens):
-        ''' sTandard Deviation of length of paragraphs in the document
-        '''
-        return summarize(self.paragraphLengths(tokens),
-                         summaryType=FType.STDEV)
-
-    def transCt(self, tokens):
-        ''' Number of transitions detected in the document
-        '''
-        return tokens._.transition_word_profile[0]
-
-    def transCatCt(self, tokens):
-        ''' Number of distinct transition types detected in the document
-        '''
-        return len(tokens._.transition_word_profile[1])
-
-    def transTypeCt(self, tokens):
-        ''' Counts for each transition type detected in the document
-        '''
-        return len(tokens._.transition_word_profile[2])
-
-    def mdTransDist(self, tokens):
-        ''' Median distance between transition terms in the document
-        '''
-        return summarize(self.transitionDistances(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def transterms(self, tokens):
-        ''' List of transition terms in the document
-        '''
-        return tokens._.transition_word_profile[3]
-
-    def mnTransDist(self, tokens):
-        ''' Mean distance between transition terms in the document
-        '''
-        return summarize(self.transitionDistances(tokens),
-                         summaryType=FType.MEAN)
-
-    def mxTransDist(self, tokens):
-        ''' Max distance between transition terms in the document
-        '''
-        return summarize(self.transitionDistances(tokens),
-                         summaryType=FType.MAX)
-
-    def minTransDist(self, tokens):
-        ''' Min distance between transition terms in the document
-        '''
-        return summarize(self.transitionDistances(tokens),
-                         summaryType=FType.MIN)
-
-    def stdTransDist(self, tokens):
-        ''' Std. Dev. of distance between transition terms in the document
-        '''
-        return summarize(self.transitionDistances(tokens),
-                         summaryType=FType.STDEV)
-
-    def mnSentCoh(self, tokens):
-        ''' Mean cohesion cosine between sentences in the document
-        '''
-        return summarize(self.interSentenceCohesions(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdSentCoh(self, tokens):
-        ''' Median cohesion cosine between sentences in the document
-        '''
-        return summarize(self.interSentenceCohesions(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxSentCoh(self, tokens):
-        ''' Max cohesion cosine between sentences in the document
-        '''
-        return summarize(self.interSentenceCohesions(tokens),
-                         summaryType=FType.MAX)
-
-    def minSentCoh(self, tokens):
-        ''' Min cohesion cosine between sentences in the document
-        '''
-        return summarize(self.interSentenceCohesions(tokens),
-                         summaryType=FType.MIN)
-
-    def sdSentCoh(self, tokens):
-        ''' STd. dev. of cohesion cosine between sentences in the document
-        '''
-        return summarize(self.interSentenceCohesions(tokens),
-                         summaryType=FType.STDEV)
-
-    def mnSlideCoh(self, tokens):
-        ''' Mean cohesion cosine between sliding windows of ten words before
-            and after any given point in the document
-        '''
-        return summarize(self.slidingWindowCohesions(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdSlideCoh(self, tokens):
-        ''' Median cohesion cosine between sliding windows of ten words before
-            and after any given point in the document
-        '''
-        return summarize(self.slidingWindowCohesions(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxSlideCoh(self, tokens):
-        ''' Max cohesion cosine between sliding windows of ten words before
-            and after any given point in the document
-        '''
-        return summarize(self.slidingWindowCohesions(tokens),
-                         summaryType=FType.MAX)
-
-    def minSlideCoh(self, tokens):
-        ''' Min cohesion cosine between sliding windows of ten words before
-            and after any given point in the document
-        '''
-        return summarize(self.slidingWindowCohesions(tokens),
-                         summaryType=FType.MIN)
-
-    def sdSlideCoh(self, tokens):
-        ''' Std. Dev. of cohesion cosine between sliding windows of
-            ten words before and after any given point in the document
-        '''
-        return summarize(self.slidingWindowCohesions(tokens),
-                         summaryType=FType.STDEV)
-
-    def nCoref(self, tokens):
-        ''' Number of chains of coreferring terms detected by Coreferee
-        '''
-        return len(tokens._.coref_chains)
-
-    def mnCorefCL(self, tokens):
-        ''' Mean length of chains of coreferring terms detected by Coreferee
-        '''
-        return summarize(self.corefChainLengths(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdCorefCL(self, tokens):
-        ''' Median length of chains of coreferring terms detected by Coreferee
-        '''
-        return summarize(self.corefChainLengths(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxCorefCL(self, tokens):
-        ''' Max length of chains of coreferring terms detected by Coreferee
-        '''
-        return summarize(self.corefChainLengths(tokens),
-                         summaryType=FType.MAX)
-
-    def minCorefCL(self, tokens):
-        ''' Min length of chains of coreferring terms detected by Coreferee
-        '''
-        return summarize(self.corefChainLengths(tokens),
-                         summaryType=FType.MIN)
-
-    def sdCorefCL(self, tokens):
-        ''' Std. Dev. of length of chains of coreferring terms
-            detected by Coreferee
-        '''
-        return summarize(self.corefChainLengths(tokens),
-                         summaryType=FType.STDEV)
-
-    def sentc(self, tokens):
-        ''' Number of sentences in the document
-        '''
-        return len(list(tokens.sents))
-
-    def stopwords(self, tokens):
-        ''' Vector of flags indicating whether each token in the document
-            is or is not a stopword
-        '''
-        return [token.is_stop for token in tokens]
-
-    def mnsentlen(self, tokens):
-        ''' Mean length of sentences in the document
-        '''
-        return summarize(self.sentenceLens(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdsentlen(self, tokens):
-        ''' Median length of sentences in the document
-        '''
-        return summarize(self.sentenceLens(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxsentlen(self, tokens):
-        ''' Max length of sentences in the document
-        '''
-        return summarize(self.sentenceLens(tokens),
-                         summaryType=FType.MAX)
-
-    def minsentlen(self, tokens):
-        ''' Min length of sentences in the document
-        '''
-        return summarize(self.sentenceLens(tokens),
-                         summaryType=FType.MIN)
-
-    def stdsentlen(self, tokens):
-        ''' Std. dev. of length of sentences in the document
-        '''
-        return summarize(self.sentenceLens(tokens),
-                         summaryType=FType.STDEV)
-
-    def sqsentLens(self, tokens):
-        ''' Square roots of lengths of sentences in the document
-        '''
-        return [math.sqrt(x) for x in self.sentenceLens(tokens)]
-
-    def mnsqsentlen(self, tokens):
-        ''' Mean square root of length of sentences in the document
-        '''
-        return summarize(tokens._.sqrt_sentence_lengths,
-                         summaryType=FType.MEAN)
-
-    def mdsqsentlen(self, tokens):
-        ''' Median square root of length of sentences in the document
-        '''
-        return summarize(tokens._.sqrt_sentence_lengths,
-                         summaryType=FType.MEDIAN)
-
-    def mxsqsentlen(self, tokens):
-        ''' Max square root of length of sentences in the document
-        '''
-        return summarize(tokens._.sqrt_sentence_lengths,
-                         summaryType=FType.MAX)
-
-    def minsqsentlen(self, tokens):
-        ''' Min square root of length of sentences in the document
-        '''
-        return summarize(tokens._.sqrt_sentence_lengths,
-                         summaryType=FType.MIN)
-
-    def stdsqsentlen(self, tokens):
-        ''' Std. dev. of mean square root of length of sentences
-            in the document
-        '''
-        return summarize(tokens._.sqrt_sentence_lengths,
-                         summaryType=FType.STDEV)
-
-    def mnword2root(self, tokens):
-        ''' Mean theme length (no words from sentence start to root word)
-        '''
-        return summarize(self.sentenceThemes(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdword2root(self, tokens):
-        ''' Median theme length (no words from sentence start to root word)
-        '''
-        return summarize(self.sentenceThemes(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxword2root(self, tokens):
-        ''' Maxn theme length (no words from sentence start to
-            root word)
-        '''
-        return summarize(self.sentenceThemes(tokens),
-                         summaryType=FType.MAX)
-
-    def minword2root(self, tokens):
-        ''' Min theme length (no words from sentence start to
-            root word)S
-        '''
-        return summarize(self.sentenceThemes(tokens),
-                         summaryType=FType.MIN)
-
-    def sdword2root(self, tokens):
-        ''' Std. dev. of theme length (no words from sentence start
-            to root word)
-        '''
-        return summarize(self.sentenceThemes(tokens),
-                         summaryType=FType.STDEV)
-
-    def mnThemeDepth(self, tokens):
-        ''' Mean theme depth (avg. embedding of words
-             from sentence start to root word)
-        '''
-        return summarize(self.syntacticDepthsOfThemes(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdThemeDepth(self, tokens):
-        ''' Median theme depth (avg. embedding of words
-             from sentence start to root word)
-        '''
-        return summarize(self.syntacticDepthsOfThemes(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxThemeDepth(self, tokens):
-        ''' Max theme depth (avg. embedding of words
-             from sentence start to root word)
-        '''
-        return summarize(self.syntacticDepthsOfThemes(tokens),
-                         summaryType=FType.MAX)
-
-    def minThemeDepth(self, tokens):
-        ''' Min theme depth (avg. embedding of words
-             from sentence start to root word)
-        '''
-        return summarize(self.syntacticDepthsOfThemes(tokens),
-                         summaryType=FType.MIN)
-
-    def sdThemeDepth(self, tokens):
-        ''' Std. dev. of theme depth (avg. embedding of words
-             from sentence start to root word)
-        '''
-        return summarize(self.syntacticDepthsOfThemes(tokens),
-                         summaryType=FType.STDEV)
-
-    def mnRhemeDepth(self, tokens):
-        ''' Mean rheme depth (avg. embedding of words
-             from root word to end of sentence)
-        '''
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdRhemeDepth(self, tokens):
-        ''' Median rheme depth (avg. embedding of words
-             from root word to end of sentence)
-        '''
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxRhemeDepth(self, tokens):
-        ''' Max rheme depth (avg. embedding of words
-             from root word to end of sentence)
-        '''
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.MAX)
-
-    def minRhemeDepth(self, tokens):
-        ''' Min rheme depth (avg. embedding of words
-             from root word to end of sentence)
-        '''
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.MIN)
-
-    def sdRhemeDepth(self, tokens):
-        ''' St. dev. of rheme depth (avg. embedding of words
-             from root word to end of sentence)
-        '''
-        return summarize(self.syntacticDepthsOfRhemes(tokens),
-                         summaryType=FType.STDEV)
-
-    def mnWtDepth(self, tokens):
-        ''' Mean weighted depth (avg. embedding of words
-             in sentence weighted to penalize left-embedding)
-        '''
-        return summarize(self.weightedSyntacticDepths(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdWtDepth(self, tokens):
-        ''' Median weighted depth (avg. embedding of words
-             in sentence weighted to penalize left-embedding)
-        '''
-        return summarize(self.weightedSyntacticDepths(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxWtDepth(self, tokens):
-        ''' Max weighted depth (avg. embedding of words
-             in sentence weighted to penalize left-embedding)
-        '''
-        return summarize(self.weightedSyntacticDepths(tokens),
-                         summaryType=FType.MAX)
-
-    def minWtDepth(self, tokens):
-        ''' Min weighted depth (avg. embedding of words
-             in sentence weighted to penalize left-embedding)
-        '''
-        return summarize(self.weightedSyntacticDepths(tokens),
-                         summaryType=FType.MIN)
-
-    def sdWtDepth(self, tokens):
-        ''' St. dev. weighted depth (avg. embedding of words
-             in sentence weighted to penalize left-embedding)
-        '''
-        return summarize(self.weightedSyntacticDepths(tokens),
-                         summaryType=FType.STDEV)
-
-    def mnWtBreadth(self, tokens):
-        ''' Mean weighted breadth (avg. embedding of words
-             in sentence weighted to penalize rambling sentence
-             structure with a lot of loosely adjoined sequential
-             clauses
-        '''
-        return summarize(self.weightedSyntacticBreadths(tokens),
-                         summaryType=FType.MEAN)
-
-    def mdWtBreadth(self, tokens):
-        ''' Median weighted breadth (avg. embedding of words
-             in sentence weighted to penalize rambling sentence
-             structure with a lot of loosely adjoined sequential
-             clauses
-        '''
-        return summarize(self.weightedSyntacticBreadths(tokens),
-                         summaryType=FType.MEDIAN)
-
-    def mxWtBreadth(self, tokens):
-        ''' Max weighted breadth (avg. embedding of words
-             in sentence weighted to penalize rambling sentence
-             structure with a lot of loosely adjoined sequential
-             clauses
-        '''
-        return summarize(self.weightedSyntacticBreadths(tokens),
-                         summaryType=FType.MAX)
-
-    def minWtBreadth(self, tokens):
-        ''' Min weighted breadth (avg. embedding of words
-             in sentence weighted to penalize rambling sentence
-             structure with a lot of loosely adjoined sequential
-             clauses
-        '''
-        return summarize(self.weightedSyntacticBreadths(tokens),
-                         summaryType=FType.MIN)
-
-    def sdWtBreadth(self, tokens):
-        ''' Std. dev. of weighted breadth (avg. embedding of words
-             in sentence weighted to penalize rambling sentence
-             structure with a lot of loosely adjoined sequential
-             clauses
-        '''
-        return summarize(self.weightedSyntacticBreadths(tokens),
-                         summaryType=FType.STDEV)
-
-    def synVar(self, tokens):
-        '''Syntactic variety (number of different dependency patterns
-           detected in the text
-        '''
-        return len(self.syntacticProfile(tokens))
-
-    def pt(self, tok):
-        ''' Past tense scopre (tokens in clauses with past tense verbs)
-        '''
-        return in_past_tense_scope(tok)
-
-    def ptscp(self, tokens):
-        ''' Past tense scopre (tokens in clauses with past tense verbs)
-        '''
-        return [1 if in_past_tense_scope(tok)
-                else 0 for tok in tokens]
-
-    def prptscp(self, tokens):
-        ''' Proportion of words in past tense scope
-        '''
-        return sum(self.ptscp(tokens))/len(self.ptscp(tokens))
-
-    def quot(self, tokens):
-        ''' Quoted words
-        '''
-        return [1 if token._.vwp_quoted
-                else 0 for token in tokens]
-
-    def sv_inversion(self, tok: Token):
-        if (tok.lemma_ in ['be', 'have', 'do']
-           or tok.tag_ == 'MD'):
-            for child in tok.children:
-                if child.dep_ in ['nsubj', 'nsubjpass', 'csubj', 'csubjpass'] \
-                   and child.i > tok.i:
-                    return True
-        return False
-
-    extensions = [{"name": "paragraph_breaks",
-                   "getter": "paragraphs",
-                   "type": "docspan"},
-                  {"name": "paragraph_count",
-                   "getter": "nParas",
-                   "type": "docspan"},
-                  {"name": "paragraph_lengths",
-                   "getter": "paragraphLengths",
-                   "type": "docspan"},
-                  {"name": "mean_paragraph_length",
-                   "getter": "mnParaLen",
-                   "type": "docspan"},
-                  {"name": "median_paragraph_length",
-                   "getter": "mdParaLen",
-                   "type": "docspan"},
-                  {"name": "max_paragraph_length",
-                   "getter": "mxParaLen",
-                   "type": "docspan"},
-                  {"name": "min_paragraph_length",
-                   "getter": "minParaLen",
-                   "type": "docspan"},
-                  {"name": "stdev_paragraph_length",
-                   "getter": "stdParaLen",
+    extensions = [{"name": "AWE_Info",
+                   "getter": "AWE_Info",
                    "type": "docspan"},
                   {"name": "sentence_types",
-                   "getter": "sentenceTypes",
+                   "getter": "sentence_types",
                    "type": "docspan"},
-                  {"name": "total_transition_words",
-                   "getter": "transCt",
+                  {"name": "transitions",
+                   "getter": "transitions",
                    "type": "docspan"},
-                  {"name": "transition_category_count",
-                   "getter": "transCatCt",
-                   "type": "docspan"},
-                  {"name": "transition_word_type_count",
-                   "getter": "transTypeCt",
-                   "type": "docspan"},
-                  {"name": "transition_words",
-                   "getter": "transterms",
+                  {"name": "transition_word_profile",
+                   "getter": "transitionProfile",
                    "type": "docspan"},
                   {"name": "transition_distances",
-                   "getter": "transitionDistances",
-                   "type": "docspan"},
-                  {"name": "mean_transition_distance",
-                   "getter": "mnTransDist",
-                   "type": "docspan"},
-                  {"name": "median_transition_distance",
-                   "getter": "mdTransDist",
-                   "type": "docspan"},
-                  {"name": "max_transition_distance",
-                   "getter": "mxTransDist",
-                   "type": "docspan"},
-                  {"name": "min_transition_distance",
-                   "getter": "minTransDist",
-                   "type": "docspan"},
-                  {"name": "stdev_transition_distance",
-                   "getter": "stdTransDist",
+                   "getter": "transition_distances",
                    "type": "docspan"},
                   {"name": "intersentence_cohesions",
                    "getter": "interSentenceCohesions",
                    "type": "docspan"},
-                  {"name": "mean_sent_cohesion",
-                   "getter": "mnSentCoh",
-                   "type": "docspan"},
-                  {"name": "median_sent_cohesion",
-                   "getter": "mdSentCoh",
-                   "type": "docspan"},
-                  {"name": "max_sent_cohesion",
-                   "getter": "mxSentCoh",
-                   "type": "docspan"},
-                  {"name": "min_sent_cohesion",
-                   "getter": "minSentCoh",
-                   "type": "docspan"},
-                  {"name": "stdev_sent_cohesion",
-                   "getter": "sdSentCoh",
-                   "type": "docspan"},
                   {"name": "sliding_window_cohesions",
                    "getter": "slidingWindowCohesions",
                    "type": "docspan"},
-                  {"name": "mean_slider_cohesion",
-                   "getter": "mnSlideCoh",
+                  {"name": "corefChainInfo",
+                   "getter": "corefChainInfo",
                    "type": "docspan"},
-                  {"name": "median_slider_cohesion",
-                   "getter": "mdSlideCoh",
-                   "type": "docspan"},
-                  {"name": "max_slider_cohesion",
-                   "getter": "mxSlideCoh",
-                   "type": "docspan"},
-                  {"name": "min_slider_cohesion",
-                   "getter": "minSlideCoh",
-                   "type": "docspan"},
-                  {"name": "stdev_slider_cohesion",
-                   "getter": "sdSlideCoh",
-                   "type": "docspan"},
-                  {"name": "num_corefs",
-                   "getter": "nCoref",
-                   "type": "docspan"},
-                  {"name": "mean_coref_chain_len",
-                   "getter": "mnCorefCL",
-                   "type": "docspan"},
-                  {"name": "median_coref_chain_len",
-                   "getter": "mdCorefCL",
-                   "type": "docspan"},
-                  {"name": "max_coref_chain_len",
-                   "getter": "mxCorefCL",
-                   "type": "docspan"},
-                  {"name": "min_coref_chain_len",
-                   "getter": "minCorefCL",
-                   "type": "docspan"},
-                  {"name": "stdev_coref_chain_len",
-                   "getter": "sdCorefCL",
-                   "type": "docspan"},
-                  {"name": "sentence_count",
-                   "getter": "sentc",
-                   "type": "docspan"},
-                  {"name": "sentence_lengths",
-                   "getter": "sentenceLens",
-                   "type": "docspan"},
-                  {"name": "stopwords",
-                   "getter": "stopwords",
-                   "type": "docspan"},
-                  {"name": "mean_sentence_len",
-                   "getter": "mnsentlen",
-                   "type": "docspan"},
-                  {"name": "median_sentence_len",
-                   "getter": "mdsentlen",
-                   "type": "docspan"},
-                  {"name": "max_sentence_len",
-                   "getter": "mxsentlen",
-                   "type": "docspan"},
-                  {"name": "min_sentence_len",
-                   "getter": "minsentlen",
-                   "type": "docspan"},
-                  {"name": "std_sentence_len",
-                   "getter": "stdsentlen",
-                   "type": "docspan"},
-                  {"name": "sqrt_sentence_lengths",
-                   "getter": "sqsentLens",
-                   "type": "docspan"},
-                  {"name": "mean_sqrt_sentence_len",
-                   "getter": "mnsqsentlen",
-                   "type": "docspan"},
-                  {"name": "median_sqrt_sentence_len",
-                   "getter": "mdsqsentlen",
-                   "type": "docspan"},
-                  {"name": "max_sqrt_sentence_len",
-                   "getter": "mxsqsentlen",
-                   "type": "docspan"},
-                  {"name": "min_sqrt_sentence_len",
-                   "getter": "minsqsentlen",
-                   "type": "docspan"},
-                  {"name": "std_sqrt_sentence_len",
-                   "getter": "stdsqsentlen",
-                   "type": "docspan"},
-                  {"name": "words_before_sentence_root",
+                  {"name": "sentenceThemes",
                    "getter": "sentenceThemes",
                    "type": "docspan"},
-                  {"name": "mean_words_to_sentence_root",
-                   "getter": "mnword2root",
-                   "type": "docspan"},
-                  {"name": "median_words_to_sentence_root",
-                   "getter": "mdword2root",
-                   "type": "docspan"},
-                  {"name": "max_words_to_sentence_root",
-                   "getter": "mxword2root",
-                   "type": "docspan"},
-                  {"name": "min_words_to_sentence_root",
-                   "getter": "minword2root",
-                   "type": "docspan"},
-                  {"name": "stdev_words_to_sentence_root",
-                   "getter": "sdword2root",
-                   "type": "docspan"},
-                  {"name": "syntacticRhemeDepths",
+                  {"name": "syntacticDepthsOfRhemes",
                    "getter": "syntacticDepthsOfRhemes",
                    "type": "docspan"},
-                  {"name": "meanRhemeDepth",
-                   "getter": "mnRhemeDepth",
-                   "type": "docspan"},
-                  {"name": "medianRhemeDepth",
-                   "getter": "mdRhemeDepth",
-                   "type": "docspan"},
-                  {"name": "maxRhemeDepth",
-                   "getter": "mxRhemeDepth",
-                   "type": "docspan"},
-                  {"name": "minRhemeDepth",
-                   "getter": "minRhemeDepth",
-                   "type": "docspan"},
-                  {"name": "stdevRhemeDepth",
-                   "getter": "sdRhemeDepth",
-                   "type": "docspan"},
-                  {"name": "syntacticThemeDepths",
+                  {"name": "syntacticDepthsOfThemes",
                    "getter": "syntacticDepthsOfThemes",
-                   "type": "docspan"},
-                  {"name": "meanThemeDepth",
-                   "getter": "mnThemeDepth",
-                   "type": "docspan"},
-                  {"name": "medianThemeDepth",
-                   "getter": "mdThemeDepth",
-                   "type": "docspan"},
-                  {"name": "maxThemeDepth",
-                   "getter": "mxThemeDepth",
-                   "type": "docspan"},
-                  {"name": "minThemeDepth",
-                   "getter": "minThemeDepth",
-                   "type": "docspan"},
-                  {"name": "stdevThemeDepth",
-                   "getter": "sdThemeDepth",
-                   "type": "docspan"},
-                  {"name": "weightedSyntacticDepths",
-                   "getter": "weightedSyntacticDepths",
-                   "type": "docspan"},
-                  {"name": "meanWeightedDepth",
-                   "getter": "mnWtDepth",
-                   "type": "docspan"},
-                  {"name": "medianWeightedDepth",
-                   "getter": "mdWtDepth",
-                   "type": "docspan"},
-                  {"name": "maxWeightedDepth",
-                   "getter": "mxWtDepth",
-                   "type": "docspan"},
-                  {"name": "minWeightedDepth",
-                   "getter": "minWtDepth",
-                   "type": "docspan"},
-                  {"name": "stdevWeightedDepth",
-                   "getter": "sdWtDepth",
-                   "type": "docspan"},
-                  {"name": "weightedSyntacticBreadths",
-                  "getter": "weightedSyntacticBreadths",
-                   "type": "docspan"},
-                  {"name": "meanWeightedBreadth",
-                   "getter": "mnWtBreadth",
-                   "type": "docspan"},
-                  {"name": "medianWeightedBreadth",
-                   "getter": "mdWtBreadth",
-                   "type": "docspan"},
-                  {"name": "maxWeightedBreadth",
-                   "getter": "mxWtBreadth",
-                   "type": "docspan"},
-                  {"name": "minWeightedBreadth",
-                   "getter": "minWtBreadth",
-                   "type": "docspan"},
-                  {"name": "stdevWeightedBreadth",
-                   "getter": "sdWtBreadth",
                    "type": "docspan"},
                   {"name": "syntacticProfile",
                    "getter": "syntacticProfile",
@@ -807,19 +109,10 @@ class SyntaxAndDiscourseFeatDef(object):
                    "getter": "syntacticProfileNormed",
                    "type": "docspan"},
                   {"name": "syntacticVariety",
-                   "getter": "synVar",
+                   "getter": "syntacticVariety",
                    "type": "docspan"},
-                  {"name": "pastTenseScope",
-                   "getter": "ptscp",
-                   "type": "docspan"},
-                  {"name": "propn_past",
-                   "getter": "prptscp",
-                   "type": "docspan"},
-                  {"name": "vwp_quoted",
-                   "getter": "quot",
-                   "type": "docspan"},
-                  {"name": "pastTenseScope",
-                   "getter": "pt",
+                  {"name": "in_past_tense_scope",
+                   "getter": "in_past_tense_scope",
                    "type": "token"},
                   {"name": "subjectVerbInversion",
                    "getter": "sv_inversion",
@@ -866,19 +159,55 @@ class SyntaxAndDiscourseFeatDef(object):
 
         Token.set_extension('vwp_quoted', default=False, force=True)
 
-        # Document level measure: return full transition word profile data
-        Span.set_extension("transition_word_profile",
-                           default=None,
-                           force=True)
-        Doc.set_extension("transition_word_profile",
-                          default=None,
-                          force=True)
 
     def __init__(self, lang="en"):
         super().__init__()
         self.package_check(lang)
         self.load_lexicons(lang)
         self.add_extensions()
+
+    ##########################################
+    # Define getter functions for attributes #
+    ##########################################
+
+    def AWE_Info(self, 
+                 document: Doc,
+                 infoType='Token',
+                 indicator='pos_',
+                 filters=[],
+                 transformations=[],
+                 summaryType=None):
+        ''' This function provides a general-purpose API for
+            obtaining information about indicators reported in
+            the AWE Workbench Spacy parse tree. 
+           
+            This is a general-purpose utility. Cloning inside
+            the class to simplify the add_extensions class
+        '''
+        AWE_Info(document, infoType, indicator, filters,
+                 transformations, summaryType)
+
+    def syntacticVariety(self, tokens):
+        '''Syntactic variety (number of different dependency patterns
+           detected in the text
+        '''
+        return len(self.syntacticProfile(tokens))
+
+    def in_past_tense_scope(self, tok):
+        ''' Past tense scopee (tokens in clauses with past tense verbs)
+            Importing from utility functions -- needs to be in-class
+            due to the way we add extensions via the add_extension function
+        '''
+        return in_past_tense_scope(tok)
+
+    def sv_inversion(self, tok: Token):
+        if (tok.lemma_ in ['be', 'have', 'do']
+           or tok.tag_ == 'MD'):
+            for child in tok.children:
+                if child.dep_ in ['nsubj', 'nsubjpass', 'csubj', 'csubjpass'] \
+                   and child.i > tok.i:
+                    return True
+        return False
 
     def quotedText(self, hdoc):
         """
@@ -917,7 +246,18 @@ class SyntaxAndDiscourseFeatDef(object):
                         if child.i < token.i:
                             child._.vwp_quoted = True
 
-    def transitionTerms(self, document: Doc):
+    def newTransitionEntry(self, startTok, toklen, category):
+        entry = {}
+        entry['name'] = 'transition'
+        entry['startToken'] = startTok.i
+        entry['endToken'] = startTok.i + toklen - 1
+        entry['offset'] = startTok.idx
+        entry['length'] = startTok.doc[entry['endToken']].idx + len(startTok.doc[entry['endToken']].text_with_ws) - startTok.idx
+        entry['value'] = category
+        entry['text'] = startTok.doc[startTok.i:startTok.i + toklen].text
+        return entry
+
+    def transitions(self, document: Doc):
         """
          Transition words and phrases like 'however', 'in any case', 'because'
          play a key role in understanding the structure of a text.
@@ -965,13 +305,13 @@ class SyntaxAndDiscourseFeatDef(object):
                     if not tok._.vwp_quoted:
                         for loc in trans:
                             document[loc]._.transition = True
-                        transitionList.append(
-                            [gram,
-                             start,
-                             trans[0],
-                             trans[len(trans)-1],
-                             'temporal'])
                         document[loc]._.transition_category = 'temporal'
+                        newEntry = \
+                            self.newTransitionEntry(tok,
+                                                    len(trans),
+                                                    'temporal')
+                        transitionList.append(newEntry)
+
                     i = i + len(trans)
                     continue
 
@@ -1008,65 +348,61 @@ class SyntaxAndDiscourseFeatDef(object):
                     document[loc]._.transition_category = \
                         self.transition_categories[
                             self.transition_terms[gram5]]
-                transitionList.append(
-                    [gram5,
-                     document[i].sent.start,
-                     i,
-                     i + 5,
-                     self.transition_categories[
-                         self.transition_terms[gram5]]])
+
+                entry = self.newTransitionEntry(tok, 6,
+                    self.transition_categories[
+                        self.transition_terms[gram5]])
+                transitionList.append(entry)
+
             elif gram4 in self.transition_terms:
                 for loc in range(i, i + 5):
                     document[loc]._.transition = True
                     document[loc]._.transition_category = \
                         self.transition_categories[
                             self.transition_terms[gram4]]
-                transitionList.append(
-                    [gram4,
-                     document[i].sent.start,
-                     i,
-                     i + 4,
-                     self.transition_categories[
-                         self.transition_terms[gram4]]])
+
+                entry = self.newTransitionEntry(tok, 5,
+                    self.transition_categories[
+                        self.transition_terms[gram4]])
+                transitionList.append(entry)
+
             elif gram3 in self.transition_terms:
                 for loc in range(i, i + 4):
                     document[loc]._.transition = True
                     document[loc]._.transition_category = \
                         self.transition_categories[
                             self.transition_terms[gram3]]
-                transitionList.append(
-                    [gram3,
-                     document[i].sent.start,
-                     i,
-                     i + 3,
-                     self.transition_categories[
-                         self.transition_terms[gram3]]])
+
+                entry = self.newTransitionEntry(tok, 4,
+                    self.transition_categories[
+                        self.transition_terms[gram3]])
+                transitionList.append(entry)
+
             elif gram2 in self.transition_terms:
                 for loc in range(i, i + 3):
                     document[loc]._.transition = True
                     document[loc]._.transition_category = \
                         self.transition_categories[
                             self.transition_terms[gram2]]
-                transitionList.append(
-                    [gram2,
-                     document[i].sent.start,
-                     i,
-                     i + 5,
-                     self.transition_categories[
-                         self.transition_terms[gram2]]])
+
+                entry = self.newTransitionEntry(tok, 3,
+                    self.transition_categories[
+                        self.transition_terms[gram2]])
+                transitionList.append(entry)
+
             elif gram1 in self.transition_terms:
                 for loc in range(i, i + 2):
                     document[loc]._.transition = True
                     document[loc]._.transition_category = \
                         self.transition_categories[
                             self.transition_terms[gram1]]
-                transitionList.append(
-                    [gram1,
-                     document[i].sent.start,
-                     i,
-                     i + 1,
-                     self.transition_categories[
-                         self.transition_terms[gram1]]])
+
+                entry = self.newTransitionEntry(tok, 2,
+                    self.transition_categories[
+                        self.transition_terms[gram1]])
+                transitionList.append(entry)
+
+
             elif (gram0 in self.transition_terms
                   and (document[i].tag_ not in adj_noun_or_verb
                        or document[i].tag_ == 'NNP')):
@@ -1076,66 +412,72 @@ class SyntaxAndDiscourseFeatDef(object):
                 # transition words proper nouns
                 document[i]._.transition = True
                 if gram0 in '?!':
-                    transitionList.append(
-                        [gram0,
-                         document[i].sent.start,
-                         i,
-                         i,
-                         self.transition_categories[
-                             self.transition_terms[gram0]]])
+                    
                     document[i]._.transition_category = \
                         self.transition_categories[
                             self.transition_terms[gram0]]
+
+                    entry = self.newTransitionEntry(tok, 1,
+                        self.transition_categories[
+                            self.transition_terms[gram0]])
+                    transitionList.append(entry)
+
                 elif (document[i].dep_ == 'cc'
                       or document[i].dep_ == 'advmod'):
                     if document[i].head.dep_ is None \
                        or document[i].head.dep_ == 'ROOT' \
                        or document[i].head.head.dep_ is None \
                        or document[i].head.head.dep_ == 'ROOT':
-                        transitionList.append(
-                            [gram0,
-                             document[i].sent.start,
-                             i,
-                             i,
-                             self.transition_categories[
-                                 self.transition_terms[gram0]]])
+
                         document[i]._.transition_category = \
                             self.transition_categories[
                                 self.transition_terms[gram0]]
+
+                        entry = self.newTransitionEntry(tok, 1,
+                            self.transition_categories[
+                                self.transition_terms[gram0]])
+                        transitionList.append(entry)
+
+
                 elif (document[i].head.dep_ is None
                       or document[i].head.dep_ == 'ROOT'):
-                    transitionList.append([gram0, document[i].sent.start,
-                                           i,
-                                           i,
-                                           self.transition_categories[
-                                               self.transition_terms[gram0]]])
+
                     document[i]._.transition_category = \
                         self.transition_categories[
                             self.transition_terms[gram0]]
+
+                    entry = self.newTransitionEntry(tok, 1,
+                        self.transition_categories[
+                            self.transition_terms[gram0]])
+                    transitionList.append(entry)
+
                 elif (document[i].head.dep_ in 'advcl'
                       and document[i].head.head.dep_ is None
                       or document[i].head.head.dep_ == 'ROOT'):
                     for item in document[i].head.subtree:
-                        transitionList.append(
-                            [gram0,
-                             document[i].sent.start,
-                             i,
-                             i,
-                             self.transition_categories[
-                                self.transition_terms[gram0]]])
+
                         document[i]._.transition_category = \
                             self.transition_categories[
                                 self.transition_terms[gram0]]
                         break
+    
+                    entry = self.newTransitionEntry(
+                        document[i].head.left_edge,
+                        1,
+                        self.transition_categories[
+                            self.transition_terms[gram0]])
+                    transitionList.append(entry)
+
             if document[i].pos_ == 'SPACE' and '\n' in document[i].text:
                 # we treat paragraph breaks as another type of transition cue
-                transitionList.append(['NEWLINE',
-                                       tok.sent.start,
-                                       i,
-                                       i,
-                                       'PARAGRAPH'])
+
+
                 document[i]._.transition_category = \
                     self.transition_categories[-1]
+
+                entry = self.newTransitionEntry(tok, 1,
+                    self.transition_categories[-1])
+                transitionList.append(entry)
 
             i += 1
         return transitionList
@@ -1147,23 +489,34 @@ class SyntaxAndDiscourseFeatDef(object):
          list that gives the offsets and categories for each detected
          transition word.)
         """
-        transitionList = self.transitionTerms(document)
+        transitionList = self.transitions(document)	
         total = 0
         catProfile = {}
         detProfile = {}
+        newList = []
         for item in transitionList:
+            transition = document[item['startToken']:item['endToken']+1].text
+            category = item['value']
+            if '\n' in transition:
+                transition = 'NEWLINE'
+                category = 'PARAGRAPH'
             total += 1
-            if item[4] not in catProfile:
-                catProfile[item[4]] = 1
+            if item['value'] not in catProfile:
+                catProfile[item['value']] = 1
             else:
-                catProfile[item[4]] += 1
-            if item[0] not in detProfile:
-                detProfile[item[0]] = 1
+                catProfile[item['value']] += 1
+            if transition not in detProfile:
+                detProfile[transition] = 1
             else:
-                detProfile[item[0]] += 1
-        return [total, catProfile, detProfile, transitionList]
+                detProfile[transition] += 1
+            newList.append([transition,
+                            document[item['startToken']].sent.start,
+                            document[item['startToken']].i,
+                            document[item['endToken']].i,
+                            category])
+        return [total, catProfile, detProfile, newList]
 
-    def transitionDistances(self, Document: Doc):
+    def transition_distances(self, Document: Doc):
         """
          Compare the cosine distances between blocks of 10 words that
          appear BEFORE and AFTER a transition word. We summarize the
@@ -1180,6 +533,13 @@ class SyntaxAndDiscourseFeatDef(object):
         end = 0
         transitionList = Document._.transition_word_profile[3]
         for item in transitionList:
+            entry = {}
+            entry['name'] = 'transitionDistance'
+            entry['offset'] = Document[int(item[2])].idx
+            entry['length'] = 1
+            entry['text'] = item
+            entry['length'] = len(item)
+            
             start = item[2]
             end = item[3]
             left = []
@@ -1213,47 +573,32 @@ class SyntaxAndDiscourseFeatDef(object):
                             right.append(sum([Document[item].vector
                                               for item in Resolution]))
             if len(left) > 0 and len(right) > 0:
-                distances.append(cosine(sum(left), sum(right)))
+                entry['value'] = cosine(sum(left), sum(right))
+                distances.append(entry)
         return distances
 
-    def paragraphs(self, document: Doc):
-        """
-         Return a list of starting offsets for the paragraphs in document,
-         where we assume a line break IS a paragraph break
-        """
-        paras = []
-        for token in document:
-            if token.is_space and token.text.count("\n") > 0:
-                paras.append(token.i)
-        if '\n' not in document[len(document) - 1].text:
-            paras.append(len(document) - 1)
-        return paras
-
-    def paragraphLengths(self, document: Doc):
-        """
-         Return list of lengths of paragraphs in document, where we
-         assume a line break IS a paragraph break
-        """
-        lengths = []
-        start = 0
-        for token in document:
-            if token.is_space and token.text.count("\n") > 0:
-                lengths.append(token.i - start)
-                start = token.i
-        if '\n' not in document[len(document) - 1].text:
-            lengths.append(token.i - start)
-        return lengths
-
-    def sentenceTypes(self, Document: Doc):
-        countSimple = 0
-        countSimpleComplexPred = 0
-        countSimpleCompoundPred = 0
-        countSimpleCompoundComplexPred = 0
-        countCompound = 0
-        countComplex = 0
-        countCompoundComplex = 0
+    def sentence_types(self, Document: Doc):
+        '''
+            Classify sentences by the syntactic pattern they display --
+            specifically, simple kernal sentences, simple sentences
+            with complex predicates, simple sentences with compound
+            predicates, simple sentences with compound/complex
+            predicates, compound sentences, complex sentences, and
+            compound/complex sentences
+        '''
         stypes = []
         for sent in Document.sents:
+            entry = {}
+            entry['name'] = 'sentence_type'
+            entry['offset'] = Document[sent.start].idx
+            entry['length'] = \
+                Document[sent.end-1].idx \
+                    + len(Document[sent.end-1].text_with_ws) \
+                    - Document[sent.start].idx
+            entry['startToken'] = sent.start
+            entry['endToken'] = sent.end - 1
+            entry['text'] = Document[sent.start: sent.end].text
+
             compoundS = False
             complexS = False
             complexPred = False
@@ -1293,54 +638,66 @@ class SyntaxAndDiscourseFeatDef(object):
                and not complexS \
                and not complexPred \
                and not compoundPred:
-                countSimple += 1
-                stypes.append(1)
+                entry['value'] = 'Simple'
+                stypes.append(entry)
             elif (not compoundS
                   and not complexS
                   and complexPred
                   and not compoundPred):
-                countSimpleComplexPred += 1
-                stypes.append(2)
+                entry['value'] = 'SimpleComplexPred'
+                stypes.append(entry)
             elif (not compoundS
                   and not complexS
                   and not complexPred
                   and compoundPred):
-                countSimpleCompoundPred += 1
-                stypes.append(3)
+                entry['value'] = 'SimpleCompoundPred'
+                stypes.append(entry)
             elif (not compoundS
                   and not complexS
                   and complexPred
                   and compoundPred):
-                countSimpleCompoundComplexPred += 1
-                stypes.append(4)
+                entry['value'] = 'SimpleCompoundComplexPred'
+                stypes.append(entry)
             elif compoundS and not complexS:
-                countCompound += 1
-                stypes.append(5)
+                entry['value'] = 'Compound'
+                stypes.append(entry)
             elif complexS and not compoundS:
-                countComplex += 1
-                stypes.append(6)
+                entry['value'] = 'Complex'
+                stypes.append(entry)
             elif compoundS and complexS:
-                countCompoundComplex += 1
-                stypes.append(7)
+                entry['value'] = 'CompoundComplex'
+                stypes.append(entry)
             else:
-                stypes.append(0)
-        return (stypes,
-                countSimple,
-                countSimpleComplexPred,
-                countSimpleCompoundPred,
-                countSimpleCompoundComplexPred,
-                countCompound,
-                countComplex,
-                countCompoundComplex)
+                entry['value'] = 'Other'
+                stypes.append(entry)
+        return stypes
 
-    def corefChainLengths(self, Document: Doc):
+    def corefChainInfo(self, Document: Doc):
         """
          Calculate statistics for the length of chains of coreferential
          nouns/pronouns identified by coreferee. Longer chains implies
          more development of specific topics in the essay.
         """
-        lengths = [len(chain) for chain in Document._.coref_chains]
-        return lengths
+        chainInfo = []
+        for chain in Document._.coref_chains:
+            references = []
+            for i in range(0, len(chain)):
+                for reference in chain[i]:
+                    references.append(reference)
+            entry = {}
+            entry['name'] = 'coref_chain_lengths'
+            entry['text'] = ' '.join([Document[item].text
+                                      for item in references])
+
+            entry['length'] = \
+                Document[len(references)-1].idx \
+                    + len(Document[len(references)-1].text_with_ws) \
+                    - Document[references[0]].idx
+            entry['startToken'] = references[0]
+            entry['endToken'] = references[len(references)-1]
+            entry['value'] = references
+            chainInfo.append(entry)       
+        return chainInfo
 
     def interSentenceCohesions(self, Document: Doc):
         """
@@ -1351,10 +708,22 @@ class SyntaxAndDiscourseFeatDef(object):
         lastSentence = None
         similarities = []
         for sentence in Document.sents:
+            entry = {}
+            entry['name'] = 'intersentence_cohesions'
+            entry['text'] = Document[sentence.start:sentence.end].text
+            entry['offset'] = Document[sentence.start].idx
+            entry['length'] = \
+                Document[sentence.end-1].idx \
+                    + len(Document[sentence.end-1].text_with_ws) \
+                    - Document[sentence.start].idx
+            entry['startToken'] = sentence.start
+            entry['endToken'] = sentence.end - 1
+            entry['value'] = None
             if lastSentence is not None \
                and sentence.has_vector \
                and lastSentence.has_vector:
-                similarities.append(float(sentence.similarity(lastSentence)))
+                entry['value'] = float(sentence.similarity(lastSentence))
+                similarities.append(entry)
             lastSentence = sentence
         return similarities
 
@@ -1371,6 +740,14 @@ class SyntaxAndDiscourseFeatDef(object):
         """
         similarities = []
         for i in range(0, len(Document) - 20):
+            entry = {}
+            entry['name'] = 'intersentence_cohesions'
+            entry['offset'] = Document[i].idx
+            entry['length'] = 1
+            entry['startToken'] = i
+            entry['endToken'] = i
+            entry['text'] = Document[i].text
+            entry['value'] = None
             left = []
             right = []
             for j in range(0, 9):
@@ -1397,15 +774,9 @@ class SyntaxAndDiscourseFeatDef(object):
                     if Resolution is not None and len(Resolution) > 0:
                         right.append(sum([item.vector for item in Resolution]))
             if len(left) > 0 and len(right) > 0:
-                similarities.append(1 - cosine(sum(left), sum(right)))
+                entry['value'] = 1 - cosine(sum(left), sum(right))
+                similarities.append(entry)
         return similarities
-
-    def sentenceLens(self, tokens: Doc):
-        """
-        Return list specifying lengths of sentences in words.
-        """
-        sentLens = [len(sent) for sent in tokens.sents]
-        return sentLens
 
     def sentenceThemes(self, tokens: Doc):
         """
@@ -1420,11 +791,27 @@ class SyntaxAndDiscourseFeatDef(object):
         """
         currentStart = 0
         offsets = []
+        entry = {}
+        entry['name'] = 'words2sentenceRoot'
+        entry['offset'] = 0
+        entry['startToken'] = 0
+        entry['value'] = 'theme'
         for t in tokens:
             if t.is_sent_start:
                 currentStart = t.i
             if t == t.head or t.dep_ == 'ROOT':
-                offsets.append(t.i - currentStart)
+                entry = {}
+                entry['length'] = t.idx \
+                    + len(t.text_with_ws) \
+                    - tokens[currentStart].idx
+                entry['offset'] = t.idx
+                entry['endToken'] = t.i - 1
+                entry['text'] = t.text
+                offsets.append(entry)
+                entry['name'] = 'words2sentenceRoot'
+                entry['offset'] = 0
+                entry['startToken'] = currentStart
+                entry['value'] = 'theme'
         return offsets
 
     def syntacticDepth(self, tok: Token, depth=1):
@@ -1526,31 +913,6 @@ class SyntaxAndDiscourseFeatDef(object):
                 return self.weightedSyntacticBreadth(tok.head, depth + 1)
             return self.weightedSyntacticBreadth(tok.head, depth)
 
-    def weightedSyntacticDepths(self, Document: Doc):
-        """
-        By summarizing over senteces using the weighted depth measure,
-        we attempt to measure the extent to which the writer has used
-        really complex elements, especially in subject position or other
-        left-branching contexts where it is likely to impose greater processing
-        costs on the reader. This may reflect greater complexity of the
-        content being expressed.
-        """
-        depths = []
-        for token in Document:
-            depths.append(float(self.weightedSyntacticDepth(token)))
-        return depths
-
-    def weightedSyntacticBreadths(self, Document: Doc):
-        """
-        By summarizing over sentences using the weighted breadth measure,
-        we attempt to measure the extent to which the writer has mostly used
-        a simple additive style in their sentence construction.
-        """
-        depths = []
-        for token in Document:
-            depths.append(float(self.weightedSyntacticBreadth(token)))
-        return depths
-
     def syntacticDepthsOfThemes(self, Document: Doc):
         """
         The early part of the sentence (before the main verb) prototypically
@@ -1563,14 +925,25 @@ class SyntaxAndDiscourseFeatDef(object):
         """
         depths = []
         inTheme = True
+        entry = {}
+        entry['name'] = 'themeDepth'
         for token in Document:
             depth = int(self.syntacticDepth(token))-1
             if token.is_sent_start:
                 inTheme = True
             if depth == 1:
                 inTheme = False
+                break
             if inTheme:
-                depths.append(depth)
+                entry = {}
+                entry['name'] = 'themeDepth'
+                entry['offset'] = token.idx
+                entry['startToken'] = Document.sent.start
+                entry['endToken'] = token.i
+                entry['length'] = len(token.text_with_ws)
+                entry['value'] = int(depth)
+                entry['text'] = token.text
+                depths.append(entry)
         return depths
 
     def syntacticDepthsOfRhemes(self, Document: Doc):
@@ -1590,7 +963,15 @@ class SyntaxAndDiscourseFeatDef(object):
             if depth == 1:
                 inTheme = False
             if not inTheme:
-                depths.append(int(depth))
+                entry = {}
+                entry['name'] = 'rhemeDepth'
+                entry['offset'] = token.idx
+                entry['startToken'] = token.i
+                entry['endToken'] = token.i
+                entry['length'] = len(token.text_with_ws)
+                entry['value'] = int(depth)
+                entry['text'] = token.text
+                depths.append(entry)
         return depths
 
     def syntacticProfile(self, Document: Doc, normalized=False):
