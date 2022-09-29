@@ -329,16 +329,14 @@ class ViewpointFeatureDef:
                     start, end = rootTree(currentHead,
                                           currentHead.i,
                                           currentHead.i)
-                    entry = {}
-                    entry['name'] = 'objective'
-                    entry['offset'] = tokens[start].idx
-                    entry['startToken'] = start
-                    entry['endToken'] = end
-                    entry['length'] = tokens[end].idx \
-                        + len(tokens[end].text_with_ws) \
-                        - tokens[start].idx
-                    entry['value'] = entry['length']
-                    entry['text'] = tokens[start:end+1].text
+                    entry = \
+                        newSpanEntry('objective',
+                                     start,
+                                     end,
+                                     tokens,
+                                     tokens[end].idx \
+                                     + len(tokens[end].text_with_ws) \
+                                     - tokens[start].idx)
                     factList.append(entry)
                     nextRoot = end + 1
                     numSubjective = 0
@@ -2398,16 +2396,11 @@ class ViewpointFeatureDef:
             (speaker, addressee, subspans) = span
             for subspan in subspans:
                 [left, right] = subspan
-                entry = {}
-                entry['name'] = 'direct speech'
-                entry['offset'] = hdoc[left].idx
-                entry['startToken'] = left
-                entry['endToken'] = right
-                entry['length'] = hdoc[right].idx \
-                    + len(hdoc[right].text_with_ws) \
-                    - hdoc[left].idx
-                entry['value'] = [speaker, addressee]
-                entry['text'] = hdoc[left:right].text
+                entry = newSpanEntry('direct speech',
+                                     left,
+                                     right,
+                                     hdoc,
+                                     [speaker, addressee])
                 hdoc._.direct_speech_spans.append(entry)
             locs = span[2]
             for loc in locs:
@@ -3863,56 +3856,36 @@ class ViewpointFeatureDef:
         reformatted = []
         for item in propositional_attitudes['implicit']:
             [[left, right], controller, proposition] = item
-            entry = {}
-            entry['name'] = 'propositional attitudes'
-            entry['offset'] = hdoc[left].idx
-            entry['startToken'] = left
-            entry['endToken'] = right
-            entry['length'] = hdoc[right].idx \
-                + len(hdoc[right].text_with_ws) \
-                - hdoc[left].idx
-            entry['value'] = 'implicit'
-            entry['text'] = hdoc[left:right].text
+            entry = newSpanEntry('propositional attitudes',
+                                 left,
+                                 right,
+                                 hdoc,
+                                 'implicit')
             reformatted.append(entry)
         for item in propositional_attitudes['explicit_1']:
             [[left, right], controller, proposition] = item
-            entry = {}
-            entry['name'] = 'propositional attitudes'
-            entry['offset'] = hdoc[left].idx
-            entry['startToken'] = left
-            entry['endToken'] = right
-            entry['length'] = hdoc[right].idx \
-                + len(hdoc[right].text_with_ws) \
-                - hdoc[left].idx
-            entry['value'] = 'explicit_1'
-            entry['text'] = hdoc[left:right].text
+            entry = newSpanEntry('propositional attitudes',
+                                 left,
+                                 right,
+                                 hdoc,
+                                 'explicit')
             reformatted.append(entry)
         for item in propositional_attitudes['explicit_2']:
             [[left, right], controller, proposition] = item
-            entry = {}
-            entry['name'] = 'propositional attitudes'
-            entry['offset'] = hdoc[left].idx
-            entry['startToken'] = left
-            entry['endToken'] = right
-            entry['length'] = hdoc[right].idx \
-                + len(hdoc[right].text_with_ws) \
-                - hdoc[left].idx
-            entry['value'] = 'explicit_2'
-            entry['text'] = hdoc[left:right].text
+            entry = newSpanEntry('propositional attitudes',
+                                 left,
+                                 right,
+                                 hdoc,
+                                 'explicit_2')
             reformatted.append(entry)
         for domain in propositional_attitudes['explicit_3']:
             for item in propositional_attitudes['explicit_3'][domain]:
                 [[left, right], controller, proposition] = item
-                entry = {}
-                entry['name'] = 'propositional attitudes'
-                entry['offset'] = hdoc[left].idx
-                entry['startToken'] = left
-                entry['endToken'] = right
-                entry['length'] = hdoc[right].idx \
-                    + len(hdoc[right].text_with_ws) \
-                    - hdoc[left].idx
-                entry['value'] = 'explicit_3'
-                entry['text'] = hdoc[left:right].text
+                entry = newSpanEntry('propositional attitudes',
+                                     left,
+                                     right,
+                                     hdoc,
+                                     'explicit_3')
                 reformatted.append(entry)
         return reformatted
 
@@ -4573,16 +4546,12 @@ class ViewpointFeatureDef:
                                         and childSubj.text.lower()
                                         in second_person_pronouns):
 
-                                entry = {}
-                                entry['name'] = 'social awareness'
-                                entry['offset'] = hdoc[token.sent.start].idx
-                                entry['startToken'] = token.sent.start
-                                entry['endToken'] = token.sent.end
-                                entry['length'] = hdoc[token.sent.end].idx \
-                                    + len(hdoc[token.sent.end].text_with_ws) \
-                                   - hdoc[token.sent.start].idx
-                                entry['value'] = 'theory of mind sentence'
-                                entry['text'] = hdoc[token.sent.start:token.sent.end].text
+                                entry = \
+                                    newSpanEntry('social awareness',
+                                                 token.sent.start,
+                                                 token.sent.end,
+                                                 hdoc,
+                                                 'theory of mind sentence')
                                 if entry not in theory_of_mind_sentences:
                                     theory_of_mind_sentences.append(
                                         entry)

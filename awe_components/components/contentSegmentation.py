@@ -6,15 +6,15 @@ from operator import itemgetter
 import spacy
 from spacy.tokens import Token, Doc
 from spacy.language import Language
-
+import wordfreq
 
 def setExtensions():
     Doc.set_extension("prompt", default=None, force=True)
     Doc.set_extension("prompt_language", default=None, force=True)
     Doc.set_extension("prompt_related", default=None, force=True)
-    Doc.set_extension("core_sentences", default=None, force=True)
-    Doc.set_extension("extended_core_sentences", default=None, force=True)
-    Doc.set_extension("content_segments", default=None, force=True)
+    Doc.set_extension("main_ideas", default=None, force=True)
+    Doc.set_extension("supporting_ideas", default=None, force=True)
+    Doc.set_extension("supporting_details", default=None, force=True)
 
 
 @Language.component("contentsegmentation")
@@ -27,9 +27,9 @@ def contentsegmentation(doc):
             pclusters, \
             plemmas = extract_content_segments(None, doc)
 
-        doc._.core_sentences = core_sentences
-        doc._.extended_core_sentences = extended_core_sentences
-        doc._.content_segments = elaboration_sentences
+        doc._.main_ideas = core_sentences
+        doc._.supporting_ideas = extended_core_sentences
+        doc._.supporting_details = elaboration_sentences
         doc._.prompt_related = pclusters
         doc._.prompt_language = plemmas
     return doc
@@ -171,7 +171,6 @@ def extract_content_segments(prompt, doc):
                     plemmas.append(token.lemma_)
                 if token.text.lower() not in plemmas:
                     plemmas.append(token.text.lower())
-
     else:
 
         # If we have a prompt text, we sort out which words in the
@@ -276,7 +275,14 @@ def extract_content_segments(prompt, doc):
                 while i <= sent.end:
                     core_offsets.append(i)
                     i += 1
-                core_sentences.append([sent.start, sent.end])
+                    
+                entry = \
+                    newSpanEntry("main_ideas",
+                                 sent.start,
+                                 sent.end-1,
+                                 doc,
+                                 sent.end - sent.start)
+                core_sentences.append(entry)
     # Identify sequences of overlapping content chains that suggest
     # supporting points linked to the core content
     chains = []
@@ -511,20 +517,64 @@ def extract_content_segments(prompt, doc):
         for item in extras:
             final_elaboration.append(item)
 
+    # restructure extended_core_sentences and final_elaboration
+    # using the span format
+    newEC = []
+    for item in extended_core_sentences:
+        newEntry =  newSpanEntry('supporting_ideas',
+                                 item[0],
+                                 item[1]-1,
+                                 doc,
+                                 item[1] - item[0])
+        newEC.append(newEntry)
+    extended_core_sentences = newEC
+            
+    new_final = []
+    for item in final_elaboration:
+        newEntry =  newSpanEntry('supporting_details',
+                                 item[0],
+                                 item[1]-1,
+                                 doc,
+                                 item[1] - item[0])
+        new_final.append(newEntry)
+    final_elaboration = new_final
+        
+    # We removed rare words appearing very few times from the
+    # plemmas list for the purpose of establishing chains of
+    # linked content. Add those words now, to report as prompt-
+    # related vocabulary.
+    for cluster in pclusters:
+        for wrd in cluster[2]:
+            if wordfreq.zipf_frequency(wrd, "en") < 5 \
+               and wrd not in plemmas:
+                   plemmas.append(wrd)
+        
     # clean up to eliminate words that are not true content-focused
     # words from the plemmas display
     for token in doc:
         if token.text.lower() in plemmas \
            and (token.is_stop
-                or token._.vwp_argumentation):
+                or token._.vwp_evaluation
+                or token._.vwp_hedge
+                or token._.transition
+                or token._.vwp_argue
+                or token._.vwp_argument):
             plemmas.remove(token.text.lower())
         if token.lemma_ in plemmas \
            and (token.is_stop
-                or token._.vwp_argumentation):
+                or token._.vwp_evaluation
+                or token._.vwp_hedge
+                or token._.transition
+                or token._.vwp_argue
+                or token._.vwp_argument):
             plemmas.remove(token.lemma_)
         if token._.root in plemmas \
            and (token.is_stop
-                or token._.vwp_argumentation):
+                or token._.vwp_evaluation
+                or token._.vwp_hedge
+                or token._.transition
+                or token._.vwp_argue
+                or token._.vwp_argument):
             plemmas.remove(token._.root)
 
     return core_sentences, extended_core_sentences, \

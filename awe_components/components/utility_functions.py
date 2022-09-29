@@ -112,7 +112,10 @@ docspan_extensions = ['sentence_types',
                       'vwp_statements_of_fact',
                       'direct_speech_spans',
                       'vwp_social_awareness',
-                      'vwp_propositional_attitudes'
+                      'vwp_propositional_attitudes',
+                      'main_ideas',
+                      'supporting_ideas',
+                      'supporting_details'
                       ]
         
 def lexFeat(tokens, theProperty):
@@ -2230,7 +2233,20 @@ def is_float(str):
         return True
     except ValueError:
         return False 
-        
+
+def newSpanEntry(name, left, right, hdoc, value):
+    entry = {}
+    entry['name'] = name
+    entry['offset'] = hdoc[left].idx
+    entry['startToken'] = left
+    entry['endToken'] = right
+    entry['length'] = hdoc[right].idx \
+        + len(hdoc[right].text_with_ws) \
+        - hdoc[left].idx
+    entry['value'] = value
+    entry['text'] = hdoc[left:right+1].text
+    return entry
+
 def AWE_Info(document: Doc,
              infoType='Token',
              indicator='pos_',
@@ -2438,7 +2454,6 @@ def AWE_Info(document: Doc,
                     # in the order specified in the list #
                     ######################################
                     for transformation in transformations:
-                        print(transformation)
                         # security check
                         if not re.match('[A-Za-z0-9_]+', transformation):
                             raise AWE_Workbench_Error('Invalid transformation' \
@@ -2511,6 +2526,8 @@ def AWE_Info(document: Doc,
                 category = summary.index[i]
                 if type(summary.index[i]) != str:
                     category = summary.index[i]
+                if type(category) == list:
+                    category = json.dumps(category)
                 output[category] = int(value)
             return json.dumps(output)
 

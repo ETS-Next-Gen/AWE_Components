@@ -246,17 +246,6 @@ class SyntaxAndDiscourseFeatDef(object):
                         if child.i < token.i:
                             child._.vwp_quoted = True
 
-    def newTransitionEntry(self, startTok, toklen, category):
-        entry = {}
-        entry['name'] = 'transition'
-        entry['startToken'] = startTok.i
-        entry['endToken'] = startTok.i + toklen - 1
-        entry['offset'] = startTok.idx
-        entry['length'] = startTok.doc[entry['endToken']].idx + len(startTok.doc[entry['endToken']].text_with_ws) - startTok.idx
-        entry['value'] = category
-        entry['text'] = startTok.doc[startTok.i:startTok.i + toklen].text
-        return entry
-
     def transitions(self, document: Doc):
         """
          Transition words and phrases like 'however', 'in any case', 'because'
@@ -307,9 +296,11 @@ class SyntaxAndDiscourseFeatDef(object):
                             document[loc]._.transition = True
                         document[loc]._.transition_category = 'temporal'
                         newEntry = \
-                            self.newTransitionEntry(tok,
-                                                    len(trans),
-                                                    'temporal')
+                            newSpanEntry('transition',
+                            tok.i,
+                            tok.i + len(trans) - 1,
+                            tok.doc,
+                            'temporal')
                         transitionList.append(newEntry)
 
                     i = i + len(trans)
@@ -349,9 +340,13 @@ class SyntaxAndDiscourseFeatDef(object):
                         self.transition_categories[
                             self.transition_terms[gram5]]
 
-                entry = self.newTransitionEntry(tok, 6,
-                    self.transition_categories[
-                        self.transition_terms[gram5]])
+                entry = \
+                    newSpanEntry('transition',
+                                 tok.i,
+                                 tok.i + 5,
+                                 tok.doc,
+                                 self.transition_categories[
+                                     self.transition_terms[gram5]])
                 transitionList.append(entry)
 
             elif gram4 in self.transition_terms:
@@ -361,9 +356,13 @@ class SyntaxAndDiscourseFeatDef(object):
                         self.transition_categories[
                             self.transition_terms[gram4]]
 
-                entry = self.newTransitionEntry(tok, 5,
-                    self.transition_categories[
-                        self.transition_terms[gram4]])
+                entry = \
+                    newSpanEntry('transition',
+                                 tok.i,
+                                 tok.i + 4,
+                                 tok.doc,
+                                 self.transition_categories[
+                                     self.transition_terms[gram4]])
                 transitionList.append(entry)
 
             elif gram3 in self.transition_terms:
@@ -373,9 +372,13 @@ class SyntaxAndDiscourseFeatDef(object):
                         self.transition_categories[
                             self.transition_terms[gram3]]
 
-                entry = self.newTransitionEntry(tok, 4,
-                    self.transition_categories[
-                        self.transition_terms[gram3]])
+                entry = \
+                    newSpanEntry('transition',
+                                 tok.i,
+                                 tok.i + 3,
+                                 tok.doc,
+                                 self.transition_categories[
+                                     self.transition_terms[gram3]])
                 transitionList.append(entry)
 
             elif gram2 in self.transition_terms:
@@ -388,6 +391,13 @@ class SyntaxAndDiscourseFeatDef(object):
                 entry = self.newTransitionEntry(tok, 3,
                     self.transition_categories[
                         self.transition_terms[gram2]])
+                entry = \
+                    newSpanEntry('transition',
+                                 tok.i,
+                                 tok.i + 2,
+                                 tok.doc,
+                                 self.transition_categories[
+                                     self.transition_terms[gram2]])
                 transitionList.append(entry)
 
             elif gram1 in self.transition_terms:
@@ -397,9 +407,13 @@ class SyntaxAndDiscourseFeatDef(object):
                         self.transition_categories[
                             self.transition_terms[gram1]]
 
-                entry = self.newTransitionEntry(tok, 2,
-                    self.transition_categories[
-                        self.transition_terms[gram1]])
+                entry = \
+                    newSpanEntry('transition',
+                                 tok.i,
+                                 tok.i + 1,
+                                 tok.doc,
+                                 self.transition_categories[
+                                     self.transition_terms[gram1]])
                 transitionList.append(entry)
 
 
@@ -417,9 +431,13 @@ class SyntaxAndDiscourseFeatDef(object):
                         self.transition_categories[
                             self.transition_terms[gram0]]
 
-                    entry = self.newTransitionEntry(tok, 1,
-                        self.transition_categories[
-                            self.transition_terms[gram0]])
+                    entry = \
+                        newSpanEntry('transition',
+                                     tok.i,
+                                     tok.i,
+                                     tok.doc,
+                                     self.transition_categories[
+                                         self.transition_terms[gram0]])
                     transitionList.append(entry)
 
                 elif (document[i].dep_ == 'cc'
@@ -433,11 +451,14 @@ class SyntaxAndDiscourseFeatDef(object):
                             self.transition_categories[
                                 self.transition_terms[gram0]]
 
-                        entry = self.newTransitionEntry(tok, 1,
-                            self.transition_categories[
-                                self.transition_terms[gram0]])
+                        entry = \
+                            newSpanEntry('transition',
+                                         tok.i,
+                                         tok.i,
+                                         tok.doc,
+                                         self.transition_categories[
+                                             self.transition_terms[gram0]])
                         transitionList.append(entry)
-
 
                 elif (document[i].head.dep_ is None
                       or document[i].head.dep_ == 'ROOT'):
@@ -446,9 +467,13 @@ class SyntaxAndDiscourseFeatDef(object):
                         self.transition_categories[
                             self.transition_terms[gram0]]
 
-                    entry = self.newTransitionEntry(tok, 1,
-                        self.transition_categories[
-                            self.transition_terms[gram0]])
+                    entry = \
+                        newSpanEntry('transition',
+                                     tok.i,
+                                     tok.i,
+                                     tok.doc,
+                                     self.transition_categories[
+                                         self.transition_terms[gram0]])
                     transitionList.append(entry)
 
                 elif (document[i].head.dep_ in 'advcl'
@@ -461,11 +486,13 @@ class SyntaxAndDiscourseFeatDef(object):
                                 self.transition_terms[gram0]]
                         break
     
-                    entry = self.newTransitionEntry(
-                        document[i].head.left_edge,
-                        1,
-                        self.transition_categories[
-                            self.transition_terms[gram0]])
+                    entry = \
+                        newSpanEntry('transition',
+                                     tok.i,
+                                     tok.i,
+                                     tok.doc,
+                                     self.transition_categories[
+                                         self.transition_terms[gram0]])
                     transitionList.append(entry)
 
             if document[i].pos_ == 'SPACE' and '\n' in document[i].text:
@@ -475,8 +502,12 @@ class SyntaxAndDiscourseFeatDef(object):
                 document[i]._.transition_category = \
                     self.transition_categories[-1]
 
-                entry = self.newTransitionEntry(tok, 1,
-                    self.transition_categories[-1])
+                entry = \
+                    newSpanEntry('transition',
+                                 tok.i,
+                                 tok.i,
+                                 tok.doc,
+                                 self.transition_categories[-1])
                 transitionList.append(entry)
 
             i += 1
@@ -533,13 +564,12 @@ class SyntaxAndDiscourseFeatDef(object):
         end = 0
         transitionList = Document._.transition_word_profile[3]
         for item in transitionList:
-            entry = {}
-            entry['name'] = 'transitionDistance'
-            entry['offset'] = Document[int(item[2])].idx
-            entry['length'] = 1
-            entry['text'] = item
-            entry['length'] = len(item)
-            
+            entry = newSpanEntry('transitionDistance',
+                                 int(item[2]),
+                                 int(item[3]),
+                                 Document,
+                                 0)
+           
             start = item[2]
             end = item[3]
             left = []
@@ -588,16 +618,12 @@ class SyntaxAndDiscourseFeatDef(object):
         '''
         stypes = []
         for sent in Document.sents:
-            entry = {}
-            entry['name'] = 'sentence_type'
-            entry['offset'] = Document[sent.start].idx
-            entry['length'] = \
-                Document[sent.end-1].idx \
-                    + len(Document[sent.end-1].text_with_ws) \
-                    - Document[sent.start].idx
-            entry['startToken'] = sent.start
-            entry['endToken'] = sent.end - 1
-            entry['text'] = Document[sent.start: sent.end].text
+
+            entry = newSpanEntry('sentence_type',
+                                 sent.start,
+                                 sent.end - 1,
+                                 Document,
+                                 'Simple')
 
             compoundS = False
             complexS = False
@@ -684,18 +710,12 @@ class SyntaxAndDiscourseFeatDef(object):
             for i in range(0, len(chain)):
                 for reference in chain[i]:
                     references.append(reference)
-            entry = {}
-            entry['name'] = 'coref_chain_lengths'
-            entry['text'] = ' '.join([Document[item].text
-                                      for item in references])
 
-            entry['length'] = \
-                Document[len(references)-1].idx \
-                    + len(Document[len(references)-1].text_with_ws) \
-                    - Document[references[0]].idx
-            entry['startToken'] = references[0]
-            entry['endToken'] = references[len(references)-1]
-            entry['value'] = references
+            entry = newSpanEntry('coref_chain_lengths',
+                                 references[0],
+                                 references[len(references)-1],
+                                 Document,
+                                 references)
             chainInfo.append(entry)       
         return chainInfo
 
@@ -708,17 +728,11 @@ class SyntaxAndDiscourseFeatDef(object):
         lastSentence = None
         similarities = []
         for sentence in Document.sents:
-            entry = {}
-            entry['name'] = 'intersentence_cohesions'
-            entry['text'] = Document[sentence.start:sentence.end].text
-            entry['offset'] = Document[sentence.start].idx
-            entry['length'] = \
-                Document[sentence.end-1].idx \
-                    + len(Document[sentence.end-1].text_with_ws) \
-                    - Document[sentence.start].idx
-            entry['startToken'] = sentence.start
-            entry['endToken'] = sentence.end - 1
-            entry['value'] = None
+            entry = newSpanEntry('intersentence_cohesions',
+                                 sentence.start,
+                                 sentence.end - 1,
+                                 Document,
+                                 0)
             if lastSentence is not None \
                and sentence.has_vector \
                and lastSentence.has_vector:
@@ -740,14 +754,11 @@ class SyntaxAndDiscourseFeatDef(object):
         """
         similarities = []
         for i in range(0, len(Document) - 20):
-            entry = {}
-            entry['name'] = 'intersentence_cohesions'
-            entry['offset'] = Document[i].idx
-            entry['length'] = 1
-            entry['startToken'] = i
-            entry['endToken'] = i
-            entry['text'] = Document[i].text
-            entry['value'] = None
+            entry = newSpanEntry('sliding_window_cohesions',
+                                 i,
+                                 i,
+                                 Document,
+                                 0)
             left = []
             right = []
             for j in range(0, 9):
@@ -791,27 +802,16 @@ class SyntaxAndDiscourseFeatDef(object):
         """
         currentStart = 0
         offsets = []
-        entry = {}
-        entry['name'] = 'words2sentenceRoot'
-        entry['offset'] = 0
-        entry['startToken'] = 0
-        entry['value'] = 'theme'
         for t in tokens:
             if t.is_sent_start:
                 currentStart = t.i
             if t == t.head or t.dep_ == 'ROOT':
-                entry = {}
-                entry['length'] = t.idx \
-                    + len(t.text_with_ws) \
-                    - tokens[currentStart].idx
-                entry['offset'] = t.idx
-                entry['endToken'] = t.i - 1
-                entry['text'] = t.text
+                entry = newSpanEntry('words2sentenceRoot',
+                                     currentStart,
+                                     t.i,
+                                     tokens,
+                                     'theme')
                 offsets.append(entry)
-                entry['name'] = 'words2sentenceRoot'
-                entry['offset'] = 0
-                entry['startToken'] = currentStart
-                entry['value'] = 'theme'
         return offsets
 
     def syntacticDepth(self, tok: Token, depth=1):
@@ -925,24 +925,21 @@ class SyntaxAndDiscourseFeatDef(object):
         """
         depths = []
         inTheme = True
-        entry = {}
-        entry['name'] = 'themeDepth'
+        currentStart = 0
         for token in Document:
             depth = int(self.syntacticDepth(token))-1
             if token.is_sent_start:
                 inTheme = True
+                currentStart = token.i
             if depth == 1:
                 inTheme = False
                 break
             if inTheme:
-                entry = {}
-                entry['name'] = 'themeDepth'
-                entry['offset'] = token.idx
-                entry['startToken'] = Document.sent.start
-                entry['endToken'] = token.i
-                entry['length'] = len(token.text_with_ws)
-                entry['value'] = int(depth)
-                entry['text'] = token.text
+                entry = newSpanEntry('themeDepth',
+                                     currentStart,
+                                     token.i,
+                                     Document,
+                                     int(depth))
                 depths.append(entry)
         return depths
 
@@ -956,21 +953,20 @@ class SyntaxAndDiscourseFeatDef(object):
         """
         depths = []
         inTheme = True
+        currentStart = 0
         for token in Document:
             depth = float(self.syntacticDepth(token))
             if token.is_sent_start:
                 inTheme = True
+                currentStart = token.i
             if depth == 1:
                 inTheme = False
             if not inTheme:
-                entry = {}
-                entry['name'] = 'rhemeDepth'
-                entry['offset'] = token.idx
-                entry['startToken'] = token.i
-                entry['endToken'] = token.i
-                entry['length'] = len(token.text_with_ws)
-                entry['value'] = int(depth)
-                entry['text'] = token.text
+                entry = newSpanEntry('rhemeDepth',
+                                     currentStart,
+                                     token.i,
+                                     Document,
+                                     int(depth))
                 depths.append(entry)
         return depths
 
