@@ -6,6 +6,7 @@ import srsly
 import imp
 
 from enum import Enum
+from collections import OrderedDict
 from spacy.tokens import Doc, Span, Token
 from spacy.language import Language
 
@@ -547,6 +548,9 @@ class ViewpointFeatureDef:
 
         if not Token.has_extension('antecedents'):
             Token.set_extension('antecedents', default=None, force=True)
+
+        if not Token.has_extension('concrete_detail'):
+            Token.set_extension('concrete_detail', default=False, force=True)
 
         # Mapping of tokens to viewpoints for the whole document
         #
@@ -2390,9 +2394,13 @@ class ViewpointFeatureDef:
             lastSpeaker = span[0]
             lastAddressee = span[1]
             lastItem = newItem
-        hdoc._.vwp_direct_speech_spans = list(reversed(newSpans))
+        
+        newList = []
+        for record in reversed(newSpans):
+            newList.append(record)
+
         # add the token level flag and do the standard format output       
-        for span in newSpans:
+        for span in newList:
             (speaker, addressee, subspans) = span
             for subspan in subspans:
                 [left, right] = subspan
@@ -5718,6 +5726,7 @@ class ViewpointFeatureDef:
                    and token._.concreteness is not None \
                    and token._.concreteness >= 4:
                     details.append(token.i)
+                    token._.concrete_detail = True
                 elif ((token.pos_ == 'VERB') and
                       token._.max_freq is not None
                       and token._.max_freq < 4.2
@@ -5730,6 +5739,7 @@ class ViewpointFeatureDef:
                            and getLogicalObject(token)._.concreteness
                            >= 4.3)):
                     details.append(token.i)
+                    token._.concrete_detail = True
                 elif token.pos_ != 'VERB' and token.pos_ != 'NOUN':
                     if token._.has_governing_subject \
                        and doc[
@@ -5744,6 +5754,7 @@ class ViewpointFeatureDef:
                             or token._.nSenses < 4
                             and token._.max_freq < 5):
                         details.append(token.i)
+                        token._.concrete_detail = True
                     elif (token.head._.concreteness is not None
                           and token.head._.concreteness >= 4
                           and token._.concreteness is not None
@@ -5754,4 +5765,5 @@ class ViewpointFeatureDef:
                                or token._.nSenses < 4
                                and token._.max_freq < 5)):
                         details.append(token.i)
+                        token._.concrete_detail = True
         doc._.concrete_details = details

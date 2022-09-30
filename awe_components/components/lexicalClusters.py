@@ -32,6 +32,33 @@ Token.set_extension("clusterID", default=None, force=True)
 Doc.set_extension("clusterInfo", default=None, force=True)
 Doc.set_extension("main_cluster_spans", default=None, force=True)
 
+
+def allClusterInfo(hdoc):
+    """
+    """
+    if hdoc._.clusterInfo is not None \
+       and len(hdoc._.clusterInfo) > 0:
+        clusterSpans = []
+        for cluster in hdoc._.clusterInfo:
+            offsets = cluster[3]
+            spans = []
+            for item in offsets:
+                entry={}
+                entry['name'] = 'clusterinfo'
+                entry['offset'] = hdoc[item].idx
+                entry['startToken'] = item
+                entry['endToken'] = item
+                entry['text'] = json.dumps(cluster[2])
+                entry['value'] = (cluster[0], cluster[1])
+                entry['length'] = len(hdoc[item].text_with_ws)
+                clusterSpans.append(entry)
+        return clusterSpans
+    else:
+        return []
+
+
+Doc.set_extension("all_cluster_info", getter=allClusterInfo, force=True)
+
 @Language.component("lexicalclusters")
 def assignClusterIDs(hdoc):
     '''

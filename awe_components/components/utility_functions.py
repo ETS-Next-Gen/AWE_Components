@@ -115,7 +115,8 @@ docspan_extensions = ['sentence_types',
                       'vwp_propositional_attitudes',
                       'main_ideas',
                       'supporting_ideas',
-                      'supporting_details'
+                      'supporting_details',
+                      'all_cluster_info'
                       ]
         
 def lexFeat(tokens, theProperty):
@@ -2235,6 +2236,16 @@ def is_float(str):
         return False 
 
 def newSpanEntry(name, left, right, hdoc, value):
+    '''
+        Create an entry in the format used for span indicator
+        values by the AWE_Information function. The offset and
+        length attributes support finding the exact span in
+        the input text. The startToken and endToken attributes
+        support finding the correct tokens in the Spacy parse
+        tree. The value field contains whatever data we want
+        to associate with the span, which depends on the
+        specific indicator.
+    '''
     entry = {}
     entry['name'] = name
     entry['offset'] = hdoc[left].idx
@@ -2247,6 +2258,435 @@ def newSpanEntry(name, left, right, hdoc, value):
     entry['text'] = hdoc[left:right+1].text
     return entry
 
+def newTokenEntry(name, token, value):
+    '''
+       Create an entry in the format used for token indicator 
+       values by the AWE_Information function. The value needs
+       to be supplied either by a built-in function or a spacy
+       extension attribute. The offset and length attributes
+       enable us to find the exact character sequenc ethat
+       corresponds to this token in the original text string.
+       The tokenIdx attribute is the index into the Spacy
+       token list. The value function is whatever data we
+       wish to associate with this function, which depends on
+       the specific indicator.
+    '''
+    entry = {}
+    entry['text'] = token.text_with_ws
+    entry['offset'] = token.idx
+    entry['tokenIdx'] = token.i
+    entry['length'] = len(token.text_with_ws)
+    entry['name'] = name
+    entry['value'] = None
+
+    if name in built_in_attributes:
+        entry['value'] = eval('token.' + name)
+
+    #######################################
+    # Create entries for named extensions #
+    # Note that we assume extensions are  #
+    # attributes not functions.           #
+    # Code will break if the indicator    #
+    # name is a function extended         #
+    # attribute.                          #
+    # TBD: put security check in for this #
+    #######################################
+    elif token.has_extension(name):
+        entry['value'] = eval('token._.' + name)
+    else:
+        raise AWE_Workbench_Error('Invalid indicator '
+            + name)
+
+    return entry
+
+def createSpanInfo(indicator, document):
+    '''
+        Create records for span data in the format used
+        by the AWE_Info function
+    '''
+    baseInfo = []
+    entry = {}
+    # Create span records for sentence spans
+    if indicator == 'sents':
+        for sent in document.sents:
+            entry = \
+                newSpanEntry('sents',
+                    sent.start,
+                    sent.end-1,
+                    document,
+                    'sentence')
+            baseInfo.append(entry)
+
+    # Create span records for other kinds of spans
+    # created in a parser module. Those functions
+    # are responsible to make sure the outputs
+    # are in the correct format.
+    elif indicator in docspan_extensions:
+        baseInfo = eval('document._.' + indicator)
+
+    # Create span records for paragraphs (delimiter_\n)
+    # and other spans identified by delimiting characters
+    elif indicator.startswith('delimiter_'):
+        delimiter = ''.join(indicator[10:])
+        segmentNo = 0
+        currentStart = 0
+        currentEnd = 0
+        for token in document:
+            currentEnd = token.i
+            if delimiter in token.text:
+                entry = \
+                    newSpanEntry(indicator,
+                        currentStart,
+                        currentEnd,
+                        document,
+                        delimiter)
+                baseInfo.append(entry)
+                currentStart = token.i
+                segmentNo += 1
+        if currentEnd > currentStart:
+            entry = \
+                newSpanEntry(indicator,
+                    currentStart,
+                    token.i,
+                    document,
+                    segmentNo)
+            baseInfo.append(entry)
+    else:
+        raise AWE_Workbench_Error(
+            'Invalid indicator '
+            + indicator)
+
+    return baseInfo
+
+def applyTokenFilters(token, entry, filters):
+    '''
+        Given an entry in the format used to describe
+        indicator values for tokens by the AWE_Info function,
+        check if that entry passes the specified filters.
+    '''
+    filterEntry = False
+    for (function, returnValues) in filters:
+        if type(filters) == list and len(filters)>0:
+            for (function, returnValues) in filters:
+                for returnValue in returnValues:
+
+                    # Direct comparison with the returnValue
+                    if function in ['==',
+                                    '>',
+                                    '<',
+                                    '>=',
+                                '    <='] \
+                       and type(entry['value']) \
+                          in [int, float, str]:
+                        if not eval(entry['value'] \
+                           + function \
+                           + returnValue):
+                            return True
+
+                    # The returnValue specifies a boolean value
+                    elif type(entry['value']) == bool \
+                       and returnValue == 'True':
+                        if not entry['value']:
+                            return True
+
+                    elif type(entry['value']) == bool \
+                       and returnValue == 'False':
+                         if entry['value']:
+                             return True
+
+                    # Negation
+                    elif function == 'not' \
+                       and type(entry['value']) == bool:
+                        if entry['value']:
+                            return True
+
+                    # Spacy built-in boolean token flags
+                    elif function in built_in_flags:
+                        if returnValue == 'True':
+                            if not eval('token.' + function):
+                                return True
+                        elif returnValue == 'False':
+                            if eval('token.' + function):
+                                return True
+                        else:
+                            raise AWE_Workbench_Error(
+                                'Invalid selection value '
+                                + returnValue)
+
+                    # Spacy built-in string functions
+                    elif function in built_in_string_functions:
+                        if eval('token.' + function) == returnValue:
+                            return False
+                        else:
+                            filterEntry = True
+
+                    # Spacy extension attributes, if true boolean
+                    # flags or numeric (non-zero) values
+                    elif token.has_extension(function):
+                        if eval('token._.' + function) is not None \
+                           and eval('token._.' + function) \
+                              in [True, False]:
+                             if returnValue == 'True':
+                                 if not eval('token._.'
+                                             + function):
+                                     return False
+                             elif returnValue == 'False':
+                                 if eval('token._.' 
+                                         + function):
+                                     return False
+                             else:
+                                 filterEntry = True
+
+                    else:
+                        raise AWE_Workbench_Error(
+                            'Invalid filter ' + function)
+                if filterEntry:
+                    return True
+    return False
+
+
+def applySpanTransformations(transformations, baseInfo):
+    '''
+       Apply transformation to span entries in the format used
+       by the AWE_Info function, in the order listed
+    '''
+    for transformation in transformations:
+        # security check
+        if not re.match('[A-Za-z0-9_]+', transformation):
+            raise AWE_Workbench_Error(
+                'Invalid transformation'
+                + transformation)                   
+
+        newInfo = []
+        for entry in baseInfo:
+            newEntry = entry
+            if transformation == 'text':
+                 newEntry['value'] = entry['text']
+                 newEntry['name'] = 'text_' \
+                     + entry['name']
+
+            elif transformation == 'len' \
+               and type(entry['value']) in [str, list]:
+                newEntry['value'] = entry['length']
+                newEntry['name'] = 'clen_' \
+                    + entry['name']
+
+            if transformation == 'tokenlen' \
+               and type(entry['value']) == str:
+                newEntry['value'] = 1 \
+                    + entry['endToken'] \
+                    - entry['startToken']
+                newEntry['name'] = 'tlen_' \
+                     + entry['name']
+
+            newInfo.append(newEntry)
+        baseInfo = newInfo
+    return baseInfo
+
+    
+def applyTokenTransformations(entry, token, transformations):
+    '''
+       Given an entry with information about a token in the format
+       used by the AWE_Info function, transform the value
+       as specified by the transformations list
+    '''
+    for transformation in transformations:
+    
+        # security check
+        if not re.match('[A-Za-z0-9_]+', transformation):
+            raise AWE_Workbench_Error(
+                'Invalid transformation'
+                + transformation)                   
+
+        if transformation == 'text':
+            entry['value'] = entry['text']
+            entry['name'] = 'text_' + entry['name']                  
+
+        elif transformation == 'len' \
+           and type(entry['value']) in [str, list]:
+            entry['value'] = len(entry['value'])
+            entry['name'] = 'len_' + entry['name']
+
+        elif transformation in built_in_flags:
+            entry['value'] = eval('token.'
+                                  + transformation)
+            entry['name'] = transformation \
+                + '_' + entry['name']
+
+        elif transformation in ['log', 'sqrt']:
+            if entry['value'] is not None \
+               and is_float(entry['value']) \
+               and not (transformation == 'sqrt'
+                        and entry['value'] < 0):
+
+                if transformation == 'log':
+                    entry['value'] = math.log(entry['value'])
+                    entry['name'] = 'log_' + entry['name']
+
+                elif transformation == 'sqrt':
+                    entry['value'] = math.sqrt(entry['value'])
+                    entry['name'] = 'sqrt_' + entry['name']
+
+                elif transformation == 'log' \
+                   and entry['value'] is not None:                
+                    raise AWE_Workbench_Error(
+                        'Cannot log non numeric data')
+
+                elif transformation == 'sqrt' \
+                   and entry['value'] is not None:                
+                     raise AWE_Workbench_Error(
+                         'Cannot take the square'
+                         + ' root of non numeric data')
+    return entry
+
+
+def applySummaryFunction(info, baseInfo, summaryType, document):
+    '''
+        Given a matrix of information about indicator values
+        for the tokens in a document, apply a summary function
+        and return the resulting summary information to the main
+        AWE_Info function
+    '''    
+
+    # Security check
+    if summaryType != '' and summaryType is not None \
+       and not re.match('[A-Za-z0-9_]+', summaryType):
+        raise AWE_Workbench_Error('Invalid summary function '
+            + summaryType)
+
+    if len(info) == 0 \
+       and (summaryType is None
+            or summaryType==''):
+        return json.dumps({})
+
+    # Counts of unique values
+    if summaryType == "counts":
+        if len(info)==0:
+            return json.dumps({})
+        output = {}
+        summary = info['value'].value_counts()
+        for i, value in enumerate(summary):
+            entry = {}
+            category = summary.index[i]
+            if type(summary.index[i]) != str:
+                category = summary.index[i]
+            if type(category) == list:
+                category = json.dumps(category)
+            output[category] = int(value)
+        return json.dumps(output)
+
+    # total number of entries in info
+    elif summaryType == "total":
+        return len(info)
+
+    # list of unique values
+    elif summaryType == "uniq":
+        if len(info)==0:
+            return json.dumps({})
+        output = []
+        summary = info['value'].value_counts()
+        for i, value in enumerate(summary):
+            category = summary.index[i]
+            if type(summary.index[i]) != str:
+                category = json.dumps(summary.index[i])
+            if category not in output:
+                output.append(category)
+        return output
+
+    # Total number of unique values
+    elif summaryType == "totaluniq":
+        if len(info)==0:
+            return 0
+        output = []
+        summary = info['value'].value_counts()
+        for i, value in enumerate(summary):
+            category = summary.index[i]
+            if type(summary.index[i]) != str:
+                category = json.dumps(summary.index[i])
+            if category not in output:
+                output.append(category)
+        return len(output)
+
+    # Proportion or percent
+    elif summaryType in ["proportion", "percent"]:
+        if len(info)==0:
+            return None
+        total = 0
+        for index, row in info.iterrows():
+            if row['value']:
+                total += 1
+        if len(info) > 0:
+            if summaryType == "proportion":
+                return total/len(document)
+            else:
+                return round(100*total/len(document))
+        else:
+            return None
+            
+    # Mean
+    elif summaryType == "mean":
+        if len(info)==0:
+            return None
+        mean = info['value'].mean(axis=0)
+        if type(mean) == type(np.int64(0)):
+            return int(mean)
+        else:
+            return float(mean)
+
+    # Median
+    elif summaryType == "median":
+        if len(info)==0:
+            return None
+        median = info['value'].median(axis=0)
+        if type(median) == type(np.int64(0)):
+            return int(median)
+        else:
+            return float(median)
+
+    # Standard Deviation
+    elif summaryType == "stdev":
+        if len(info)==0:
+            return None
+        if len(baseInfo) > 2:
+            std = info['value'].std(axis=0)
+            if type(std) == type(np.int64(0)):
+                return int(std)
+            else:
+                return float(std)
+        else:
+            return None
+
+    # Maximum
+    elif summaryType == "max":
+        if len(info)==0:
+            return None
+        maxVal = info['value'].max(axis=0)
+        if type(maxVal) == type(np.int64(0)):
+            return int(maxVal)
+        else:
+            return float(maxVal)
+
+    # Minimum
+    elif summaryType == "min":
+        if len(info)==0:
+            return None
+        minVal = info['value'].min(axis=0)
+        if type(minVal) == type(np.int64(0)):
+            return int(minVal)
+        else:
+            return float(minVal)
+
+    # No summary, just the full dataframe
+    elif summaryType == '' or summaryType is None:
+        if len(info)==0:
+            return None
+        val = info.T.to_json()
+        return val
+    else:
+        raise AWE_Workbench_Error('Invalid summary function '
+            + summaryType)
+
+
 def AWE_Info(document: Doc,
              infoType='Token',
              indicator='pos_',
@@ -2254,387 +2694,51 @@ def AWE_Info(document: Doc,
              transformations=[],
              summaryType=None):
     ''' This function provides a general-purpose API for
-        obtaining information about indicators reported in
+        obtaining information about indicators annoted on
         the AWE Workbench Spacy parse tree. 
     '''
     try:
         baseInfo = []
         # security check
         if not re.match('[A-Za-z0-9_]+', indicator):
-            raise AWE_Workbench_Error('a Invalid indicator ' + indicator)                   
+            raise AWE_Workbench_Error(
+                'Invalid indicator ' + indicator)                   
     
-        # Extract
-        if infoType in ['Doc']:
-            if indicator == 'sents':
-                for sent in document.sents:
-                    entry = {}
-                    entry['offset'] = document[sent.start].idx
-                    entry['length'] = \
-                        document[sent.end-1].idx \
-                        + len(document[sent.end-1].text_with_ws) \
-                        - document[sent.start].idx
-                    entry['startToken'] = sent.start
-                    entry['endToken'] = sent.end - 1
-                    entry['name'] = 'sents'
-                    entry['value'] = 'sentence'
-                    entry['text'] = document[sent.start:sent.end].text
-                    baseInfo.append(entry)
-
-            elif indicator in docspan_extensions:
-                baseInfo = eval('document._.' + indicator)
-           
-            elif indicator.startswith('delimiter_'):
-                delimiter = ''.join(indicator[10:])
-                entry = {}
-                segmentno = 0
-                for token in document:
-                    if 'offset' not in entry:
-                        entry['offset'] = token.idx
-                        entry['startToken'] = token.i
-                    if delimiter in token.text:
-                        entry['length'] = \
-                            token.idx + len(token.text_with_ws)
-                        entry['endToken'] = token.i
-                        entry['name'] = indicator
-                        entry['value'] = delimiter
-                        entry['text'] = \
-                            document[entry['startToken']:entry['endToken']+1].text
-                        baseInfo.append(entry)
-                        entry = {}
-                        segmentno += 1
-                if 'startToken' in entry \
-                   and 'length' not in entry:
-                    entry['length'] = \
-                        len(document.text) - entry['offset']
-                    entry['endToken'] = len(document)-1
-                    entry['name'] = indicator
-                    entry['value'] = segmentno
-                    baseInfo.append(entry)
-            else:
-                raise AWE_Workbench_Error('b Invalid indicator ' + indicator)
- 
-            ######################################
-            # Apply transformations if specified #
-            # in the order specified in the list #
-            ######################################
-            for transformation in transformations:
-                # security check
-                if not re.match('[A-Za-z0-9_]+', transformation):
-                    raise AWE_Workbench_Error('Invalid transformation' \
-                         + transformation)                   
-
-                newInfo = []
-                for entry in baseInfo:
-                    newEntry = entry
-                    if transformation == 'text':
-                         newEntry['value'] = entry['text']
-                         newEntry['name'] = 'text_' + entry['name']
-                    
-                    elif transformation == 'len' \
-                       and type(entry['value']) in [str, list]:
-                        newEntry['value'] = entry['length']
-                        newEntry['name'] = 'clen_' + entry['name']
-
-                    if transformation == 'tokenlen' \
-                       and type(entry['value']) == str:
-                        newEntry['value'] = 1 + entry['endToken'] - entry['startToken']
-                        newEntry['name'] = 'tlen_' + entry['name']
-                    newInfo.append(newEntry)
-                baseInfo = newInfo
-
+        if infoType == 'Doc':
+            baseInfo = createSpanInfo(indicator,
+                                      document)
+            baseInfo = applySpanTransformations(transformations,
+                                                baseInfo)
         elif infoType == 'Token':
             for token in document:
-                ######################################
-                # Create basic entry with attributes #
-                # for offset, length, indicator name #
-                # and value for selected indicator   #
-                ######################################
-                entry = {}
-                entry['text'] = token.text_with_ws
-                entry['offset'] = token.idx
-                entry['tokenIdx'] = token.i
-                entry['length'] = len(token.text_with_ws)
-                entry['name'] = indicator
-                entry['value'] = None
+                entry = newTokenEntry(indicator, token, None)
 
-                if indicator in built_in_attributes:
-                    entry['value'] = eval('token.' + indicator)
-
-                # Note that we assume extensions are attributes not functions.
-                # Code will break if the indicator name is a function extended attribute.
-                # TBD: put security check in for this
-                elif token.has_extension(indicator):
-                    entry['value'] = eval('token._.' + indicator)
-                else:
-                    raise AWE_Workbench_Error('c Invalid indicator ' + indicator)
-
-                ##########################################
-                # Apply selection functions if specified #
-                # in the order specified in the list.    #
-                ##########################################
                 filterEntry = False
                 if type(filters) == list and len(filters)>0:
-                    for (function, returnValues) in filters:
-                        for returnValue in returnValues:
-                            # Comparison
-                            if function in ['==','>', '<', '>=', '<='] \
-                               and type(entry['value']) in [int, float, str]:
-                                if not eval(entry['value'] + function + returnValue):
-                                     filterEntry = True
-                                     break
-
-                            # Truth function
-                            elif type(entry['value']) == bool \
-                               and returnValue == 'True':
-                                if not entry['value']:
-                                    filterEntry = True
-                                    break
-                                    
-                            elif type(entry['value']) == bool \
-                               and returnValue == 'False':
-                                 if entry['value']:
-                                    filterEntry = True
-                                    break
-
-                            # Negation
-                            elif function == 'not' \
-                               and type(entry['value']) == bool:
-                                if entry['value']:
-                                    filterEntry = True
-                                    break
-
-                            # Spacy built-in token flags
-                            elif function in built_in_flags:
-                                if returnValue == 'True':
-                                    if not eval('token.' + function):
-                                        filterEntry = True
-                                        break
-                                elif returnValue == 'False':
-                                    if eval('token.' + function):
-                                        filterEntry = True
-                                        break
-                                else:
-                                    raise AWE_Workbench_Error('Invalid selection value '
-                                        + returnValue)
-
-                            elif function in built_in_string_functions:
-                                if eval('token.' + function) == returnValue:
-                                    filterEntry = False
-                                    break
-                                else:
-                                    filterEntry = True
-
-                            # Spacy extension attributes, if boolean flags
-                            elif token.has_extension(function):
-                                if eval('token._.' + function) is not None \
-                                   and eval('token._.' + function) in [True, False]:
-                                     if returnValue == 'True':
-                                         if not eval('token._.' + function):
-                                            filterEntry = False
-                                            break
-                                     elif returnValue == 'False':
-                                         if eval('token._.' + function):
-                                            filterEntry = False
-                                            break
-                                     else:
-                                         filterEntry = True
-
-                            else:
-                                raise AWE_Workbench_Error('Invalid filter ' + function)
-                        if filterEntry:
-                            break
-
+                    filterEntry = applyTokenFilters(token,
+                                                    entry,
+                                                    filters)
                 elif filters != []:
-                    raise AWE_Workbench_Error('Invalid filter ' + str(filters))                   
+                    raise AWE_Workbench_Error('Invalid filter '
+                        + str(filters))                   
                 if filterEntry:
                     continue
                 else:
-                    ######################################
-                    # Apply transformations if specified #
-                    # in the order specified in the list #
-                    ######################################
-                    for transformation in transformations:
-                        # security check
-                        if not re.match('[A-Za-z0-9_]+', transformation):
-                            raise AWE_Workbench_Error('Invalid transformation' \
-                                + transformation)                   
-
-                        if transformation == 'text':
-                            entry['value'] = entry['text']
-                            entry['name'] = 'text_' + entry['name']                  
-
-                        elif transformation == 'len' \
-                           and type(entry['value']) in [str, list]:
-                            entry['value'] = len(entry['value'])
-                            entry['name'] = 'len_' + entry['name']
-
-                        elif transformation in built_in_flags:
-                            entry['value'] = eval('token.' + transformation)
-                            entry['name'] = transformation + '_' + entry['name']
-
-                        elif transformation in ['log', 'sqrt']:
-                            if entry['value'] is not None \
-                               and is_float(entry['value']) \
-                               and not (transformation == 'sqrt'
-                                        and entry['value'] < 0):
-
-                                if transformation == 'log':
-                                    entry['value'] = math.log(entry['value'])
-                                    entry['name'] = 'log_' + entry['name']
-
-                                elif transformation == 'sqrt':
-                                    entry['value'] = math.sqrt(entry['value'])
-                                    entry['name'] = 'sqrt_' + entry['name']
-
-                            elif transformation == 'log' \
-                               and entry['value'] is not None:                
-                                raise AWE_Workbench_Error('Cannot log non numeric data')
-
-                            elif transformation == 'sqrt' \
-                               and entry['value'] is not None:                
-                                raise AWE_Workbench_Error('Cannot take the square'
-                                    + ' root of non numeric data')
-
-                        elif transformation is not None:
-                            raise AWE_Workbench_Error('Invalid transformation '
-                                + transformation)
-
+                    entry = \
+                        applyTokenTransformations(entry,
+                                                  token,
+                                                  transformations)
                     baseInfo.append(entry)
-
-        info = pd.DataFrame.from_dict(baseInfo)
-
-        # Security check
-        if summaryType != '' and summaryType is not None \
-           and not re.match('[A-Za-z0-9_]+', summaryType):
-            raise AWE_Workbench_Error('Invalid summary function '
-                + summaryType)
-
-        if len(info) == 0 and (summaryType is None or summaryType==''):
-            return json.dumps({})
-
-        #############################################
-        # Apply summarization rules if requested    #
-        #############################################
-        # Counts
-        if summaryType == "counts":
-            if len(info)==0:
-                return json.dumps({})
-            output = {}
-            summary = info['value'].value_counts()
-            for i, value in enumerate(summary):
-                entry = {}
-                category = summary.index[i]
-                if type(summary.index[i]) != str:
-                    category = summary.index[i]
-                if type(category) == list:
-                    category = json.dumps(category)
-                output[category] = int(value)
-            return json.dumps(output)
-
-        elif summaryType == "total":
-            return len(info)
-
-        elif summaryType == "uniq":
-            if len(info)==0:
-                return json.dumps({})
-            output = []
-            summary = info['value'].value_counts()
-            for i, value in enumerate(summary):
-                category = summary.index[i]
-                if type(summary.index[i]) != str:
-                    category = json.dumps(summary.index[i])
-                if category not in output:
-                    output.append(category)
-            return output
-        elif summaryType == "totaluniq":
-            if len(info)==0:
-                return 0
-            output = []
-            summary = info['value'].value_counts()
-            for i, value in enumerate(summary):
-                category = summary.index[i]
-                if type(summary.index[i]) != str:
-                    category = json.dumps(summary.index[i])
-                if category not in output:
-                    output.append(category)
-            return len(output)
-        elif summaryType in ["proportion", "percent"]:
-            if len(info)==0:
-                return None
-            total = 0
-            for index, row in info.iterrows():
-                if row['value']:
-                    total += 1
-            if len(info) > 0:
-                if summaryType == "proportion":
-                    return total/len(document)
-                else:
-                    return round(100*total/len(document))
-            else:
-                return None
-                
-        # Mean
-        elif summaryType == "mean":
-            if len(info)==0:
-                return None
-            mean = info['value'].mean(axis=0)
-            if type(mean) == type(np.int64(0)):
-                return int(mean)
-            else:
-                return float(mean)
-
-        # Median
-        elif summaryType == "median":
-            if len(info)==0:
-                return None
-            median = info['value'].median(axis=0)
-            if type(median) == type(np.int64(0)):
-                return int(median)
-            else:
-                return float(median)
-
-        # Standard Deviation
-        elif summaryType == "stdev":
-            if len(info)==0:
-                return None
-            if len(baseInfo) > 2:
-                std = info['value'].std(axis=0)
-                if type(std) == type(np.int64(0)):
-                    return int(std)
-                else:
-                    return float(std)
-            else:
-                return None
-
-        # Maximum
-        elif summaryType == "max":
-            if len(info)==0:
-                return None
-            maxVal = info['value'].max(axis=0)
-            if type(maxVal) == type(np.int64(0)):
-                return int(maxVal)
-            else:
-                return float(maxVal)
-
-        # Minimum
-        elif summaryType == "min":
-            if len(info)==0:
-                return None
-            minVal = info['value'].min(axis=0)
-            if type(minVal) == type(np.int64(0)):
-                return int(minVal)
-            else:
-                return float(minVal)
-
-        # No summary, just the full dataframe
-        elif summaryType == '' or summaryType is None:
-            if len(info)==0:
-                return None
-            val = info.T.to_json()
-            return val
         else:
-            raise AWE_Workbench_Error('Invalid summary function '
-                + summaryType)
+            raise AWE_Workbench_Error('Invalid indicator type '
+                + infoType)                   
+        
+        info = pd.DataFrame.from_dict(baseInfo)
+        return applySummaryFunction(info,
+                                    baseInfo,
+                                    summaryType,
+                                    document)
+
     except Exception as e:
             print(e)
             raise AWE_Workbench_Error('error in code')
