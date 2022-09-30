@@ -138,7 +138,6 @@ class LexicalFeatureDef(object):
         self.nlp = nlpIn
 
     def package_check(self, lang):
-
         for path in self.datapaths:
             if not os.path.exists(path['value']):
                 raise LexiconMissingError(
@@ -147,11 +146,10 @@ class LexicalFeatureDef(object):
                 )
 
     def load_lexicons(self):
-
         for path in self.datapaths:
             lexicon_name = \
                 path['pathname'].replace('_PATH', '').lower()
-            lexicon = eval('self.' + lexicon_name)
+            lexicon = getattr(self, lexicon_name)
 
             # To save memory, use the spacy string hash as key,
             # not the actual text string
@@ -190,129 +188,124 @@ class LexicalFeatureDef(object):
     # Define extensions  #
     #####################
 
-    extensions = [{"name": "AWE_Info",
-                   "method": "AWE_Info",
-                   "type": "docspan"},
-                  {"name": "token_vectors",
-                   "getter": "token_vectors",
-                   "type": "docspan"},
-                  {"name": "root",
-                   "getter": "root",
-                   "type": "token"},
-                  {"name": "nSyll",
-                   "getter": "nSyll",
-                   "type": "token"},
-                  {"name": "sqrtNChars",
-                   "getter": "sqrtNChars",
-                   "type": "token"},
-                  {"name": "is_latinate",
-                   "getter": "is_latinate",
-                   "type": "token"},
-                  {"name": "is_academic",
-                   "getter": "is_academic",
-                   "type": "token"},
-                  {"name": "family_size",
-                   "getter": "family_size",
-                   "type": "token"},
-                  {"name": "nSenses",
-                   "getter": "nSenses",
-                   "type": "token"},
-                  {"name": "logNSenses",
-                   "getter": "logNSenses",
-                   "type": "token"},
-                  {"name": "morphology",
-                   "getter": "morphology",
-                   "type": "token"},
-                  {"name": "morpholexsegm",
-                   "getter": "morpholexsegm",
-                   "type": "token"},
-                  {"name": "nMorph",
-                   "getter": "nMorph",
-                   "type": "token"},
-                  {"name": "root1_freq_HAL",
-                   "getter": "root1_freq_HAL",
-                   "type": "token"},
-                  {"name": "root2_freq_HAL",
-                   "getter": "root2_freq_HAL",
-                   "type": "token"},
-                  {"name": "root3_freq_HAL",
-                   "getter": "root3_freq_HAL",
-                   "type": "token"},
-                  {"name": "root_famSize",
-                   "getter": "root_famSize",
-                   "type": "token"},
-                  {"name": "root_pfmf",
-                   "getter": "root_pfmf",
-                   "type": "token"},
-                  {"name": "token_freq",
-                   "getter": "token_freq",
-                   "type": "token"},
-                  {"name": "lemma_freq",
-                   "getter": "lemma_freq",
-                   "type": "token"},
-                  {"name": "root_freq",
-                   "getter": "root_freq",
-                   "type": "token"},
-                  {"name": "min_root_freq",
-                   "getter": "min_root_freq",
-                   "type": "token"},
-                  {"name": "max_freq",
-                   "getter": "max_freq",
-                   "type": "token"},
-                  {"name": "concreteness",
-                   "getter": "concreteness",
-                   "type": "token"},
-                  {"name": "sentiword",
-                   "getter": "sentiword",
-                   "type": "token"},
-                  {"name": "abstract_trait",
-                   "getter": "abstract_trait2",
-                   "type": "token"},
-                  {"name": "deictic",
-                   "getter": "deictic",
-                   "type": "token"},
-                  {"name": "animate",
-                   "getter": "animate",
-                   "type": "token"},
-                  {"name": "location",
-                   "getter": "isloc",
-                   "type": "token"}
-                  ]
-
     def add_extensions(self):
 
         """
          Funcion to add extensions that allow us to access the various
          lexicons this module is designed to support.
         """
+        extensions = [
+            {"name": "AWE_Info",
+             "method": self.AWE_Info,
+             "type": "docspan"},
+            {"name": "token_vectors",
+             "getter": self.token_vectors,
+             "type": "docspan"},
+            {"name": "root",
+             "getter": self.root,
+             "type": "token"},
+            {"name": "nSyll",
+             "getter": self.nSyll,
+             "type": "token"},
+            {"name": "sqrtNChars",
+             "getter": self.sqrtNChars,
+             "type": "token"},
+            {"name": "is_latinate",
+             "getter": self.is_latinate,
+             "type": "token"},
+            {"name": "is_academic",
+             "getter": self.is_academic,
+             "type": "token"},
+            {"name": "family_size",
+             "getter": self.family_size,
+             "type": "token"},
+            {"name": "nSenses",
+             "getter": self.nSenses,
+             "type": "token"},
+            {"name": "logNSenses",
+             "getter": self.logNSenses,
+             "type": "token"},
+            {"name": "morphology",
+             "getter": self.morphology,
+             "type": "token"},
+            {"name": "morpholexsegm",
+             "getter": self.morpholexsegm,
+             "type": "token"},
+            {"name": "nMorph",
+             "getter": self.nMorph,
+             "type": "token"},
+            {"name": "root1_freq_HAL",
+             "getter": self.root1_freq_HAL,
+             "type": "token"},
+            {"name": "root2_freq_HAL",
+             "getter": self.root2_freq_HAL,
+             "type": "token"},
+            {"name": "root3_freq_HAL",
+             "getter": self.root3_freq_HAL,
+             "type": "token"},
+            {"name": "root_famSize",
+             "getter": self.root_famSize,
+             "type": "token"},
+            {"name": "root_pfmf",
+             "getter": self.root_pfmf,
+             "type": "token"},
+            {"name": "token_freq",
+             "getter": self.token_freq,
+             "type": "token"},
+            {"name": "lemma_freq",
+             "getter": self.lemma_freq,
+             "type": "token"},
+            {"name": "root_freq",
+             "getter": self.root_freq,
+             "type": "token"},
+            {"name": "min_root_freq",
+             "getter": self.min_root_freq,
+             "type": "token"},
+            {"name": "max_freq",
+             "getter": self.max_freq,
+             "type": "token"},
+            {"name": "concreteness",
+             "getter": self.concreteness,
+             "type": "token"},
+            {"name": "sentiword",
+             "getter": self.sentiword,
+             "type": "token"},
+            {"name": "abstract_trait",
+             "getter": self.abstract_trait2,
+             "type": "token"},
+            {"name": "deictic",
+             "getter": self.deictic,
+             "type": "token"},
+            {"name": "animate",
+             "getter": self.animate,
+             "type": "token"},
+            {"name": "location",
+             "getter": self.isloc,
+             "type": "token"}
+        ]
 
-        for extension in self.extensions:
-
+        for extension in extensions:
             if extension['type'] == 'docspan':
-
                 if not Doc.has_extension(extension['name']):
                     if 'getter' in extension:
                         Doc.set_extension(extension['name'],
-                                          getter=eval('self.'
-                                                      + extension['getter']))
+                                          getter=extension['getter'])
 
                     elif 'method' in extension:
                         Doc.set_extension(extension['name'],
-                                          method=eval('self.'
-                                                      + extension['method']))
+                                          method=extension['method'])
                     else:
                         raise AWE_Workbench_Error('Invalid extension specification ')
 
                 if not Span.has_extension(extension['name']):
                     if 'getter' in extension:
                         Span.set_extension(extension['name'],
-                                           getter=eval('self.'
-                                                       + extension['getter']))
+                                           getter=extension['getter'])
 
                     elif 'method' in extension:
                         Span.set_extension(extension['name'],
-                                           method=eval('self.'
-                                                       + extension['method']))
+                                           method=extension['method'])
+
                     else:
                         raise AWE_Workbench_Error('Invalid extension specification ')
 
@@ -321,14 +314,12 @@ class LexicalFeatureDef(object):
                 if 'getter' in extension:
                     if not Token.has_extension(extension['name']):
                         Token.set_extension(extension['name'],
-                                            getter=eval('self.'
-                                                        + extension['getter']))
+                                            getter=extension['getter'])
 
                 elif 'method' in extension:
                     if not Token.has_extension(extension['name']):
                         Token.set_extension(extension['name'],
-                                            method=eval('self.'
-                                                        + extension['method']))
+                                            method=extension['method'])
                 else:
                     raise AWE_Workbench_Error('Invalid extension specification ')
             else:

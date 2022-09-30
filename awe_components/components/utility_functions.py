@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-# Copyright 2022, Educational Testing Service
+'''
+Copyright 2022, Educational Testing Service
+
+This is a bunch of general-purpose functions which might be called by
+different components in this module.
+'''
 
 import sys
 import logging
@@ -2280,7 +2285,7 @@ def newTokenEntry(name, token, value):
     entry['value'] = None
 
     if name in built_in_attributes:
-        entry['value'] = eval('token.' + name)
+        entry['value'] = getattr(token, name)
 
     #######################################
     # Create entries for named extensions #
@@ -2292,7 +2297,9 @@ def newTokenEntry(name, token, value):
     # TBD: put security check in for this #
     #######################################
     elif token.has_extension(name):
-        entry['value'] = eval('token._.' + name)
+        # TODO: Use Token.get_extension
+        # https://spacy.io/api/token
+        entry['value'] = getattr(token._, name)
     else:
         raise AWE_Workbench_Error('Invalid indicator '
             + name)
@@ -2322,7 +2329,7 @@ def createSpanInfo(indicator, document):
     # are responsible to make sure the outputs
     # are in the correct format.
     elif indicator in docspan_extensions:
-        baseInfo = eval('document._.' + indicator)
+        baseInfo = getattr(document._, indicator)
 
     # Create span records for paragraphs (delimiter_\n)
     # and other spans identified by delimiting characters
@@ -2369,18 +2376,20 @@ def applyTokenFilters(token, entry, filters):
         if type(filters) == list and len(filters)>0:
             for (function, returnValues) in filters:
                 for returnValue in returnValues:
+                    comparers = {
+                        "==": lambda x, y: x==y,
+                        "<": lambda x, y: x<y,
+                        ">": lambda x, y: x>y,
+                        "<=": lambda x, y: x<=y,
+                        ">=": lambda x, y: x>=y,
+                        "!=": lambda x, y: x!=y
+                    }
 
                     # Direct comparison with the returnValue
-                    if function in ['==',
-                                    '>',
-                                    '<',
-                                    '>=',
-                                '    <='] \
+                    if function in comparers \
                        and type(entry['value']) \
                           in [int, float, str]:
-                        if not eval(entry['value'] \
-                           + function \
-                           + returnValue):
+                        if not comparer[function](entry['value'], returnValue):
                             return True
 
                     # The returnValue specifies a boolean value
@@ -2403,10 +2412,10 @@ def applyTokenFilters(token, entry, filters):
                     # Spacy built-in boolean token flags
                     elif function in built_in_flags:
                         if returnValue == 'True':
-                            if not eval('token.' + function):
+                            if not getattr(token, function):
                                 return True
                         elif returnValue == 'False':
-                            if eval('token.' + function):
+                            if getattr(token, function):
                                 return True
                         else:
                             raise AWE_Workbench_Error(
@@ -2415,7 +2424,7 @@ def applyTokenFilters(token, entry, filters):
 
                     # Spacy built-in string functions
                     elif function in built_in_string_functions:
-                        if eval('token.' + function) == returnValue:
+                        if getattr(token, function) == returnValue:
                             return False
                         else:
                             filterEntry = True
@@ -2423,16 +2432,16 @@ def applyTokenFilters(token, entry, filters):
                     # Spacy extension attributes, if true boolean
                     # flags or numeric (non-zero) values
                     elif token.has_extension(function):
-                        if eval('token._.' + function) is not None \
-                           and eval('token._.' + function) \
+                        if getattr(token._, function) is not None \
+                           and getattr(token._, function) \
                               in [True, False]:
                              if returnValue == 'True':
-                                 if not eval('token._.'
-                                             + function):
+                                 if not getattr(token._,
+                                                function):
                                      return False
                              elif returnValue == 'False':
-                                 if eval('token._.' 
-                                         + function):
+                                 if getattr(token._,
+                                            function):
                                      return False
                              else:
                                  filterEntry = True
@@ -2508,8 +2517,8 @@ def applyTokenTransformations(entry, token, transformations):
             entry['name'] = 'len_' + entry['name']
 
         elif transformation in built_in_flags:
-            entry['value'] = eval('token.'
-                                  + transformation)
+            entry['value'] = getattr(token,
+                                     transformation)
             entry['name'] = transformation \
                 + '_' + entry['name']
 

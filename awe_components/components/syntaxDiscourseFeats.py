@@ -69,86 +69,83 @@ class SyntaxAndDiscourseFeatDef(object):
 
         return doc
 
-    extensions = [{"name": "AWE_Info",
-                   "getter": "AWE_Info",
-                   "type": "docspan"},
-                  {"name": "sentence_types",
-                   "getter": "sentence_types",
-                   "type": "docspan"},
-                  {"name": "transitions",
-                   "getter": "transitions",
-                   "type": "docspan"},
-                  {"name": "transition_word_profile",
-                   "getter": "transitionProfile",
-                   "type": "docspan"},
-                  {"name": "transition_distances",
-                   "getter": "transition_distances",
-                   "type": "docspan"},
-                  {"name": "intersentence_cohesions",
-                   "getter": "interSentenceCohesions",
-                   "type": "docspan"},
-                  {"name": "sliding_window_cohesions",
-                   "getter": "slidingWindowCohesions",
-                   "type": "docspan"},
-                  {"name": "corefChainInfo",
-                   "getter": "corefChainInfo",
-                   "type": "docspan"},
-                  {"name": "sentenceThemes",
-                   "getter": "sentenceThemes",
-                   "type": "docspan"},
-                  {"name": "syntacticDepthsOfRhemes",
-                   "getter": "syntacticDepthsOfRhemes",
-                   "type": "docspan"},
-                  {"name": "syntacticDepthsOfThemes",
-                   "getter": "syntacticDepthsOfThemes",
-                   "type": "docspan"},
-                  {"name": "syntacticProfile",
-                   "getter": "syntacticProfile",
-                   "type": "docspan"},
-                  {"name": "syntacticProfileNormed",
-                   "getter": "syntacticProfileNormed",
-                   "type": "docspan"},
-                  {"name": "syntacticVariety",
-                   "getter": "syntacticVariety",
-                   "type": "docspan"},
-                  {"name": "in_past_tense_scope",
-                   "getter": "in_past_tense_scope",
-                   "type": "token"},
-                  {"name": "subjectVerbInversion",
-                   "getter": "sv_inversion",
-                   "type": "token"},
-                  {"name": "weightedSyntacticDepth",
-                   "getter": "weightedSyntacticDepth",
-                   "type": "token"},
-                  {"name": "weightedSyntacticBreadth",
-                   "getter": "weightedSyntacticBreadth",
-                   "type": "token"},
-                  {"name": "syntacticDepth",
-                   "getter": "syntacticDepth",
-                   "type": "token"}]
-
     def add_extensions(self):
-
         """
          Funcion to add extensions with getter functions that allow us
          to access the various lexicons this module is designed to support.
         """
+        extensions = [
+            {"name": "AWE_Info",
+             "getter": self.AWE_Info,
+             "type": "docspan"},
+            {"name": "sentence_types",
+             "getter": self.sentence_types,
+             "type": "docspan"},
+            {"name": "transitions",
+             "getter": self.transitions,
+             "type": "docspan"},
+            {"name": "transition_word_profile",
+             "getter": self.transitionProfile,
+             "type": "docspan"},
+            {"name": "transition_distances",
+             "getter": self.transition_distances,
+             "type": "docspan"},
+            {"name": "intersentence_cohesions",
+             "getter": self.interSentenceCohesions,
+             "type": "docspan"},
+            {"name": "sliding_window_cohesions",
+             "getter": self.slidingWindowCohesions,
+             "type": "docspan"},
+            {"name": "corefChainInfo",
+             "getter": self.corefChainInfo,
+             "type": "docspan"},
+            {"name": "sentenceThemes",
+             "getter": self.sentenceThemes,
+             "type": "docspan"},
+            {"name": "syntacticDepthsOfRhemes",
+             "getter": self.syntacticDepthsOfRhemes,
+             "type": "docspan"},
+            {"name": "syntacticDepthsOfThemes",
+             "getter": self.syntacticDepthsOfThemes,
+             "type": "docspan"},
+            {"name": "syntacticProfile",
+             "getter": self.syntacticProfile,
+             "type": "docspan"},
+            {"name": "syntacticProfileNormed",
+             "getter": self.syntacticProfileNormed,
+             "type": "docspan"},
+            {"name": "syntacticVariety",
+             "getter": self.syntacticVariety,
+             "type": "docspan"},
+            {"name": "in_past_tense_scope",
+             "getter": self.in_past_tense_scope,
+             "type": "token"},
+            {"name": "subjectVerbInversion",
+             "getter": self.sv_inversion,
+             "type": "token"},
+            {"name": "weightedSyntacticDepth",
+             "getter": self.weightedSyntacticDepth,
+             "type": "token"},
+            {"name": "weightedSyntacticBreadth",
+             "getter": self.weightedSyntacticBreadth,
+             "type": "token"},
+            {"name": "syntacticDepth",
+             "getter": self.syntacticDepth,
+             "type": "token"}
+        ]
 
-        for extension in self.extensions:
+        for extension in extensions:
             if extension['type'] == 'docspan':
                 if not Doc.has_extension(extension['name']):
                     Doc.set_extension(extension['name'],
-                                      getter=eval('self.'
-                                                  + extension['getter']))
+                                      getter=extension['getter'])
                 if not Span.has_extension(extension['name']):
                     Span.set_extension(extension['name'],
-                                       getter=eval('self.'
-                                                   + extension['getter']))
+                                      getter=extension['getter'])
             if extension['type'] == 'token':
                 if not Token.has_extension(extension['name']):
                     Token.set_extension(extension['name'],
-                                        getter=eval('self.'
-                                                    + extension['getter']))
+                                        getter=extension['getter'])
         # By default, we do not classify words as transition terms
         # We set the flag true when we identif them later
         if not Token.has_extension('transition'):

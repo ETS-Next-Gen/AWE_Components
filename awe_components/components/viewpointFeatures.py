@@ -193,7 +193,7 @@ class ViewpointFeatureDef:
         return False
 
     def s_o_f(self, tokens):
-        return self.statements_of_fact(tokens, ' == 0')
+        return self.statements_of_fact(tokens, lambda x: x==0)
 
     def statements_of_fact(self, tokens, relation):
         factList = []
@@ -326,7 +326,7 @@ class ViewpointFeatureDef:
                        and child == self.getHeadDomain(child):
                         numSubjective += 1
                         break
-                if eval("numSubjective " + relation):
+                if relation(numSubjective):
                     start, end = rootTree(currentHead,
                                           currentHead.i,
                                           currentHead.i)
@@ -344,7 +344,7 @@ class ViewpointFeatureDef:
         return factList
 
     def statements_of_opinion(self, tokens):
-        theList = self.statements_of_fact(tokens, " > 0")
+        theList = self.statements_of_fact(tokens, lambda x: x>0)
         opinionList = []
         for item in theList:
              newItem = item
@@ -454,29 +454,28 @@ class ViewpointFeatureDef:
                                      ]._.vwp_communication))))):
             return True
 
-    extensions = [{"name": "vwp_statements_of_fact",
-                   "getter": "s_o_f",
-                   "type": "docspan"},
-                  {"name": "vwp_statements_of_opinion",
-                   "getter": "statements_of_opinion",
-                   "type": "docspan"},
-                  {"name": "vwp_explicit_argument",
-                   "getter": "vwp_explicit_argument",
-                   "type": "token"},
-                  {"name": "vwp_emotionword",
-                   "getter": "vwp_emotionword",
-                   "type": "token"},
-                  {"name": "vwp_argumentword",
-                   "getter": "vwp_argumentword",
-                   "type": "token"}
-                  ]
-
     def add_extensions(self):
-
         """
          Funcion to add extensions with getter functions that allow us
          to access the various lexicons this module is designed to support.
         """
+        extensions = [
+            {"name": "vwp_statements_of_fact",
+             "getter": self.s_o_f,
+             "type": "docspan"},
+            {"name": "vwp_statements_of_opinion",
+             "getter": self.statements_of_opinion,
+             "type": "docspan"},
+            {"name": "vwp_explicit_argument",
+             "getter": self.vwp_explicit_argument,
+             "type": "token"},
+            {"name": "vwp_emotionword",
+             "getter": self.vwp_emotionword,
+             "type": "token"},
+            {"name": "vwp_argumentword",
+             "getter": self.vwp_argumentword,
+             "type": "token"}
+        ]
 
         ##################################################
         # Register extensions for all the categories in  #
@@ -492,21 +491,18 @@ class ViewpointFeatureDef:
         #####################################################
         # Register all the extensions in the extension list #
         #####################################################
-        for extension in self.extensions:
+        for extension in extensions:
             if extension['type'] == 'docspan':
                 if not Doc.has_extension(extension['name']):
                     Doc.set_extension(extension['name'],
-                                      getter=eval('self.'
-                                                  + extension['getter']))
+                                      getter=extension['getter'])
                 if not Span.has_extension(extension['name']):
                     Span.set_extension(extension['name'],
-                                       getter=eval('self.'
-                                                   + extension['getter']))
+                                       getter=extension['getter'])
             if extension['type'] == 'token':
                 if not Token.has_extension(extension['name']):
                     Token.set_extension(extension['name'],
-                                        getter=eval('self.'
-                                                    + extension['getter']))
+                                        getter=extension['getter'])
 
         ########################
         # Viewpoint and stance #
