@@ -4643,7 +4643,7 @@ class ViewpointFeatureDef:
                                 entry = \
                                     newSpanEntry('social awareness',
                                                  token.sent.start,
-                                                 token.sent.end,
+                                                 token.sent.end-1,
                                                  hdoc,
                                                  'theory of mind sentence')
                                 if entry not in theory_of_mind_sentences:
