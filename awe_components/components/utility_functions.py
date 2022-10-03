@@ -34,95 +34,6 @@ class FType(Enum):
     MEDIAN = 3
     MAX = 4
     MIN = 5
-
-built_in_attributes = ['text',
-                       'text_with_ws',
-                       'orth_',
-                       'ent_type_',
-                       'ent_iob_',
-                       'ent_id',
-                       'lemma_',
-                       'norm_',
-                       'lower_',
-                       'is_alpha',
-                       'is_ascii',
-                       'is_digit',
-                       'is_lower',
-                       'is_upper',
-                       'is_title',
-                       'is_punct',
-                       'is_left_punct',
-                       'is_right_punct',
-                       'is_sent_start',
-                       'is_sent_end',
-                       'is_space',
-                       'is_bracket',
-                       'is_quote',
-                       'is_currency',
-                       'like_url',
-                       'like_num',
-                       'like_email',
-                       'is_oov',
-                       'is_stop',
-                       'pos_',
-                       'tag_',
-                       'dep_',
-                       'lang_',
-                       'idx']
-
-built_in_string_functions = ['text',
-                       'text_with_ws',
-                       'orth_',
-                       'ent_type_',
-                       'lemma_',
-                       'norm_',
-                       'lower_',
-                       'pos_',
-                       'tag_',
-                       'dep_',
-                       'lang_']
-
-built_in_flags = ['is_alpha',
-                  'is_ascii',
-                  'is_digit',
-                  'is_lower',
-                  'is_upper',
-                  'is_title',
-                  'is_punct',
-                  'is_left_punct',
-                  'is_right_punct',
-                  'is_sent_start',
-                  'is_sent_end',
-                  'is_space',
-                  'is_bracket',
-                  'is_quote',
-                  'is_currency',
-                  'like_url',
-                  'like_num',
-                  'like_email',
-                  'is_oov',
-                  'is_stop']
-
-docspan_extensions = ['sentence_types', 
-                      'transition_distances',
-                      'intersentence_cohesions',
-                      'sliding_window_cohesions',
-                      'corefChainInfo',
-                      'sentenceThemes',
-                      'transitions',
-                      'syntacticDepthsOfThemes',
-                      'syntacticDepthsOfRhemes',
-                      'main_cluster_spans',
-                      'vwp_statements_of_opinion',
-                      'vwp_statements_of_fact',
-                      'direct_speech_spans',
-                      'vwp_social_awareness',
-                      'vwp_propositional_attitudes',
-                      'main_ideas',
-                      'supporting_ideas',
-                      'supporting_details',
-                      'all_cluster_info'
-                      ]
         
 def lexFeat(tokens, theProperty):
     """
@@ -763,9 +674,37 @@ def in_past_tense_scope(tok: Token):
         return None
     if '\n' in tok.text:
         return None
-    if tok.text.lower() in ['was', 'were']:
+    if tok.lower_ in ['was', 'were']:
         return True
+    for item in tok.subtree:
+        if item.dep_ == 'aux' \
+           and item.lower_ in ['was',
+                               'were',
+                               'did',
+                               '\'d',
+                               'had']:
+            return True
+        if item.dep_ == 'aux' \
+           and item.text.lower() in ['do',
+                                     'does',
+                                     'has',
+                                     'will',
+                                     'can',
+                                     'shall',
+                                     'may',
+                                     'must',
+                                     'am',
+                                     'are',
+                                     'is']:
+            return False
     for item in tok.head.subtree:
+        if item.dep_ == 'aux' \
+           and item.lower_ in ['was',
+                               'were',
+                               'did',
+                               '\'d',
+                               'had']:
+            return True
         if item.dep_ == 'aux' \
            and item.text.lower() in ['do',
                                      'does',
@@ -1363,9 +1302,9 @@ def ResolveReference(tok: Token, doc: Doc):
                 for item in Resolution:
                     doclist.append(item.i)
 
-    if tok._.vwp_speaker is not None:
+    if tok._.vwp_speaker_ is not None:
         doclist = []
-        for item in tok._.vwp_speaker:
+        for item in tok._.vwp_speaker_:
             if doc[item].pos_ != 'PRON' \
                and doc[item].lemma_ != 'mine':
                 doclist.append(item)
@@ -1373,9 +1312,9 @@ def ResolveReference(tok: Token, doc: Doc):
             doclist.append(tok.i)
         return doclist
 
-    if tok._.vwp_addressee is not None:
+    if tok._.vwp_addressee_ is not None:
         doclist = []
-        for item in tok._.vwp_addressee:
+        for item in tok._.vwp_addressee_:
             if doc[item].pos_ != 'PRON':
                 doclist.append(item)
         if len(doclist) == 0:
@@ -1892,6 +1831,13 @@ deictics = ['i',
             'those'
             ]
 
+demonstratives = ['here',
+                  'there',
+                  'this',
+                  'that',
+                  'these',
+                  'those']
+
 adj_noun_or_verb = ['NN',
                     'NNS',
                     'NNP',
@@ -1968,6 +1914,90 @@ personal_or_indefinite_pronoun = ['i',
                                   'who',
                                   'whom',
                                   'whoever']
+indefinite_pronoun = ['anyone',
+                      'anybody',
+                      'anything',
+                      'someone',
+                      'somebody',
+                      'something',
+                      'nobody',
+                      'nothing',
+                      'everyone',
+                      'everybody',
+                      'everything']
+
+def wh_question_word(token):
+    if (token.dep_ in ['WP', 'WRB', 'WP$']
+        and token.head.dep_ not in
+        ['relcl',
+         'ccomp',
+         'csubj',
+         'csubjpass',
+         'xcomp',
+         'acl']):
+        return True
+    else:
+        return False
+
+def contracted_verb(token):
+    doc = token.doc
+    if (token.lemma_ in ['be',
+                         'have',
+                         'do',
+                         'ai',
+                         'wo',
+                         'sha']
+         or token.pos_ == 'AUX') \
+        and token.i+1 < len(doc) \
+        and doc[token.i + 1].pos_ == 'PART' \
+        and doc[token.i + 1].text.lower() != 'not' \
+        and len([child for child in token.children]) == 0:
+         return True
+    else:
+        return False
+
+def contraction(token):
+    doc = token.doc
+    if token.lower_ in \
+       ['\'s',
+        '\'ve',
+        '\'d',
+        '\'ll',
+        '\'m',
+        '\'re',
+        'n\'t',
+        '\'cause',
+        'gotta',
+        'oughta',
+        'sposeta',
+        'gonna',
+        'couldnt',
+        'shouldnt',
+        'wouldnt',
+        'mightnt',
+        'woulda',
+        'didnt',
+        'doesnt',
+        'dont',
+        'werent',
+        'wasnt',
+        'aint',
+        'sposta',
+        'sposeta',
+        'ain\t',
+        'cain\'t']:
+         return True
+    elif (token.pos_ == 'PRON'
+          and token.i + 1 < len(doc)
+          and doc[token.i + 1].lower_ in ['\'s',
+                                          '\'re',
+                                          '\'d',
+                                         '\'m',
+                                         '\'ll',
+                                         '\'ve']):
+        return True
+    else:
+        return False
 
 loc_sverbs = ['contain',
               'cover',
@@ -2045,6 +2075,278 @@ def clausal_subject_or_complement(tok):
     else:
         return False
 
+
+def emphatic_adverb(token): 
+    if (token.dep_ == 'advmod'
+       and token.head.pos_ in ['ADJ', 'ADV', 'VERB']
+       and token.lemma_ in ['absolutely',
+                            'altogether',
+                            'completely',
+                            'enormously',
+                            'entirely',
+                            'awfully',
+                            'extremely',
+                            'fully',
+                            'greatly',
+                            'highly',
+                            'hugely',
+                            'intensely',
+                            'perfectly',
+                            'strongly',
+                            'thoroughly',
+                            'totally',
+                            'utterly',
+                            'very',
+                            'so',
+                            'too',
+                            'mainly',
+                            'pretty',
+                            'totally',
+                             'even']):
+        return True
+    else:
+        return False
+
+
+def emphatic_adjective(token):
+    if (token.dep_ == 'amod'
+        and token.head.pos_ in ['NOUN']
+        and token.lemma_ in ['huge'
+                             'gigantic',
+                             'enormous',
+                             'total',
+                             'complete'
+                             'extreme',
+                             'thorough',
+                             'perfect'
+                             ]):
+        return True
+    else:
+        return False
+
+
+def common_evaluation_adjective(token):
+    if token.pos_ == 'ADJ' \
+       and token.lemma_ in ['bad',
+                            'good',
+                            'better',
+                            'best',
+                            'grand',
+                            'happy',
+                            'crazy',
+                            'huge',
+                            'neat',
+                            'nice',
+                            'sick',
+                            'smart',
+                            'strange',
+                            'stupid',
+                            'weird',
+                            'wrong',
+                            'new',
+                            'awful',
+                            'mad',
+                            'funny',
+                            'glad']:
+        return True
+    else:
+        return False
+
+
+def common_hedge_word(token):
+    if token.pos_ == 'ADV' \
+       and token.lemma_ in ['just',
+                            'really',
+                            'mostly',
+                            'so',
+                            'actually',
+                            'basically',
+                            'probably',
+                            'awhile',
+                            'almost',
+                            'maybe',
+                            'still',
+                            'kinda',
+                            'kind',
+                            'sorta',
+                            'sort',
+                            'mostly',
+                            'more']:
+        return True
+    else:
+        return False
+
+
+def indefinite_comparison(token):
+    if token.lemma_ == 'like' and token.dep_ == 'prep' \
+       and token.head.lemma_ in ['something',
+                                 'stuff',
+                                 'thing']:
+        return True
+    else:
+        return False
+
+
+def absolute_degree(token):
+    if token.dep_ == 'amod' \
+       and token.head.pos_ == 'NOUN' \
+       and token.head.dep_ in ['attr', 'ccomp'] \
+       and token.lemma_ in ['real',
+                            'absolute',
+                            'complete',
+                            'perfect',
+                            'total',
+                            'utter']:
+        return True
+    else:
+        return False
+
+def elliptical_verb(token):
+    if (token.pos_ == 'VERB'
+       and (token._.vwp_argument
+            or token._.vwp_communication
+            or token._.vwp_cognitive)
+       and token.i + 1 < len(token.doc)
+       and token.nbor().text.lower() in ['so', 'not']):
+        return True
+    else:
+        return False
+
+
+def illocutionary_tag(token):
+    if ((token.tag_ == 'PRP' or token.pos_ == 'PROPN')
+        and token.head.lemma_ in ['say',
+                                  'see',
+                                  'look',
+                                  'tell',
+                                  'give',
+                                  'ask',
+                                  'remind',
+                                  'warn',
+                                  'promise',
+                                  'order',
+                                  'command',
+                                  'admit',
+                                  'confess',
+                                  'beg',
+                                  'suggest',
+                                  'recommend',
+                                  'advise',
+                                  'command',
+                                  'declare',
+                                  'forbid',
+                                  'refuse',
+                                  'thank',
+                                  'congratulate',
+                                  'praise',
+                                  'forgive',
+                                  'pardon']):
+        return True
+    else:
+        return False
+
+
+def private_mental_state_tag(token):
+    if token.text.lower() in ['i', 'you'] \
+       and token.dep_ == 'nsubj' \
+       and token.head.lemma_ in ['assume',
+                                 'believe',
+                                 'beleive',
+                                 'bet',
+                                 'care',
+                                 'consider',
+                                 'dislike',
+                                 'doubt',
+                                 'expect',
+                                 'fear',
+                                 'feel',
+                                 'figure',
+                                 'forget',
+                                 'gather',
+                                 'guess',
+                                 'hate',
+                                 'hear',
+                                 'hope',
+                                 'imagine',
+                                 'judge',
+                                 'know',
+                                 'like',
+                                 'look',
+                                 'love',
+                                 'mean',
+                                 'notice',
+                                 'plan',
+                                 'realize',
+                                 'recall',
+                                 'reckon',
+                                 'recognize',
+                                 'remember',
+                                 'see',
+                                 'sense',
+                                 'sound',
+                                 'suppose',
+                                 'suspect',
+                                 'think',
+                                 'understand',
+                                 'want',
+                                 'wish',
+                                 'wonder']:
+        return True
+    else:
+        return False
+
+
+other_conversational_vocabulary = ['guy',
+                                   'gal',
+                                  'kid',
+                                  'plus',
+                                  'stuff',
+                                  'thing',
+                                  'because',
+                                  'blah',
+                                  'etcetera',
+                                  'alright',
+                                  'hopefully',
+                                  'personally',
+                                  'anyhow',
+                                  'anyway',
+                                  'anyways',
+                                  'cuss',
+                                  'coulda',
+                                  'woulda',
+                                  'doncha',
+                                  'betcha']
+
+def other_conversational_idioms(token):
+    doc = token.doc
+    if (token.text.lower == 'thank'
+        and doc[token.i + 1].text.lower == 'you'
+        and doc[token.i+2].pos_ == 'PUNCT') \
+       or (token.text.lower == 'pardon'
+           and doc[token.i + 1].text.lower == 'me'
+           and doc[token.i + 2].pos_ == 'PUNCT') \
+       or (token.text.lower == 'after'
+           and doc[token.i + 1].text.lower == 'you'
+           and doc[token.i + 2].pos_ == 'PUNCT') \
+       or (token.text.lower == 'never'
+           and doc[token.i + 1].text.lower == 'mind'
+           and doc[token.i + 2].pos_ == 'PUNCT') \
+       or (token.text.lower == 'speak'
+           and doc[token.i + 1].text.lower == 'soon'
+           and doc[token.i + 2].pos_ == 'PUNCT') \
+       or (token.text.lower == 'know'
+           and doc[token.i + 1].text.lower == 'better') \
+       or (token.text.lower == 'shut'
+           and doc[token.i + 1].text.lower == 'up') \
+       or (token.text.lower == 'you'
+           and doc[token.i + 1].text.lower == 'wish'
+           and doc[token.i + 2].pos_ == 'PUNCT') \
+       or (token.text.lower == 'take'
+           and doc[token.i + 1].text.lower == 'care'
+           and doc[token.i + 2].pos_ == 'PUNCT'):
+        return True
+    else:
+        return False
 
 adjectival_predicates = ['attr', 'oprd', 'acomp', 'amod']
 
@@ -2240,6 +2542,101 @@ def is_float(str):
     except ValueError:
         return False 
 
+
+built_in_attributes = ['text',
+                       'text_with_ws',
+                       'orth_',
+                       'ent_type_',
+                       'ent_iob_',
+                       'ent_id',
+                       'lemma_',
+                       'norm_',
+                       'lower_',
+                       'is_alpha',
+                       'is_ascii',
+                       'is_digit',
+                       'is_lower',
+                       'is_upper',
+                       'is_title',
+                       'is_punct',
+                       'is_left_punct',
+                       'is_right_punct',
+                       'is_sent_start',
+                       'is_sent_end',
+                       'is_space',
+                       'is_bracket',
+                       'is_quote',
+                       'is_currency',
+                       'like_url',
+                       'like_num',
+                       'like_email',
+                       'is_oov',
+                       'is_stop',
+                       'pos_',
+                       'tag_',
+                       'dep_',
+                       'lang_',
+                       'idx']
+
+built_in_string_functions = ['text',
+                       'text_with_ws',
+                       'orth_',
+                       'ent_type_',
+                       'lemma_',
+                       'norm_',
+                       'lower_',
+                       'pos_',
+                       'tag_',
+                       'dep_',
+                       'lang_']
+
+built_in_flags = ['is_alpha',
+                  'is_ascii',
+                  'is_digit',
+                  'is_lower',
+                  'is_upper',
+                  'is_title',
+                  'is_punct',
+                  'is_left_punct',
+                  'is_right_punct',
+                  'is_sent_start',
+                  'is_sent_end',
+                  'is_space',
+                  'is_bracket',
+                  'is_quote',
+                  'is_currency',
+                  'like_url',
+                  'like_num',
+                  'like_email',
+                  'is_oov',
+                  'is_stop']
+
+docspan_extensions = ['sentence_types', 
+                      'transition_distances',
+                      'intersentence_cohesions',
+                      'sliding_window_cohesions',
+                      'corefChainInfo',
+                      'sentenceThemes',
+                      'transitions',
+                      'syntacticDepthsOfThemes',
+                      'syntacticDepthsOfRhemes',
+                      'main_cluster_spans',
+                      'vwp_statements_of_opinion',
+                      'vwp_statements_of_fact',
+                      'vwp_direct_speech_spans',
+                      'vwp_social_awareness',
+                      'vwp_propositional_attitudes',
+                      'main_ideas',
+                      'supporting_ideas',
+                      'supporting_details',
+                      'all_cluster_info'
+                      ]
+
+summary_functions = ['vwp_egocentric',
+                     'vwp_allocentric',
+                     'concrete_detail',
+                     'vwp_interactive'
+                    ]
 def newSpanEntry(name, left, right, hdoc, value):
     '''
         Create an entry in the format used for span indicator
@@ -2263,7 +2660,17 @@ def newSpanEntry(name, left, right, hdoc, value):
     entry['text'] = hdoc[left:right+1].text
     return entry
 
-def newTokenEntry(name, token, value):
+def newTokenEntry(name, token):
+    entry = {}
+    entry['text'] = token.text_with_ws
+    entry['offset'] = token.idx
+    entry['tokenIdx'] = token.i
+    entry['length'] = len(token.text_with_ws)
+    entry['name'] = name
+    entry['value'] = None
+    return entry
+    
+def setTokenEntry(name, token, value):
     '''
        Create an entry in the format used for token indicator 
        values by the AWE_Information function. The value needs
@@ -2276,13 +2683,7 @@ def newTokenEntry(name, token, value):
        wish to associate with this function, which depends on
        the specific indicator.
     '''
-    entry = {}
-    entry['text'] = token.text_with_ws
-    entry['offset'] = token.idx
-    entry['tokenIdx'] = token.i
-    entry['length'] = len(token.text_with_ws)
-    entry['name'] = name
-    entry['value'] = None
+    entry = newTokenEntry(name, token)
 
     if name in built_in_attributes:
         entry['value'] = getattr(token, name)
@@ -2712,15 +3113,19 @@ def AWE_Info(document: Doc,
         if not re.match('[A-Za-z0-9_]+', indicator):
             raise AWE_Workbench_Error(
                 'Invalid indicator ' + indicator)                   
-    
+
         if infoType == 'Doc':
             baseInfo = createSpanInfo(indicator,
                                       document)
             baseInfo = applySpanTransformations(transformations,
                                                 baseInfo)
+        elif infoType == 'Token' \
+           and indicator in summary_functions:
+            baseInfo = getattr(document._, indicator)
+
         elif infoType == 'Token':
             for token in document:
-                entry = newTokenEntry(indicator, token, None)
+                entry = setTokenEntry(indicator, token, None)
 
                 filterEntry = False
                 if type(filters) == list and len(filters)>0:

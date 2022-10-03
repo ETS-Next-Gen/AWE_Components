@@ -271,16 +271,16 @@ class LexicalFeatureDef(object):
              "getter": self.sentiword,
              "type": "token"},
             {"name": "abstract_trait",
-             "getter": self.abstract_trait2,
+             "getter": self.abstract_trait,
              "type": "token"},
             {"name": "deictic",
              "getter": self.deictic,
              "type": "token"},
             {"name": "animate",
-             "getter": self.animate,
+             "getter": self.is_animate,
              "type": "token"},
             {"name": "location",
-             "getter": self.isloc,
+             "getter": self.is_location,
              "type": "token"}
         ]
 
@@ -587,30 +587,6 @@ class LexicalFeatureDef(object):
         else:
             return 0
 
-    def abstract_trait2(self, token):
-        ''' For various purposes we need to know whether a noun
-            denotes an abstract trait
-        '''
-        if alphanum_word(token.text):
-            return self.abstract_trait(token)
-        else:
-            return None
-
-    def animate(self, token):
-        ''' For various purposes we need to know whether a noun is animate
-        '''
-        if alphanum_word(token.text):
-            return self.is_animate(token)
-        else:
-            return None
-
-    def isloc(self, token):
-        ''' For various purposes we need to know whether a noun is locative
-        '''
-        if alphanum_word(token.text):
-            return self.is_location(token)
-        else:
-            return None
 
     def token_vectors(self, document):
         ''' Extensions to allow us to get vectors for tokens in a spacy
@@ -972,7 +948,6 @@ class LexicalFeatureDef(object):
                    and (self.travelV[0] in wrdhyp or
                         self.travelV[0] == wrdsyns[0]):
                     return True
-
         # If a word is under the wordnet location, structure nodes, or
         # subject or object of location verbs like leave and arrive, it's
         # a location
@@ -1028,8 +1003,9 @@ class LexicalFeatureDef(object):
                 except Exception as e:
                     print('Wordnet error c while \
                            checking synsets for ', token, e)
-
+                    return False
         return False
+
 
     def deictic(self, token):
         """

@@ -294,8 +294,8 @@ class SyntaxAndDiscourseFeatDef(object):
                         document[loc]._.transition_category = 'temporal'
                         newEntry = \
                             newSpanEntry('transition',
-                            tok.i,
-                            tok.i + len(trans) - 1,
+                            tok.left_edge.i,
+                            tok.right_edge.i,
                             tok.doc,
                             'temporal')
                         transitionList.append(newEntry)

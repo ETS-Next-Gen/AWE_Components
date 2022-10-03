@@ -99,6 +99,31 @@ class ViewpointFeatureDef:
                 self.is_nominalization[token] = True
         self.morpholex = None
 
+    def markSlang(self, token):
+        # Use of slang or colloquial expressions
+        # If the first sense of the word in WordNet
+        # is classified as slang, colloquialism,
+        # vulgarism, ethnic slur, or disparagement,
+        # classify the word as spoken/interactive
+        try:
+            s = wordnet.synsets(token.orth_)
+            for synset in s:
+                domains = synset.usage_domains()
+                for dom in domains:
+                    if dom.lemma_names()[0] == 'slang' \
+                       or dom.lemma_names()[0] == 'colloquialism' \
+                       or dom.lemma_names()[0] == 'vulgarism' \
+                       or dom.lemma_names()[0] == 'ethnic_slur' \
+                       or dom.lemma_names()[0] == 'disparagement':
+                        # special cases where the colloquial label doesn't
+                        # apply to the dominant sense of the word
+                        if token.text.lower() not in ['think']:
+                            token._.usage = dom.lemma_names()[0]
+                    break
+                break
+        except Exception as e:
+            print('No Wordnet synset found for ', token, e)
+
     def __call__(self, doc):
         """
          Call the spacy component and process the document to register
@@ -107,20 +132,14 @@ class ViewpointFeatureDef:
         for token in doc:
             # Add attributes specified in the stance lexicon
             self.setLexiconAttributes(token, doc)
+            if emphatic_adverb(token) \
+               or emphatic_adjective(token) \
+               or elliptical_verb(token) \
+               or token.pos_ == 'INTJ':
+                token._.vwp_evaluation = True
 
-        # Add general rules for vwp_abstract, above and beyond
-        # any special cases set from the stancePerspectiveVoc
-        # dictionary
-        for token in doc:
-            # Low concreteness or in abstract traits
-            # or being a nominalization means an abstract word
-            if (token._.concreteness is not None
-                and token._.concreteness < 3.5) \
-               or token._.abstract_trait \
-               or token.text.lower() in self.is_nominalization:
-                token._.vwp_abstract = True
-
-        for token in doc:
+            # Mark slang, colloquialisms, etc.
+            self.markSlang(token)
 
             # Mark implicit subject relationships within each clause
             if isRoot(token):
@@ -130,19 +149,13 @@ class ViewpointFeatureDef:
             if token.pos_ == 'PRON':
                 antecedents = ResolveReference(token, doc)
                 token._.antecedents = antecedents
-
+                
         # Mark sentiment properly under scope of negation, using
         # sentiWord weights as base lexical sentiment polarities
         negation_tokens = self.propagateNegation(doc)
         for token in doc:
             if isRoot(token):
                 self.traverseTree(token, negation_tokens)
-
-        # Mark words that suggest a spoken/interactive style
-        self.spoken_register_markers(doc)
-
-        # Identify where tense shifts present tense to past or vice versa
-        self.tenseSequences(doc)
 
         # Find implied perspectives
         self.perspectiveMarker(doc)
@@ -152,22 +165,6 @@ class ViewpointFeatureDef:
         # Identify the perspectives
         # that apply to individual tokens in the text
         self.set_perspective_spans(doc, self.calculatePerspective)
-
-        if self.calculatePerspective:
-            # Identify references especially to animate characters
-            characterList, referenceList = self.nominalReferences(doc)
-            doc._.nominalReferences = (characterList, referenceList)
-
-            # Identify vocabulary that can be classified as providing concrete
-            # detail (say, to a narrative)
-            self.concreteDetails(doc)
-
-        # Mark explicitly cued cases of direct speech
-        # such as 'This is crazy,' Jenna remarked.
-        self.directSpeech(doc)
-        
-        self.egocentric(doc)
-        self.allocentric(doc)
 
         return doc
 
@@ -454,18 +451,108 @@ class ViewpointFeatureDef:
                                      ]._.vwp_communication))))):
             return True
 
+    # This set of attributes are dependent upon having called the
+    # directSpeech function which calculates direct speech spans.
+    # So we record the flag information on attributes with an extra
+    # underscore on them, and then define the function without the
+    # underscore in such a way that it makes sure directSpeech has
+    # been called before we check the underscore attribute. This
+    # enables us to call all of the direct speech attributes in a 
+    # 'just in time' fashion w/o having to do the relatively costly
+    # directSpeech calculations as part of the main parse.
+    def vwp_direct_speech_verb(self, token):
+          # make sure direct speech info has been set
+          self.directSpeech(token.doc)
+          return token._.vwp_direct_speech_verb_
+
+    def vwp_in_direct_speech(self, token):
+          # make sure direct speech info has been set
+          self.directSpeech(token.doc)
+          return token._.vwp_in_direct_speech_
+
+    def vwp_speaker(self, token):
+          # make sure direct speech info has been set
+          self.directSpeech(token.doc)
+          return token._.vwp_speaker_
+
+    def vwp_speaker_refs(self, token):
+          # make sure direct speech info has been set
+          self.directSpeech(token.doc)
+          return token._.vwp_speaker_refs_
+
+    def vwp_addressee(self, token):
+          # make sure direct speech info has been set
+          self.directSpeech(token.doc)
+          return token._.vwp_addressee_
+
+    def vwp_addressee_refs(self, token):
+          # make sure direct speech info has been set
+          self.directSpeech(token.doc)
+          return token._.vwp_addressee_refs_
+
+    def vwp_abstract(self, token):
+        if (token._.concreteness is not None
+            and token._.concreteness < 3.5) \
+           or token._.abstract_trait \
+           or token.text.lower() in self.is_nominalization:
+            return True
+        else:
+            return False
+
     def add_extensions(self):
         """
          Funcion to add extensions with getter functions that allow us
          to access the various lexicons this module is designed to support.
         """
         extensions = [
+            {"name": "vwp_direct_speech_spans",
+             "getter": self.directSpeech,
+             "type": "docspan"},
             {"name": "vwp_statements_of_fact",
              "getter": self.s_o_f,
              "type": "docspan"},
             {"name": "vwp_statements_of_opinion",
              "getter": self.statements_of_opinion,
              "type": "docspan"},
+            {"name": "vwp_egocentric",
+             "getter": self.egocentric,
+             "type": "docspan"},
+            {"name": "vwp_allocentric",
+             "getter": self.allocentric,
+             "type": "docspan"},
+            {"name": "concrete_detail",
+             "getter": self.concreteDetails,
+             "type": "docspan"},
+            {"name": "vwp_interactive",
+             "getter": self.spoken_register_markers,
+             "type": "docspan"},
+            {"name": "vwp_tense_changes",
+             "getter": self.tenseChanges,
+             "type": "docspan"},
+            {"name": "nominalReferences",
+             "getter": self.nominalReferences,
+             "type": "docspan"},
+            {"name": "vwp_abstract",
+             "getter": self.vwp_abstract,
+             "type": "token"},
+            {"name": "vwp_direct_speech_verb",
+             "getter": self.vwp_direct_speech_verb,
+             "type": "token"},
+            {"name": "vwp_in_direct_speech",
+             "getter": self.vwp_in_direct_speech,
+             "type": "token"},
+            {"name": "vwp_speaker",
+             "getter": self.vwp_speaker,
+             "type": "token"},
+            {"name": "vwp_speaker_refs",
+             "getter": self.vwp_speaker_refs,
+             "type": "token"},
+            {"name": "vwp_addressee",
+             "getter": self.vwp_addressee,
+             "type": "token"},
+            {"name": "vwp_addressee_refs",
+             "getter": self.vwp_addressee_refs,
+             "type": "token"},
             {"name": "vwp_explicit_argument",
              "getter": self.vwp_explicit_argument,
              "type": "token"},
@@ -536,17 +623,8 @@ class ViewpointFeatureDef:
                                 default=False,
                                 force=True)
 
-        if not Token.has_extension('vwp_egocentric'):
-            Token.set_extension('vwp_egocentric', default=False)
-
-        if not Token.has_extension('vwp_allocentric'):
-            Token.set_extension('vwp_allocentric', default=False)
-
         if not Token.has_extension('antecedents'):
             Token.set_extension('antecedents', default=None, force=True)
-
-        if not Token.has_extension('concrete_detail'):
-            Token.set_extension('concrete_detail', default=False, force=True)
 
         # Mapping of tokens to viewpoints for the whole document
         #
@@ -616,10 +694,6 @@ class ViewpointFeatureDef:
             Doc.set_extension('vwp_social_awareness',
                               default=None)
 
-        if not Doc.has_extension('concrete_details'):
-            Doc.set_extension('concrete_details',
-                              default=None)
-
         # SentiWord sentiment polarity ratings #
 
         # Rating of positive or negative sentiment
@@ -647,55 +721,48 @@ class ViewpointFeatureDef:
         if not Token.has_extension('vwp_interactive'):
             Token.set_extension('vwp_interactive', default=False)
 
-        if not Doc.has_extension('nominalReferences'):
-            Doc.set_extension('nominalReferences', default=None)
-
         ################################
         # Direct speech                #
         ################################
 
+        # List of spans that count as direct speech
+        if not Doc.has_extension('direct_speech_spans'):
+            Doc.set_extension('direct_speech_spans', default=None)
+
         # Flag that says whether a verb of saying (thinking, etc.)
         # is being used as direct speech ('John is happy, I think')
         # rather than as direct speech ('I think that John is happy.')
-        if not Token.has_extension('vwp_direct_speech'):
-            Token.set_extension('vwp_direct_speech',
+        if not Token.has_extension('vwp_direct_speech_verb_'):
+            Token.set_extension('vwp_direct_speech_verb_',
                                 default=False)
 
-        if not Token.has_extension('vwp_in_direct_speech'):
-            Token.set_extension('vwp_in_direct_speech',
+        if not Token.has_extension('vwp_in_direct_speech_'):
+            Token.set_extension('vwp_in_direct_speech_',
                                 default=False)
-
-        # List of spans that count as direct speech
-        if not Doc.has_extension('vwp_direct_speech_spans'):
-            Doc.set_extension('vwp_direct_speech_spans', default=[])
-        # version in the standardized format we use for doc level
-        # spans
-        if not Doc.has_extension('direct_speech_spans'):
-            Doc.set_extension('direct_speech_spans', default=[])
 
         # Flag identifying a nominal that identifies the
         # speaker referenced as 'I/me/my/mine' within a
         # particular stretch of direct speech
-        if not Token.has_extension('vwp_speaker'):
-            Token.set_extension('vwp_speaker', default=None)
+        if not Token.has_extension('vwp_speaker_'):
+            Token.set_extension('vwp_speaker_', default=None)
 
         # List of all tokens (nominals or first person pronouns)
         # that refer to a speaker defined within a particular
         # stretch of direct speech
-        if not Token.has_extension('vwp_speaker_refs'):
-            Token.set_extension('vwp_speaker_refs', default=None)
+        if not Token.has_extension('vwp_speaker_refs_'):
+            Token.set_extension('vwp_speaker_refs_', default=None)
 
         # Flag identifying a nominal (if present) that identifies
         # the speaker referenced as 'you/your/yours' within a
         # particular stretch of direct speech.
-        if not Token.has_extension('vwp_addressee'):
-            Token.set_extension('vwp_addressee', default=None)
+        if not Token.has_extension('vwp_addressee_'):
+            Token.set_extension('vwp_addressee_', default=None)
 
         # List of all tokens (nominals or first person pronouns)
         # that refer to an addressee defined within a particular
         # stretch of direct speech
-        if not Token.has_extension('vwp_addressee_refs'):
-            Token.set_extension('vwp_addressee_refs', default=None)
+        if not Token.has_extension('vwp_addressee_refs_'):
+            Token.set_extension('vwp_addressee_refs_', default=None)
 
         ##########################################################
         # Helper extensions for tracking viewpoint domains over  #
@@ -713,10 +780,6 @@ class ViewpointFeatureDef:
         # A token's WordNet usage domain.
         if not Token.has_extension('usage'):
             Token.set_extension('usage', default=None)
-
-        # Pointer to a token's governing subject.
-        if not Doc.has_extension('vwp_tense_changes'):
-            Doc.set_extension('vwp_tense_changes', default=None)
 
     def __init__(self, fast: bool, lang="en"):
         super().__init__()
@@ -1094,34 +1157,34 @@ class ViewpointFeatureDef:
         # which will be the object of the preposition
         # 'to' or the direct object
         if isRoot(target):
-            target._.vwp_addressee = []
+            target._.vwp_addressee_ = []
         for child2 in target.children:
             if child2.dep_ == 'dative' and child2._.animate:
-                target._.vwp_addressee = [child2.i]
-                tok._.vwp_addressee = [child2.i]
+                target._.vwp_addressee_ = [child2.i]
+                tok._.vwp_addressee_ = [child2.i]
                 if child2.i not in addressee_refs:
                     addressee_refs.append(child2.i)
                 break
             if child2.dep_ == 'dobj' and child2._.animate:
-                target._.vwp_addressee = [child2.i]
-                tok._.vwp_addressee = [child2.i]
+                target._.vwp_addressee_ = [child2.i]
+                tok._.vwp_addressee_ = [child2.i]
                 if child2.i not in addressee_refs:
                     addressee_refs.append(child2.i)
                 break
-            if target._.vwp_addressee is not None:
+            if target._.vwp_addressee_ is not None:
                 dativeNoun = getPrepObject(target, ['to'])
                 if dativeNoun is not None \
                    and dativeNoun._.animate:
-                    target._.vwp_addressee = [dativeNoun.i]
-                    dativeNoun._.vwp_addressee = [dativeNoun.i]
+                    target._.vwp_addressee_ = [dativeNoun.i]
+                    dativeNoun._.vwp_addressee_ = [dativeNoun.i]
                     if child2.i not in addressee_refs:
                         addressee_refs.append(child2.i)
                         break
                 dativeNoun = getPrepObject(target, ['at'])
                 if dativeNoun is not None \
                    and dativeNoun._.animate:
-                    target._.vwp_addressee = [dativeNoun.i]
-                    dativeNoun._.vwp_addressee = [dativeNoun.i]
+                    target._.vwp_addressee_ = [dativeNoun.i]
+                    dativeNoun._.vwp_addressee_ = [dativeNoun.i]
                     if child2.i not in addressee_refs:
                         addressee_refs.append(child2.i)
                     break
@@ -1135,6 +1198,10 @@ class ViewpointFeatureDef:
          of direct rather than indirect speech. E.g., 'John said,
          I am happy.'
         """
+        
+        if hdoc._.direct_speech_spans is not None:
+            return hdoc._.direct_speech_spans
+
         lastRoot = None
         currentRoot = None
         speaker_refs = []
@@ -1230,7 +1297,7 @@ class ViewpointFeatureDef:
                             if thisDom in hdoc[thisDom._.governing_subject
                                                ].subtree:
                                 thisDom = hdoc[thisDom._.governing_subject]
-                            thisDom._.vwp_speaker_refs = speaker_refs
+                            thisDom._.vwp_speaker_refs_ = speaker_refs
 
                             # Mark the addressee for the local domain,
                             # which will be the object of the preposition
@@ -1239,9 +1306,9 @@ class ViewpointFeatureDef:
                                 self.markAddresseeRefs(thisDom,
                                                        tok,
                                                        addressee_refs)
-                            thisDom._.vwp_addressee_refs = addressee_refs
+                            thisDom._.vwp_addressee_refs_ = addressee_refs
 
-                        thisDom._.vwp_direct_speech = True
+                        thisDom._.vwp_direct_speech_verb_ = True
                         break
 
                     # we need punctuation BETWEEN the head and
@@ -1292,7 +1359,10 @@ class ViewpointFeatureDef:
                                 or subj._.vwp_sourcetext
                                 or subj.text.lower() in ['they', 'it']
                                 or subj.pos_ == 'PROPN'):
-                            target._.vwp_direct_speech = True
+                            subj._.vwp_in_direct_speech_ = True
+                            for child in subj.subtree:
+                                child._.vwp_in_direct_speech_ = True
+                            target._.vwp_direct_speech_verb_ = True
                         else:
                             continue
 
@@ -1303,24 +1373,24 @@ class ViewpointFeatureDef:
 
                         # Record the speaker as being the subject
                         if subj is not None:
-                            target._.vwp_speaker = [subj.i]
-                            tok._.vwp_speaker = [subj.i]
+                            target._.vwp_speaker_ = [subj.i]
+                            tok._.vwp_speaker_ = [subj.i]
                             if subj.i not in speaker_refs:
                                 speaker_refs.append(subj.i)
                             subjAnt = [hdoc[loc] for loc
                                        in ResolveReference(subj, hdoc)]
                             if subjAnt is not None:
                                 for ref in subjAnt:
-                                    if ref.i not in target._.vwp_speaker:
-                                        target._.vwp_speaker.append(ref.i)
-                                    if ref.i not in tok._.vwp_speaker:
-                                        tok._.vwp_speaker.append(ref.i)
+                                    if ref.i not in target._.vwp_speaker_:
+                                        target._.vwp_speaker_.append(ref.i)
+                                    if ref.i not in tok._.vwp_speaker_:
+                                        tok._.vwp_speaker_.append(ref.i)
                                     if ref.i not in speaker_refs:
                                         speaker_refs.append(ref.i)
 
                         elif isRoot(tok.head):
-                            target._.vwp_speaker = []
-                            tok._.vwp_speaker = []
+                            target._.vwp_speaker_ = []
+                            tok._.vwp_speaker_ = []
 
                         # Mark the addressee for the local domain,
                         # which will be the object of the preposition
@@ -1339,12 +1409,12 @@ class ViewpointFeatureDef:
                                 if descendant.text.lower() in \
                                    first_person_pronouns \
                                    and len(list(descendant.children)) == 0:
-                                    descendant._.vwp_speaker = \
-                                        target._.vwp_speaker
+                                    descendant._.vwp_speaker_ = \
+                                        target._.vwp_speaker_
                                     if descendant.i not in speaker_refs \
                                        and descendant.i not in addressee_refs:
                                         speaker_refs.append(descendant.i)
-                        target._.vwp_speaker_refs = speaker_refs
+                        target._.vwp_speaker_refs_ = speaker_refs
 
                         # direct speech should be treated as quoted even if
                         # it isn't in quotation marks, as in 'This is good,
@@ -1360,11 +1430,11 @@ class ViewpointFeatureDef:
                                     and descendant.i not in speaker_refs) \
                                    or (descendant.dep_ == 'vocative'
                                        and descendant.pos_ == 'NOUN'):
-                                    descendant._.vwp_addressee = \
-                                        tok.head._.vwp_addressee
+                                    descendant._.vwp_addressee_ = \
+                                        tok.head._.vwp_addressee_
                                     if descendant.i not in addressee_refs:
                                         addressee_refs.append(descendant.i)
-                        target._.vwp_addressee_refs = addressee_refs
+                        target._.vwp_addressee_refs_ = addressee_refs
                         break
 
             if (currentRoot is not None
@@ -1377,72 +1447,72 @@ class ViewpointFeatureDef:
                           or currentRoot._.vwp_argument))):
                 speaker_refs = []
                 addressee_refs = []
-                currentRoot._.vwp_direct_speech = True
+                currentRoot._.vwp_direct_speech_verb_ = True
                 for child in tok.children:
                     if child.dep_ == 'dobj':
                         subj = child
-                        currentRoot._.vwp_direct_speech = True
-                        currentRoot._.vwp_addressee = []
-                        currentRoot._.vwp_speaker = [subj.i]
-                        child._.vwp_speaker = [subj.i]
+                        currentRoot._.vwp_direct_speech_verb_ = True
+                        currentRoot._.vwp_addressee_ = []
+                        currentRoot._.vwp_speaker_ = [subj.i]
+                        child._.vwp_speaker_ = [subj.i]
                         if subj.i not in speaker_refs:
                             speaker_refs.append(subj.i)
                         subjAnt = [loc for loc
                                    in ResolveReference(subj, hdoc)]
                         if subjAnt is not None:
                             for ref in subjAnt:
-                                if ref not in currentRoot._.vwp_speaker:
-                                    currentRoot._.vwp_speaker.append(ref)
-                                if ref not in child._.vwp_speaker:
-                                    child._.vwp_speaker.append(ref)
+                                if ref not in currentRoot._.vwp_speaker_:
+                                    currentRoot._.vwp_speaker_.append(ref)
+                                if ref not in child._.vwp_speaker_:
+                                    child._.vwp_speaker_.append(ref)
                                 if ref not in speaker_refs:
                                     speaker_refs.append(ref)
                         for descendant in lastRoot.subtree:
                             if descendant.text.lower() in \
                                first_person_pronouns:
-                                descendant._.vwp_speaker = \
-                                    lastRoot._.vwp_speaker
+                                descendant._.vwp_speaker_ = \
+                                    lastRoot._.vwp_speaker_
                                 if descendant.i not in speaker_refs:
                                     speaker_refs.append(descendant.i)
                             if descendant.text.lower() in \
                                second_person_pronouns \
                                or (descendant.dep_ == 'vocative'
                                    and descendant.pos_ == 'NOUN'):
-                                if descendant._.vwp_addressee is None:
-                                    descendant._.vwp_addressee = []
-                                descendant._.vwp_addressee.append(
+                                if descendant._.vwp_addressee_ is None:
+                                    descendant._.vwp_addressee_ = []
+                                descendant._.vwp_addressee_.append(
                                     descendant.i)
                                 if descendant.i not in speaker_refs:
                                     addressee_refs.append(descendant.i)
                         for addressee in addressee_refs:
-                            if lastRoot._.vwp_addressee_refs is not None \
+                            if lastRoot._.vwp_addressee_refs_ is not None \
                                 and addressee not in \
-                                    lastRoot._.vwp_addressee_refs:
+                                    lastRoot._.vwp_addressee_refs_:
                                 if addressee not in \
-                                   lastRoot._.vwp_addressee_refs:
-                                    lastRoot._.vwp_addressee_refs.append(
+                                   lastRoot._.vwp_addressee_refs_:
+                                    lastRoot._.vwp_addressee_refs_.append(
                                        addressee)
                             else:
                                 if addressee not in \
-                                   lastRoot._.vwp_addressee_refs:
-                                    lastRoot._.vwp_addressee_refs = \
+                                   lastRoot._.vwp_addressee_refs_:
+                                    lastRoot._.vwp_addressee_refs_ = \
                                         [addressee]
                         for speaker in speaker_refs:
-                            if lastRoot._.vwp_speaker_refs is not None \
+                            if lastRoot._.vwp_speaker_refs_ is not None \
                                 and speaker not in \
-                                    lastRoot._.vwp_speaker_refs:
+                                    lastRoot._.vwp_speaker_refs_:
                                 if speaker not in \
-                                   lastRoot._.vwp_speaker_refs:
-                                    lastRoot._.vwp_speaker_refs.append(
+                                   lastRoot._.vwp_speaker_refs_:
+                                    lastRoot._.vwp_speaker_refs_.append(
                                         speaker)
                             else:
                                 if speaker not in \
-                                   lastRoot._.vwp_speaker_refs:
-                                    lastRoot._.vwp_speaker_refs = [speaker]
-                        currentRoot._.vwp_speaker = speaker_refs
-                        currentRoot._.vwp_addressee = addressee_refs
-                        currentRoot._.vwp_speaker_refs = speaker_refs
-                        currentRoot._.vwp_addressee_refs = addressee_refs
+                                   lastRoot._.vwp_speaker_refs_:
+                                    lastRoot._.vwp_speaker_refs_ = [speaker]
+                        currentRoot._.vwp_speaker_ = speaker_refs
+                        currentRoot._.vwp_addressee_ = addressee_refs
+                        currentRoot._.vwp_speaker_refs_ = speaker_refs
+                        currentRoot._.vwp_addressee_refs_ = addressee_refs
                         break
 
             # A quotation following direct speech without identifier
@@ -1453,23 +1523,23 @@ class ViewpointFeatureDef:
             if currentRoot is not None \
                and lastRoot is not None \
                and currentRoot._.vwp_quoted \
-               and lastRoot._.vwp_direct_speech:
+               and lastRoot._.vwp_direct_speech_verb_:
 
-                currentRoot._.vwp_direct_speech = True
-                if lastRoot._.vwp_speaker is not None \
-                   and len(lastRoot._.vwp_speaker) > 0:
-                    currentRoot._.vwp_speaker = lastRoot._.vwp_speaker
-                if lastRoot._.vwp_addressee is not None \
-                   and len(lastRoot._.vwp_addressee) > 0:
-                    currentRoot._.vwp_addressee = lastRoot._.vwp_addressee
-                if lastRoot._.vwp_speaker_refs is not None \
-                   and len(lastRoot._.vwp_speaker_refs) > 0:
-                    for item in lastRoot._.vwp_speaker_refs:
+                currentRoot._.vwp_direct_speech_verb_ = True
+                if lastRoot._.vwp_speaker_ is not None \
+                   and len(lastRoot._.vwp_speaker_) > 0:
+                    currentRoot._.vwp_speaker_ = lastRoot._.vwp_speaker_
+                if lastRoot._.vwp_addressee_ is not None \
+                   and len(lastRoot._.vwp_addressee_) > 0:
+                    currentRoot._.vwp_addressee_ = lastRoot._.vwp_addressee_
+                if lastRoot._.vwp_speaker_refs_ is not None \
+                   and len(lastRoot._.vwp_speaker_refs_) > 0:
+                    for item in lastRoot._.vwp_speaker_refs_:
                         if item not in speaker_refs:
                             speaker_refs.append(item)
-                if lastRoot._.vwp_addressee_refs is not None \
-                   and len(lastRoot._.vwp_addressee_refs) > 0:
-                    for item in lastRoot._.vwp_addressee_refs:
+                if lastRoot._.vwp_addressee_refs_ is not None \
+                   and len(lastRoot._.vwp_addressee_refs_) > 0:
+                    for item in lastRoot._.vwp_addressee_refs_:
                         if item not in addressee_refs:
                             addressee_refs.append(item)
                 for descendant in tok.subtree:
@@ -1477,31 +1547,31 @@ class ViewpointFeatureDef:
                     # TO-DO: add block to prevent inheritance
                     # for embedded direct speech
                     if descendant.text.lower() in first_person_pronouns:
-                        descendant._.vwp_speaker = speaker_refs
+                        descendant._.vwp_speaker_ = speaker_refs
                         if descendant.i not in speaker_refs:
                             speaker_refs.append(descendant.i)
                     if descendant.text.lower() in second_person_pronouns \
                        or (descendant.dep_ == 'vocative'
                            and descendent.pos_ == 'NOUN'):
-                        descendant._.vwp_addressee = lastRoot._.vwp_addressee
+                        descendant._.vwp_addressee_ = lastRoot._.vwp_addressee_
                         if descendant.i not in addressee_refs:
                             addressee_refs.append(descendant.i)
-                currentRoot._.vwp_speaker_refs = speaker_refs
-                currentRoot._.vwp_addressee_refs = addressee_refs
-                tok.head._.vwp_addressee_refs = addressee_refs
-                tok.head._.vwp_speaker_refs = speaker_refs
+                currentRoot._.vwp_speaker_refs_ = speaker_refs
+                currentRoot._.vwp_addressee_refs_ = addressee_refs
+                tok.head._.vwp_addressee_refs_ = addressee_refs
+                tok.head._.vwp_speaker_refs_ = speaker_refs
 
             # Quoted text that contains first or second person
             # pronouns can be presumed to be direct speech
             if (isRoot(tok) and tok._.vwp_quoted) \
                or (tok._.vwp_quoted and '\n' in tok.head.text):
-                if tok._.vwp_speaker is None:
-                    tok._.vwp_speaker = []
-                if tok._.vwp_addressee is None:
-                    tok._.vwp_addressee = []
+                if tok._.vwp_speaker_ is None:
+                    tok._.vwp_speaker_ = []
+                if tok._.vwp_addressee_ is None:
+                    tok._.vwp_addressee_ = []
 
                 if len(speaker_refs) > 0:
-                    tok._.vwp_direct_speech = True
+                    tok._.vwp_direct_speech_verb_ = True
 
                 subtree = tok.subtree
                 if isRoot(tok):
@@ -1511,25 +1581,25 @@ class ViewpointFeatureDef:
                     if descendant.text.lower() in first_person_pronouns:
                         if descendant.i not in speaker_refs:
                             speaker_refs.append(descendant.i)
-                        if descendant.i not in tok._.vwp_speaker:
-                            tok._.vwp_speaker.append(descendant.i)
-                        tok._.vwp_direct_speech = True
-                        tok._.vwp_speaker = [descendant.i]
-                        tok._.vwp_speaker_refs = speaker_refs
+                        if descendant.i not in tok._.vwp_speaker_:
+                            tok._.vwp_speaker_.append(descendant.i)
+                        tok._.vwp_direct_speech_verb_ = True
+                        tok._.vwp_speaker_ = [descendant.i]
+                        tok._.vwp_speaker_refs_ = speaker_refs
                     if descendant.text.lower() in second_person_pronouns \
                        or (descendant.dep_ == 'vocative'
                            and descendant.pos_ == 'NOUN'):
                         if descendant.i not in addressee_refs:
                             addressee_refs.append(descendant.i)
-                        if descendant.i not in tok._.vwp_addressee:
-                            if descendant.i not in tok._.vwp_addressee:
-                                tok._.vwp_addressee.append(descendant.i)
-                        tok._.vwp_direct_speech = True
-                        tok._.vwp_addressee = [descendant.i]
-                        tok._.vwp_addressee_refs = addressee_refs
+                        if descendant.i not in tok._.vwp_addressee_:
+                            if descendant.i not in tok._.vwp_addressee_:
+                                tok._.vwp_addressee_.append(descendant.i)
+                        tok._.vwp_direct_speech_verb_ = True
+                        tok._.vwp_addressee_ = [descendant.i]
+                        tok._.vwp_addressee_refs_ = addressee_refs
 
-                currentRoot._.vwp_speaker_refs = speaker_refs
-                currentRoot._.vwp_addressee_refs = addressee_refs
+                currentRoot._.vwp_speaker_refs_ = speaker_refs
+                currentRoot._.vwp_addressee_refs_ = addressee_refs
 
                 # TO-DO: Text with no specified viewpoint following
                 # direct speech (including internal mental state predicates
@@ -1541,6 +1611,7 @@ class ViewpointFeatureDef:
                 # speaker in a smaller text scope.
 
         self.set_direct_speech_spans(hdoc)
+        return hdoc._.direct_speech_spans
 
     def perspectiveMarker(self, hdoc):
         """
@@ -2319,11 +2390,12 @@ class ViewpointFeatureDef:
           the start of the direct speech segment, and the end of
           the direct speech segment.
         """
+
         dspans = []
         for token in hdoc:
-            if token._.vwp_direct_speech:
-                speaker = token._.vwp_speaker_refs
-                addressee = token._.vwp_addressee_refs
+            if token._.vwp_direct_speech_verb_:
+                speaker = token._.vwp_speaker_refs_
+                addressee = token._.vwp_addressee_refs_
                 left = token.left_edge
                 right = token.right_edge
 
@@ -2379,9 +2451,14 @@ class ViewpointFeatureDef:
                     if item not in lastSpeaker:
                         included = False
                 if included:
-                    newSpans[len(newSpans) - 1][2].insert(0,
-                                                          [span[2],
-                                                              span[3]])
+                    if span[2] <= newSpans[len(newSpans) - 1][2][0][0] \
+                       and span[3] >= newSpans[len(newSpans) - 1][2][0][1]:
+                        newSpans[len(newSpans) - 1][2][0][0] = span[2]
+                        newSpans[len(newSpans) - 1][2][0][1] = span[3]
+                    else:
+                        newSpans[len(newSpans) - 1][2].insert(0,
+                                                              [span[2],
+                                                               span[3]])
                 else:
                     newItem[0] = list(sorted(span[0]))
                     newItem[1] = list(sorted(span[1]))
@@ -2393,9 +2470,10 @@ class ViewpointFeatureDef:
         
         newList = []
         for record in reversed(newSpans):
-            newList.append(record)
+                newList.append(record)
 
         # add the token level flag and do the standard format output       
+        hdoc._.direct_speech_spans = []
         for span in newList:
             (speaker, addressee, subspans) = span
             for subspan in subspans:
@@ -2411,8 +2489,8 @@ class ViewpointFeatureDef:
                 leftEdge = loc[0]
                 rightEdge = loc[1]
                 for item in hdoc[leftEdge:rightEdge]:
-                    if item._.vwp_quoted:
-                        item._.vwp_in_direct_speech = True
+                    item._.vwp_in_direct_speech_ = True
+        return hdoc._.direct_speech_spans
 
     def egocentric(self, hdoc):
         """
@@ -2424,6 +2502,7 @@ class ViewpointFeatureDef:
         """
         count = 0
         domainList = []
+        entityInfo = []
         for token in hdoc:
             if (token._.vwp_evaluation or token._.vwp_hedge) \
                and len(token._.vwp_perspective) == 0 \
@@ -2437,13 +2516,20 @@ class ViewpointFeatureDef:
                          not in domainList)):
                     domainList.append(self.getHeadDomain(token).i)
         for token in hdoc:
+            entry = newTokenEntry('egocentric', token)
             if self.getHeadDomain(token).i in domainList:
-                token._.vwp_egocentric = True
+                entry['value'] = True
+            else:
+                entry['value'] = False
+            entityInfo.append(entry)
+        return entityInfo
 
     def allocentric(self, doc):
         count = 0
         domainList = []
+        entityInfo = []
         for token in doc:
+            entry = newTokenEntry('egocentric', token)
             include = True
             if len(token._.vwp_perspective) == 0:
                 include = False
@@ -2456,7 +2542,11 @@ class ViewpointFeatureDef:
                            in second_person_pronouns):
                         include = False
             if include:
-                token._.vwp_allocentric = True
+                entry['value'] = True
+            else:
+                entry['value'] = False
+            entityInfo.append(entry)
+        return entityInfo
 
     def set_perspective_spans(self, hdoc, calculatePerspective=True):
         """
@@ -4798,100 +4888,27 @@ class ViewpointFeatureDef:
     def spoken_register_markers(self, doc: Doc):
         # TBD: develop a parallel marker of formal/written
         # register
+        interactiveStatus = []
         for token in doc:
+            entry = newTokenEntry('interactive', token)
+            entry['value'] = False
+            entry2 = None
 
-            # Use of slang or colloquial expressions
-            # If the first sense of the word in WordNet
-            # is classified as slang, colloquialism,
-            # vulgarism, ethnic slur, or disparagement,
-            # classify the word as spoken/interactive
-            try:
-                s = wordnet.synsets(token.orth_)
-                for synset in s:
-                    domains = synset.usage_domains()
-                    for dom in domains:
-                        if dom.lemma_names()[0] == 'slang' \
-                           or dom.lemma_names()[0] == 'colloquialism' \
-                           or dom.lemma_names()[0] == 'vulgarism' \
-                           or dom.lemma_names()[0] == 'ethnic_slur' \
-                           or dom.lemma_names()[0] == 'disparagement':
-                            # special cases where the colloquial label doesn't
-                            # apply to the dominant sense of the word
-                            if token.text.lower() not in ['think']:
-                                token._.usage = dom.lemma_names()[0]
-                        break
-                    break
-            except Exception as e:
-                print('No Wordnet synset found for ', token, e)
+            # colloquial usage/slang
+            if token._.usage is not None:
+                entry['value'] = True               
 
-            # Use of first person pronouns
             if token.text.lower() in first_person_pronouns:
-                token._.vwp_interactive = True
+                entry['value'] = True               
 
-            # Use of second person pronouns
             elif token.text.lower() in second_person_pronouns:
-                token._.vwp_interactive = True
+                entry['value'] = True               
 
-            # Use of wh-questions
-            elif (token.dep_ in ['WP', 'WRB']
-                  and token.head.dep_ not in
-                  ['relcl',
-                   'ccomp',
-                   'csubj',
-                   'csubjpass',
-                   'xcomp',
-                   'acl']):
-                token._.vwp_interactive = True
-            elif (token.dep_ == 'WP$'
-                  and token.head.head.dep_ not in
-                  ['relcl',
-                   'ccomp',
-                   'csubj',
-                   'csubjpass',
-                   'xcomp',
-                   'acl']):
-                token._.vwp_interactive = True
+            elif wh_question_word(token):
+                entry['value'] = True               
 
-            # Use of contractions
-            elif (token.text in
-                  ['\'s',
-                   '\'ve',
-                   '\'d',
-                   '\'ll',
-                   '\'m',
-                   '\'re',
-                   'n\'t',
-                   '\'cause',
-                   'gotta',
-                   'oughta',
-                   'sposeta',
-                   'gonna',
-                   'couldnt',
-                   'shouldnt',
-                   'wouldnt',
-                   'mightnt',
-                   'woulda',
-                   'didnt',
-                   'doesnt',
-                   'dont',
-                   'werent',
-                   'wasnt',
-                   'aint',
-                   'sposta',
-                   'sposeta',
-                   'ain\t',
-                   'cain\'t']):
-                token._.vwp_interactive = True
-
-            elif (token.pos_ == 'PRON'
-                  and token.i + 1 < len(doc)
-                  and doc[token.i + 1].text in ['\'s',
-                                                '\'re',
-                                                '\'d',
-                                                '\'m',
-                                                '\'ll',
-                                                '\'ve']):
-                token._.vwp_interactive = True
+            elif contraction(token):
+                entry['value'] = True               
 
             # Preposition stranding
             elif (token.dep_ == 'IN'
@@ -4899,345 +4916,113 @@ class ViewpointFeatureDef:
                                      for child in token.children]
                   and 'prep' not in [child.dep_
                                      for child in token.children]):
-                token._.vwp_interactive = True
+                entry['value'] = True               
 
             # Anaphoric use of auxiliaries
             elif (token.pos == 'AUX'
                   and 'VERB' not in [child.pos_ for child
                                      in token.head.children]):
-                token._.vwp_interactive = True
+                entry['value'] = True               
 
-            # pronominal contractives
-            elif ((token.lemma_ in ['be',
-                                    'have',
-                                    'do',
-                                    'ai',
-                                    'wo',
-                                    'sha']
-                  or token.pos_ == 'AUX')
-                  and token.i+1 < len(doc)
-                  and doc[token.i + 1].pos_ == 'PART'
-                  and doc[token.i + 1].text.lower() != 'not'
-                  and len([child for child in token.children]) == 0):
-                token._.vwp_interactive = True
+            elif contracted_verb(token):
+                entry['value'] = True               
 
-            # Use of demonstrative articles and pronouns
-            elif (token.text.lower() in ['here',
-                                         'there',
-                                         'this',
-                                         'that',
-                                         'these',
-                                         'those']
+            elif (token.lower_ in demonstratives
                   and token.dep_ != 'mark'
                   and token.tag_ != 'WDT'
                   and token.pos_ in ['PRON', 'DET']):
-                token._.vwp_interactive = True
+                entry['value'] = True               
 
-            # Use of indefinite pronouns
-            elif (token.text.lower() in ['anyone',
-                                         'anybody',
-                                         'anything',
-                                         'someone',
-                                         'somebody',
-                                         'something',
-                                         'nobody',
-                                         'nothing',
-                                         'everyone',
-                                         'everybody',
-                                         'everything']
-                  and token.pos_ == 'PRON'):
-                token._.vwp_interactive = True
+            elif token.lower_ in indefinite_pronoun:
+                entry['value'] = True               
 
             # Use of a conjunction to start a main clause
             elif token.is_sent_start and token.tag_ == 'CCONJ':
+                entry['value'] = True               
+
+            elif illocutionary_tag(token):
+                entry['value'] = True               
+
+            elif emphatic_adverb(token):
+                entry['value'] = True               
                 token._.vwp_interactive = True
 
-            # Use of common verbs of saying with a personal pronoun subject
-            elif ((token.tag_ == 'PRP' or token.pos_ == 'PROPN')
-                  and token.head.lemma_ in ['say',
-                                            'see',
-                                            'look',
-                                            'tell',
-                                            'give',
-                                            'ask',
-                                            'remind',
-                                            'warn',
-                                            'promise',
-                                            'order',
-                                            'command',
-                                            'admit',
-                                            'confess',
-                                            'beg',
-                                            'suggest',
-                                            'recommend',
-                                            'advise',
-                                            'command',
-                                            'declare',
-                                            'forbid',
-                                            'refuse',
-                                            'thank',
-                                            'congratulate',
-                                            'praise',
-                                            'forgive',
-                                            'pardon']):
+            elif emphatic_adjective(token):
+                entry['value'] = True               
                 token._.vwp_interactive = True
 
-            # Use of common emphatic adverbs
-            elif (token.dep_ == 'advmod'
-                  and token.head.pos_ in ['ADJ', 'ADV', 'VERB']
-                  and token.lemma_ in ['absolutely',
-                                       'altogether',
-                                       'completely',
-                                       'enormously',
-                                       'entirely',
-                                       'awfully',
-                                       'extremely',
-                                       'fully',
-                                       'greatly',
-                                       'highly',
-                                       'hugely',
-                                       'intensely',
-                                       'perfectly',
-                                       'strongly',
-                                       'thoroughly',
-                                       'totally',
-                                       'utterly',
-                                       'very',
-                                       'so',
-                                       'too',
-                                       'mainly',
-                                       'pretty',
-                                       'totally',
-                                       'even']):
-                token._.vwp_interactive = True
-                token._.vwp_evaluation = True
+            elif common_evaluation_adjective(token):
+                entry['value'] = True               
 
-            # Use of common emphatic adverbs
-            elif (token.dep_ == 'amod'
-                  and token.head.pos_ in ['NOUN']
-                  and token.lemma_ in ['huge'
-                                       'gigantic',
-                                       'enormous',
-                                       'total',
-                                       'complete'
-                                       'extreme',
-                                       'thorough',
-                                       'perfect'
-                                       ]):
-                token._.vwp_interactive = True
-                token._.vwp_evaluation = True
+            elif common_hedge_word(token):
+                entry['value'] = True               
 
-            # Use of verb general evaluation adjectives
-            elif (token.pos_ == 'ADJ'
-                  and token.lemma_ in ['bad',
-                                       'good',
-                                       'better',
-                                       'best',
-                                       'grand',
-                                       'happy',
-                                       'crazy',
-                                       'huge',
-                                       'neat',
-                                       'nice',
-                                       'sick',
-                                       'smart',
-                                       'strange',
-                                       'stupid',
-                                       'weird',
-                                       'wrong',
-                                       'new',
-                                       'awful',
-                                       'mad',
-                                       'funny',
-                                       'glad']):
-                # Use of these kinds of expressions
-                # is also evaluative
-                token._.vwp_interactive = True
+            elif elliptical_verb(token):
+                entry['value'] = True               
+                entry2 = newTokenEntry('interactive', token.nbor())
+                entry2['value'] = True
 
-            # Use of common hedge words and phrases
-            elif (token.pos_ == 'ADV'
-                  and token.lemma_ in ['just',
-                                       'really',
-                                       'mostly',
-                                       'so',
-                                       'actually',
-                                       'basically',
-                                       'probably',
-                                       'awhile',
-                                       'almost',
-                                       'maybe',
-                                       'still',
-                                       'kinda',
-                                       'kind',
-                                       'sorta',
-                                       'sort',
-                                       'mostly',
-                                       'more']):
-                token._.vwp_interactive = True
-            # Expressions like think so, think not
-            elif (token.pos_ == 'VERB'
-                  and (token._.vwp_argument
-                       or token._.vwp_communication
-                       or token._.vwp_cognitive)
-                  and token.i + 1 < len(token.doc)
-                  and token.nbor().text.lower() in ['so', 'not']):
-                token._.vwp_interactive = True
-                token.nbor()._.vwp_interactive = True
-                # Use of this kind of elliptical construction
-                # is also evaluative
-                token.nbor()._.vwp_evaluation = True
             elif (token.lemma_ in ['lot', 'bit', 'while', 'ways']
                   and token.dep_ == 'npadvmod'):
-                token._.vwp_interactive = True
+                entry['value'] = True               
+
+
             elif token.pos_ == 'DET' and token.dep_ == 'advmod':
                 # expressions like 'all in all'
-                token._.vwp_interactive = True
+                entry['value'] = True               
+
             elif token.dep_ == 'predet':
                 # predeterminers like 'such a', 'what', or 'quite'
-                token._.vwp_interactive = True
-            elif (token.lemma_ == 'like' and token.dep_ == 'prep'
-                  and token.head.lemma_ in ['something',
-                                            'stuff',
-                                            'thing']):
-                # expressions like 'stuff like that'
-                token._.vwp_interactive = True
-            elif (token.dep_ == 'amod'
-                  and token.head.pos_ == 'NOUN'
-                  and token.head.dep_ in ['attr', 'ccomp']
-                  and token.lemma_ in ['real',
-                                       'absolute',
-                                       'complete',
-                                       'perfect',
-                                       'total',
-                                       'utter']):
-                # expressions like 'a complete idiot'
-                token._.vwp_interactive = True
+                entry['value'] = True               
+
+            elif indefinite_comparison(token):
+                entry['value'] = True               
+
+            elif absolute_degree(token):
+                entry['value'] = True               
+
             elif (token.lemma_ == 'old'
                   and self.getFirstChild(token.head) is not None
                   and 'any' == self.getFirstChild(token.head).lemma_):
-                token._.vwp_interactive = True
+                  # any old
+                entry['value'] = True               
+
             elif (token.lemma_ in ['bunch', 'couple', 'lot']
                   and self.getFirstChild(token) is not None
                   and 'of' == self.getFirstChild(token).lemma_):
-                token._.vwp_interactive = True
+                entry['value'] = True               
 
             # Use of common private mental state verbs with
             # first or second person pronouns
-            elif (token.text.lower() in ['i', 'you']
-                  and token.dep_ == 'nsubj'
-                  and token.head.lemma_ in ['assume',
-                                            'believe',
-                                            'beleive',
-                                            'bet',
-                                            'care',
-                                            'consider',
-                                            'dislike',
-                                            'doubt',
-                                            'expect',
-                                            'fear',
-                                            'feel',
-                                            'figure',
-                                            'forget',
-                                            'gather',
-                                            'guess',
-                                            'hate',
-                                            'hear',
-                                            'hope',
-                                            'imagine',
-                                            'judge',
-                                            'know',
-                                            'like',
-                                            'look',
-                                            'love',
-                                            'mean',
-                                            'notice',
-                                            'plan',
-                                            'realize',
-                                            'recall',
-                                            'reckon',
-                                            'recognize',
-                                            'remember',
-                                            'see',
-                                            'sense',
-                                            'sound',
-                                            'suppose',
-                                            'suspect',
-                                            'think',
-                                            'understand',
-                                            'want',
-                                            'wish',
-                                            'wonder']):
-                token._.vwp_interactive = True
-                token.head._.vwp_interactive = True
+            elif private_mental_state_tag(token):
+                entry['value'] = True               
+                entry2 = newTokenEntry('interactive', token.head)
+                entry2['value'] = True
 
             # Use of words with a strong conversational flavor
-            elif token.lemma_ in ['guy',
-                                  'gal',
-                                  'kid',
-                                  'plus',
-                                  'stuff',
-                                  'thing',
-                                  'because',
-                                  'blah',
-                                  'etcetera',
-                                  'alright',
-                                  'hopefully',
-                                  'personally',
-                                  'anyhow',
-                                  'anyway',
-                                  'anyways',
-                                  'cuss',
-                                  'coulda',
-                                  'woulda',
-                                  'doncha',
-                                  'betcha']:
-                token._.vwp_interactive = True
+            elif token.lemma_ in other_conversational_vocabulary:
+                entry['value'] = True               
+
             # Use of interjections
             elif token.pos_ == 'INTJ':
-                token._.vwp_interactive = True
-                token._.vwp_evaluation = True
-            elif (token.text.lower == 'thank'
-                  and doc[token.i + 1].text.lower == 'you'
-                  and doc[token.i+2].pos_ == 'PUNCT'
+                entry['value'] = True               
 
-                  or token.text.lower == 'pardon'
-                  and doc[token.i + 1].text.lower == 'me'
-                  and doc[token.i + 2].pos_ == 'PUNCT'
+            elif other_conversational_idioms(token):
+                entry['value'] = True               
 
-                  or token.text.lower == 'after'
-                  and doc[token.i + 1].text.lower == 'you'
-                  and doc[token.i + 2].pos_ == 'PUNCT'
-
-                  or token.text.lower == 'never'
-                  and doc[token.i + 1].text.lower == 'mind'
-                  and doc[token.i + 2].pos_ == 'PUNCT'
-
-                  or token.text.lower == 'speak'
-                  and doc[token.i + 1].text.lower == 'soon'
-                  and doc[token.i + 2].pos_ == 'PUNCT'
-
-                  or token.text.lower == 'know'
-                  and doc[token.i + 1].text.lower == 'better'
-                  or token.text.lower == 'shut'
-                  and doc[token.i + 1].text.lower == 'up'
-
-                  or token.text.lower == 'you'
-                  and doc[token.i + 1].text.lower == 'wish'
-                  and doc[token.i + 2].pos_ == 'PUNCT'
-
-                  or token.text.lower == 'take'
-                  and doc[token.i + 1].text.lower == 'care'
-                  and doc[token.i + 2].pos_ == 'PUNCT'
-                  ):
-                token._.vwp_interactive = True
                 if token.i + 1 < len(doc):
-                    doc[token.i+1]._.vwp_interactive = True
+                    entry2 = newTokenEntry('interactive', token)
+                    entry2['value'] = True
 
             # Use of idiomatic prep + adj combinations like
             # for sure, for certain, for good
             elif token.pos_ == 'ADJ' and token.head.pos_ == 'ADP':
-                token._.vwp_interactive = True
-
+                entry['value'] = True               
+            interactiveStatus.append(entry)
+            if entry2 is not None:
+                interactiveStatus.append(entry2)
+        return interactiveStatus
+        
     def nominalReferences(self, doc):
         """
         A very simple listing of potential entities. No proper
@@ -5248,7 +5033,7 @@ class ViewpointFeatureDef:
         nouns, instead of just the anaphora resolution handled by
         coreferee.
         """
-
+       
         characterList = {}
         referenceList = {}
         registered = []
@@ -5553,11 +5338,11 @@ class ViewpointFeatureDef:
                             referenceList[
                                 antecedent[0].lemma_.capitalize()] = [token.i]
                             registered.append(token.i)
-        directspeech = doc._.vwp_direct_speech_spans
+        directspeech = self.directSpeech(doc)
         for character in characterList:
             for speechevent in directspeech:
-                speaker = speechevent[0]
-                addressee = speechevent[1]
+                speaker = speechevent['value'][0]
+                addressee = speechevent['value'][1]
                 for item in speaker:
                     if item in characterList[character]:
                         for item2 in speaker:
@@ -5570,11 +5355,17 @@ class ViewpointFeatureDef:
                                 characterList[character].append(item2)
         return (characterList, referenceList)
 
-    def tenseSequences(self, document):
+    def tenseChanges(self, document):
         tenseChanges = []
         currentEvent = {}
         i = 0
         past_tense_state = False
+        
+        # We need to call this attribute to make
+        # sure that set_direct_speech spans has been
+        # called before we check tense sequences
+        self.directSpeech(document)
+        
         while i < len(document):
             if i > 0 \
                and not in_past_tense_scope(
@@ -5588,7 +5379,7 @@ class ViewpointFeatureDef:
                                               'para',
                                               'parapara'] \
                and in_past_tense_scope(getTensedVerbHead(document[i-1])):
-                if not document[i]._.vwp_in_direct_speech:
+                if not document[i]._.vwp_in_direct_speech_:
                     if past_tense_state:
                         currentEvent['loc'] = i
                         currentEvent['past'] = False
@@ -5610,7 +5401,7 @@ class ViewpointFeatureDef:
                                                  'para',
                                                  'parapara']
                   and in_past_tense_scope(getTensedVerbHead(document[i-2]))):
-                if not document[i]._.vwp_in_direct_speech:
+                if not document[i]._.vwp_in_direct_speech_:
                     if past_tense_state:
                         currentEvent['loc'] = i
                         currentEvent['past'] = False
@@ -5620,7 +5411,7 @@ class ViewpointFeatureDef:
 
             elif (i == 0
                   and in_past_tense_scope(getTensedVerbHead(document[i]))):
-                if not document[i]._.vwp_in_direct_speech:
+                if not document[i]._.vwp_in_direct_speech_:
                     past_tense_state = True
                     currentEvent['loc'] = i
                     currentEvent['past'] = True
@@ -5640,7 +5431,7 @@ class ViewpointFeatureDef:
                                                'parapara']
                   and in_past_tense_scope(
                       getTensedVerbHead(document[i]))):
-                if not document[i]._.vwp_in_direct_speech:
+                if not document[i]._.vwp_in_direct_speech_:
                     if not past_tense_state:
                         currentEvent['loc'] = i
                         currentEvent['past'] = True
@@ -5663,7 +5454,7 @@ class ViewpointFeatureDef:
                                                'parapara']
                   and in_past_tense_scope(
                       getTensedVerbHead(document[i]))):
-                if not document[i]._.vwp_in_direct_speech:
+                if not document[i]._.vwp_in_direct_speech_:
                     if not past_tense_state:
                         currentEvent['loc'] = i
                         currentEvent['past'] = True
@@ -5671,29 +5462,42 @@ class ViewpointFeatureDef:
                         tenseChanges.append(currentEvent)
                         currentEvent = {}
             i += 1
-        document._.vwp_tense_changes = tenseChanges
+        return tenseChanges
 
     def concreteDetails(self, doc):
         characterList = None
         characterList = doc._.nominalReferences[0]
-        details = []
+        detailList = []
+
+        # We need to call this attribute to make
+        # sure that set_direct_speech spans has been
+        # called before we check for concrete details
+        self.directSpeech(doc)
+
         for token in doc:
+            entry = newTokenEntry('concrete_detail', token)
+            entry['value'] = False
 
             if token._.vwp_abstract:
+                detailList.append(entry)
                 continue
 
             # Higher frequency words aren't likely to be concrete details
             if token._.max_freq > 5:
+                detailList.append(entry)
                 continue
 
             if token._.is_academic:
+                detailList.append(entry)
                 continue
 
             if token.text.capitalize() in characterList \
                and len(characterList[token.text.capitalize()]) > 2:
+                detailList.append(entry)
                 continue
-            if token._.vwp_direct_speech \
-               or token._.vwp_in_direct_speech:
+            if token._.vwp_direct_speech_verb_ \
+               or token._.vwp_in_direct_speech_:
+                detailList.append(entry)
                 continue
             if token._.has_governing_subject \
                and doc[token._.governing_subject]._.animate \
@@ -5701,16 +5505,19 @@ class ViewpointFeatureDef:
                     or token._.vwp_argument
                     or token._.vwp_communication
                     or token._.vwp_emotion):
+                detailList.append(entry)
                 continue
             if getLogicalObject(token) is not None \
                and getLogicalObject(token)._.animate \
                and token._.vwp_emotional_impact:
+                detailList.append(entry)
                 continue
             if (token._.vwp_evaluation
                 or token._.vwp_hedge
                 or (token._.abstract_trait
                     and 'of' in [child.text.lower()
                                  for child in token.children])):
+                detailList.append(entry)
                 continue
             if (token.pos_ != 'PROPN'
                 and (token.dep_ != 'punct'
@@ -5721,8 +5528,8 @@ class ViewpointFeatureDef:
                    or token._.max_freq < 4.5) \
                    and token._.concreteness is not None \
                    and token._.concreteness >= 4:
-                    details.append(token.i)
-                    token._.concrete_detail = True
+                    entry['value'] = True
+                    detailList.append(entry)
                 elif ((token.pos_ == 'VERB') and
                       token._.max_freq is not None
                       and token._.max_freq < 4.2
@@ -5734,8 +5541,8 @@ class ViewpointFeatureDef:
                            is not None
                            and getLogicalObject(token)._.concreteness
                            >= 4.3)):
-                    details.append(token.i)
-                    token._.concrete_detail = True
+                    entry['value'] = True
+                    detailList.append(entry)
                 elif token.pos_ != 'VERB' and token.pos_ != 'NOUN':
                     if token._.has_governing_subject \
                        and doc[
@@ -5749,8 +5556,8 @@ class ViewpointFeatureDef:
                             or token._.nSenses is None
                             or token._.nSenses < 4
                             and token._.max_freq < 5):
-                        details.append(token.i)
-                        token._.concrete_detail = True
+                        entry['value'] = True
+                        detailList.append(entry)
                     elif (token.head._.concreteness is not None
                           and token.head._.concreteness >= 4
                           and token._.concreteness is not None
@@ -5760,6 +5567,6 @@ class ViewpointFeatureDef:
                                or token._.nSenses is None
                                or token._.nSenses < 4
                                and token._.max_freq < 5)):
-                        details.append(token.i)
-                        token._.concrete_detail = True
-        doc._.concrete_details = details
+                        entry['value'] = True
+                        detailList.append(entry)
+        return detailList
