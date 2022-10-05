@@ -5478,7 +5478,7 @@ class ViewpointFeatureDef:
             entry = newTokenEntry('concrete_detail', token)
             entry['value'] = False
 
-            if token._.vwp_abstract:
+            if token._.vwp_abstract or token._.is_latinate:
                 detailList.append(entry)
                 continue
 
