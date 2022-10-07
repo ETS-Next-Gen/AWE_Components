@@ -4226,12 +4226,12 @@ class ViewpointFeatureDef:
                                             'been'])
                 and 'attr' not in hdeps
                 and 'acomp' not in hdeps)
-           and ((token.dep_ in ['ccomp', 'csubjpass', 'acl', 'xcomp', 'oprd']
+           and ((token.dep_ in ['ccomp', 'csubjpass', 'acl', 'oprd']
                  and tensed_clause(token))
                 or token.dep_ in 'relcl' and token.head.dep_ in ['nsubj',
                                                                  'nsubjpass',
                                                                  'attr']
-                or (token.dep_ in ['ccomp', 'xcomp', 'oprd']
+                or (token.dep_ in ['ccomp', 'oprd']
                     and ('dobj' in hdeps
                          or 'nsubjpass' in hdeps))
                 or (token.dep_ == 'advcl'
@@ -4361,7 +4361,6 @@ class ViewpointFeatureDef:
                         and (token.head._.vwp_raising
                              or token.head._.vwp_tough
                              or token.head._.vwp_evaluation
-                             or token.head.dep_ == 'xcomp'
                              or any([child._.vwp_evaluation
                                      for child in token.head.children]))):
                         if token.head.pos_ in ['NOUN']:
@@ -4465,8 +4464,7 @@ class ViewpointFeatureDef:
                 if (hdoc[token.head.head._.governing_subject].lemma_ == 'it'
                    and (token.head.head._.vwp_raising
                         or token.head.head._.vwp_tough
-                        or token.head.head._.vwp_evaluation
-                        or token.head.head.dep_ == 'xcomp')):
+                        or token.head.head._.vwp_evaluation)):
                     if token.head.head.pos_ == 'NOUN':
                         if is_definite_nominal(token.head.head):
                             if domHead not in \
@@ -4547,8 +4545,7 @@ class ViewpointFeatureDef:
                     token.head.head.head._.governing_subject].lemma_ == 'it'
                     and (token.head.head.head._.vwp_raising
                          or token.head.head.head._.vwp_tough
-                         or token.head.head.head._.vwp_evaluation
-                         or token.head.head.head.dep_ == 'xcomp')):
+                         or token.head.head.head._.vwp_evaluation)):
                     if token.head.head.head.pos_ == 'NOUN':
                         if is_definite_nominal(token.head.head.head):
                             if domHead not in propositional_attitudes[
@@ -4683,8 +4680,7 @@ class ViewpointFeatureDef:
                 if domHead not in propositional_attitudes['implicit']:
                     propositional_attitudes['implicit'].append(domHead)
 
-            elif (token.dep_ in ['xcomp',
-                                 'ccomp',
+            elif (token.dep_ in ['ccomp',
                                  'csubj',
                                  'csubjpass',
                                  'advcl',
@@ -4720,8 +4716,7 @@ class ViewpointFeatureDef:
                     if (hdoc[token._.governing_subject].lemma_ == 'it'
                         and (token._.vwp_raising
                              or token._.vwp_tough
-                             or token._.vwp_evaluation
-                             or token.dep_ == 'xcomp')):
+                             or token._.vwp_evaluation)):
                         if token.head.head.head.pos_ == 'NOUN':
                             if domHead not in \
                                propositional_attitudes['implicit_3']:
