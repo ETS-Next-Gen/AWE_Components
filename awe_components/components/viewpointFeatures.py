@@ -124,22 +124,39 @@ class ViewpointFeatureDef:
         except Exception as e:
             print('No Wordnet synset found for ', token, e)
 
+    def markPerspectiveSpan(self, doc):
+       
+        if doc._.vwp_perspective_spans_ is not None:
+            return
+
+        # Find implied perspectives
+        self.perspectiveMarker(doc)
+
+        # Identify the perspectives
+        # that apply to individual tokens in the text
+        self.set_perspective_spans(doc)
+
     def __call__(self, doc):
         """
          Call the spacy component and process the document to register
          viewpoint and stance elements
         """
         for token in doc:
+
+            # Mark slang, colloquialisms, etc.
+            self.markSlang(token)
+
             # Add attributes specified in the stance lexicon
             self.setLexiconAttributes(token, doc)
+
+            # rule-based expansion of vwp_evaluation is better
+            # stored once than calculated every time we check
+            # vwp_evaluation in later calls
             if emphatic_adverb(token) \
                or emphatic_adjective(token) \
                or elliptical_verb(token) \
                or token.pos_ == 'INTJ':
                 token._.vwp_evaluation = True
-
-            # Mark slang, colloquialisms, etc.
-            self.markSlang(token)
 
             # Mark implicit subject relationships within each clause
             if isRoot(token):
@@ -150,23 +167,36 @@ class ViewpointFeatureDef:
                 antecedents = ResolveReference(token, doc)
                 token._.antecedents = antecedents
                 
-        # Mark sentiment properly under scope of negation, using
-        # sentiWord weights as base lexical sentiment polarities
-        negation_tokens = self.propagateNegation(doc)
-        for token in doc:
-            if isRoot(token):
-                self.traverseTree(token, negation_tokens)
-
-        # Find implied perspectives
-        self.perspectiveMarker(doc)
-
+        # treat most transition words as also being argument words
         self.mark_transition_argument_words(doc)
 
-        # Identify the perspectives
-        # that apply to individual tokens in the text
-        self.set_perspective_spans(doc, self.calculatePerspective)
-
         return doc
+
+    def has_governing_subject(self, token):
+        if not token.doc._.has_governing_subject:
+            for item in token.doc:
+                self.markImplicitSubject(item, token.doc)
+            token.doc._.has_governing_subject = True
+        return token._.has_governing_subject_
+
+    def governing_subject(self, token):
+        if not token.doc._.has_governing_subject:
+            for item in token.doc:
+                self.markImplicitSubject(item, token.doc)
+            token.doc._.has_governing_subject = True
+        return token._.governing_subject_
+
+    def vwp_argumentation(self, token):
+        self.markPerspectiveSpan(token.doc)
+        if not token.doc._.vwp_argumentation:
+            for item in token.doc:
+                self.mark_argument_words(item, token.doc)
+            token.doc._.vwp_argumentation = True
+        return token._.vwp_argumentation_
+
+    def vwp_perspective(self, token):
+        self.markPerspectiveSpan(token.doc)
+        return token._.vwp_perspective_
 
     def subjectiveWord(self, token):
         if token.text in ['?', '!'] \
@@ -499,17 +529,58 @@ class ViewpointFeatureDef:
         else:
             return False
 
+    def vwp_sentiment(self, token):
+        if token.doc._.negation_tokens is None:
+            # Mark sentiment properly under scope of negation, using
+            # sentiWord weights as base lexical sentiment polarities
+            negation_tokens = self.propagateNegation(token.doc)
+            for token in token.doc:
+                if isRoot(token):
+                    self.traverseTree(token, negation_tokens)
+            token.doc._.negation_tokens = negation_tokens
+        return token._.vwp_sentiment_
+
+    def vwp_tone(self, token):
+        if token.doc._.negation_tokens is None:
+            # Mark sentiment properly under scope of negation, using
+            # sentiWord weights as base lexical sentiment polarities
+            negation_tokens = self.propagateNegation(token.doc)
+            for token in token.doc:
+                if isRoot(token):
+                    self.traverseTree(token, negation_tokens)
+            token.doc._.negation_tokens = negation_tokens
+        return token._.vwp_tone_
+
     def add_extensions(self):
         """
          Funcion to add extensions with getter functions that allow us
-         to access the various lexicons this module is designed to support.
+         to access the various viewpoint/argumentation functions built
+         into viewpointFeatures
         """
         extensions = [
+            {"name": "vwp_perspective_spans",
+             "getter": self.vwp_perspective_spans,
+             "type": "docspan"},
+            {"name": "vwp_stance_markers",
+             "getter": self.vwp_stance_markers,
+             "type": "docspan"},
             {"name": "vwp_direct_speech_spans",
              "getter": self.directSpeech,
              "type": "docspan"},
             {"name": "vwp_statements_of_fact",
              "getter": self.s_o_f,
+             "type": "docspan"},
+            {"name": "vwp_social_awareness",
+             "getter": self.vwp_social_awareness,
+             "type": "docspan"},
+            {"name": "vwp_propositional_attitudes",
+             "getter": self.vwp_propositional_attitudes,
+             "type": "docspan"},
+            {"name": "vwp_emotion_states",
+             "getter": self.vwp_emotion_states,
+             "type": "docspan"},
+            {"name": "vwp_character_traits",
+             "getter": self.vwp_character_traits,
              "type": "docspan"},
             {"name": "vwp_statements_of_opinion",
              "getter": self.statements_of_opinion,
@@ -532,6 +603,15 @@ class ViewpointFeatureDef:
             {"name": "nominalReferences",
              "getter": self.nominalReferences,
              "type": "docspan"},
+            {"name": "has_governing_subject",
+             "getter": self.has_governing_subject,
+             "type": "token"},
+            {"name": "governing_subject",
+             "getter": self.governing_subject,
+             "type": "token"},
+            {"name": "vwp_perspective",
+             "getter": self.vwp_perspective,
+             "type": "token"},
             {"name": "vwp_abstract",
              "getter": self.vwp_abstract,
              "type": "token"},
@@ -553,11 +633,35 @@ class ViewpointFeatureDef:
             {"name": "vwp_addressee_refs",
              "getter": self.vwp_addressee_refs,
              "type": "token"},
+            {"name": "vwp_cite",
+             "getter": self.vwp_cite,
+             "type": "token"},
+            {"name": "vwp_attribution",
+             "getter": self.vwp_attribution,
+             "type": "token"},
+            {"name": "vwp_source",
+             "getter": self.vwp_source,
+             "type": "token"},
+            {"name": "vwp_argumentation",
+             "getter": self.vwp_argumentation,
+             "type": "token"},
             {"name": "vwp_explicit_argument",
              "getter": self.vwp_explicit_argument,
              "type": "token"},
             {"name": "vwp_emotionword",
              "getter": self.vwp_emotionword,
+             "type": "token"},
+            {"name": "vwp_sentiment",
+             "getter": self.vwp_sentiment,
+             "type": "token"},
+            {"name": "vwp_tone",
+             "getter": self.vwp_tone,
+             "type": "token"},
+            {"name": "vwp_claim",
+             "getter": self.vwp_claim,
+             "type": "token"},
+            {"name": "vwp_discussion",
+             "getter": self.vwp_discussion,
              "type": "token"},
             {"name": "vwp_argumentword",
              "getter": self.vwp_argumentword,
@@ -597,8 +701,8 @@ class ViewpointFeatureDef:
 
         # Index to the word that identifies the perspective that applies
         # to this token
-        if not Token.has_extension('vwp_perspective'):
-            Token.set_extension('vwp_perspective', default=None)
+        if not Token.has_extension('vwp_perspective_'):
+            Token.set_extension('vwp_perspective_', default=None)
 
         # Special index that tracks the perspective of root words for
         # whole sentences. Default is empty list, implicitly the speaker.
@@ -606,20 +710,25 @@ class ViewpointFeatureDef:
         if not Token.has_extension('head_perspective'):
             Token.set_extension('head_perspective', default=[])
 
-        if not Token.has_extension('vwp_attribution'):
-            Token.set_extension('vwp_attribution', default=False)
+        if not Token.has_extension('vwp_attribution_'):
+            Token.set_extension('vwp_attribution_', default=False)
 
-        if not Token.has_extension('vwp_source'):
-            Token.set_extension('vwp_source', default=False)
+        if not Token.has_extension('vwp_source_'):
+            Token.set_extension('vwp_source_', default=False)
 
-        if not Token.has_extension('vwp_cite'):
-            Token.set_extension('vwp_cite', default=False)
+        if not Token.has_extension('vwp_cite_'):
+            Token.set_extension('vwp_cite_', default=False)
 
-        if not Token.has_extension('vwp_claim'):
-            Token.set_extension('vwp_claim', default=False, force=True)
+        if not Doc.has_extension('propositional_attitudes_'):
+            Doc.set_extension('propositional_attitudes_',
+                default=None, force=True)
 
-        if not Token.has_extension('vwp_discussion'):
-            Token.set_extension('vwp_discussion',
+        if not Token.has_extension('vwp_claim_'):
+            Token.set_extension('vwp_claim_',
+                default=False, force=True)
+
+        if not Token.has_extension('vwp_discussion_'):
+            Token.set_extension('vwp_discussion_',
                                 default=False,
                                 force=True)
 
@@ -633,10 +742,10 @@ class ViewpointFeatureDef:
         # explicit first person, explicit third person, and
         # for explicit third person, by the offset for the referent
         # that takes that perspective.
-        Span.set_extension('vwp_perspective_spans',
+        Span.set_extension('vwp_perspective_spans_',
                            default=None,
                            force=True)
-        Doc.set_extension('vwp_perspective_spans',
+        Doc.set_extension('vwp_perspective_spans_',
                           default=None,
                           force=True)
 
@@ -648,70 +757,37 @@ class ViewpointFeatureDef:
         # explicit first person, explicit third person, and
         # for explicit third person, by the offset for the referent
         # that takes that perspective.
-        Doc.set_extension('vwp_stance_markers',
+        Doc.set_extension('vwp_stance_markers_',
                           default=None,
                           force=True)
-        Span.set_extension('vwp_stance_markers',
+        Span.set_extension('vwp_stance_markers_',
                            default=None,
                            force=True)
 
-        # Identification of propositional attitude predicates associated
-        # with specific predicates. E.g., believe or think in 'I believe
-        # that this is true', or 'John thinks we are on the right track'.
-        #
-        # Our code creates separate lists by the viewpoint that
-        # applies to the prop. attitude predicate: implicit first person,
-        # explicit first person, explicit third person, and
-        # for explicit third person, by the offset for the
-        # animate entity referent.
-        if not Doc.has_extension('vwp_propositional_attitudes'):
-            Doc.set_extension('vwp_propositional_attitudes', default=None)
-
-        # Identification of emotion markers that attribute
-        # emotional states to agents
-        #
-        # Our code creates separate lists by the animate entity that
-        # the emotion predicate applies to: implicit first person,
-        # explicit first person, explicit third person, and
-        # for explicit third person, by the offset for the
-        # animate entity referent.
-        if not Doc.has_extension('vwp_emotion_states'):
-            Doc.set_extension('vwp_emotion_states', default=None)
-
-        # Identification of character markers that attribute
-        # character attributes to agents
-        #
-        # Our code creates separate lists by the animate entity that
-        # the character attribute applies to: implicit first person,
-        # explicit first person, explicit third person, and
-        # for explicit third person, by the offset for the referent
-        # offset for the animate entity.
-        if not Doc.has_extension('vwp_character_traits'):
-            Doc.set_extension('vwp_character_traits',
-                              default=None)
-
-        if not Doc.has_extension('vwp_social_awareness'):
-            Doc.set_extension('vwp_social_awareness',
-                              default=None)
+        Doc.set_extension('vwp_argumentation',
+                          default=False,
+                          force=True)
 
         # SentiWord sentiment polarity ratings #
+        if not Doc.has_extension('negation_tokens'):
+            Doc.set_extension('negation_tokens', default=None)
 
         # Rating of positive or negative sentiment
-        if not Token.has_extension('vwp_sentiment'):
-            Token.set_extension('vwp_sentiment',
+        if not Token.has_extension('vwp_sentiment_'):
+            Token.set_extension('vwp_sentiment_',
                                 default=None)
 
         # Rating of positive or negative sentiment
-        if not Token.has_extension('vwp_tone'):
-            Token.set_extension('vwp_tone',
+        if not Token.has_extension('vwp_tone_'):
+            Token.set_extension('vwp_tone_',
                                 default=None)
 
         ##########################
         # Argumentative style    #
         ##########################
 
-        if not Token.has_extension('vwp_argumentation'):
-            Token.set_extension('vwp_argumentation', default=False)
+        if not Token.has_extension('vwp_argumentation_'):
+            Token.set_extension('vwp_argumentation_', default=False)
 
         #####################
         # Interactive Style #
@@ -769,13 +845,17 @@ class ViewpointFeatureDef:
         # sentential scope                                       #
         ##########################################################
 
+        # Flag that identifies whether a governing subjects have been set.
+        if not Doc.has_extension('has_governing_subject'):
+            Doc.set_extension('has_governing_subject', default=False)
+
         # Flag that identifies whether a token has a governing subject.
-        if not Token.has_extension('has_governing_subject'):
-            Token.set_extension('has_governing_subject', default=False)
+        if not Token.has_extension('has_governing_subject_'):
+            Token.set_extension('has_governing_subject_', default=False)
 
         # Pointer to a token's governing subject.
-        if not Token.has_extension('governing_subject'):
-            Token.set_extension('governing_subject', default=None)
+        if not Token.has_extension('governing_subject_'):
+            Token.set_extension('governing_subject_', default=None)
 
         # A token's WordNet usage domain.
         if not Token.has_extension('usage'):
@@ -1059,7 +1139,7 @@ class ViewpointFeatureDef:
     def registerViewpoint(self, hdoc, token, subj):
         """
          Utility function that resolves antecedents of pronouns
-         and then sets the vwp_perspective extension attribute
+         and then sets the vwp_perspective_ extension attribute
          for a token to point to the right referent.
         """
 
@@ -1073,13 +1153,13 @@ class ViewpointFeatureDef:
             token._.head_perspective = \
                 [token._.governing_subject]
 
-        subj._.vwp_perspective = [subj.i]
-        token._.vwp_perspective = [subj.i]
+        subj._.vwp_perspective_ = [subj.i]
+        token._.vwp_perspective_ = [subj.i]
 
     def markAttribution(self, tok, hdoc):
         if (tok.dep_ == 'nsubj'
             and tok.head.dep_ == 'conj'
-            and tok.head.head._.vwp_attribution
+            and tok.head.head._.vwp_attribution_
             and (tok.head._.vwp_argument
                  or tok.head._.vwp_say
                  or tok.head._.vwp_argue
@@ -1109,16 +1189,16 @@ class ViewpointFeatureDef:
                  or hdoc[tok.head._.governing_subject].tag_ == 'PROPN'
                  or hdoc[tok.head._.governing_subject].tag_ == 'DET'
                  or hdoc[tok.head._.governing_subject]._.vwp_sourcetext):
-            hdoc[tok.head._.governing_subject]._.vwp_source = True
+            hdoc[tok.head._.governing_subject]._.vwp_source_ = True
             for child in hdoc[tok.head._.governing_subject].subtree:
                 if child.i >= tok.head.i:
                     break
-                child._.vwp_source = True
-            tok.head._.vwp_attribution = True
+                child._.vwp_source_ = True
+            tok.head._.vwp_attribution_ = True
             for child in tok.head.subtree:
                 if child.i >= tok.head.i:
                     break
-                child._.vwp_attribution = True
+                child._.vwp_attribution_ = True
 
     def markCitedText(self, tok, hdoc):
         if tok.tag_ == '-LRB-' \
@@ -1131,10 +1211,10 @@ class ViewpointFeatureDef:
             i = tok.i
             while (i < len(hdoc)
                    and hdoc[i].tag_ != '-RRB-'):
-                hdoc[i]._.vwp_cite = True
+                hdoc[i]._.vwp_cite_ = True
                 for child in hdoc[i].subtree:
-                    child._.vwp_cite = True
-                    tok._.vwp_cite = True
+                    child._.vwp_cite_ = True
+                    tok._.vwp_cite_ = True
                 i += 1
         elif tok.tag_ == '-LRB-':
             for child in tok.head.children:
@@ -1146,10 +1226,10 @@ class ViewpointFeatureDef:
                                                     'WORK_OF_ART',
                                                     'DATE'] \
                            or hdoc[i]._.vwp_quoted:
-                            hdoc[i]._.vwp_cite = True
-                            tok._.vwp_cite = True
+                            hdoc[i]._.vwp_cite_ = True
+                            tok._.vwp_cite_ = True
                             for grandchild in hdoc[i].subtree:
-                                grandchild._.vwp_cite = True
+                                grandchild._.vwp_cite_ = True
                             break
 
     def markAddresseeRefs(self, target, tok, addressee_refs):
@@ -1631,7 +1711,7 @@ class ViewpointFeatureDef:
             # perspective of that domain (e.g., John deserves a raise)
             if token._.vwp_evaluated_role \
                and isRoot(token):
-                token._.vwp_perspective = token._.head_perspective
+                token._.vwp_perspective_ = token._.head_perspective
                 continue
 
             # Set viewpoint for emotional impact predicates
@@ -1641,7 +1721,7 @@ class ViewpointFeatureDef:
                 obj = getLogicalObject(token)
                 if obj._.animate:
                     self.registerViewpoint(hdoc, token, obj)
-                    obj._.vwp_perspective = token._.vwp_perspective
+                    obj._.vwp_perspective_ = token._.vwp_perspective_
                 if obj is not None \
                    and 'poss' in [child.dep_
                                   for child
@@ -1651,8 +1731,8 @@ class ViewpointFeatureDef:
                         if child.dep_ == 'poss' \
                            and child._.animate:
                             self.registerViewpoint(hdoc, token, child)
-                            child._.vwp_perspective = token._.vwp_perspective
-                            token._.governing_subject = child.i
+                            child._.vwp_perspective_ = token._.vwp_perspective_
+                            token._.governing_subject_ = child.i
                             continue
                 continue
 
@@ -1670,20 +1750,20 @@ class ViewpointFeatureDef:
                     # verb/subject as being in the head's perspective
                     # because the to-phrase has purely local scope
                     if token.dep_ in ['acomp', 'oprd', 'attr']:
-                        token.head._.vwp_perspective = \
+                        token.head._.vwp_perspective_ = \
                             self.getHeadDomain(token.head
                                                )._.head_perspective
                         if getSubject(token) is not None:
-                            getSubject(token)._.vwp_perspective = \
+                            getSubject(token)._.vwp_perspective_ = \
                                 self.getHeadDomain(token.head
                                                    )._.head_perspective
 
                     continue
-                elif (self.getHeadDomain(token)._.vwp_perspective is not None
+                elif (self.getHeadDomain(token)._.vwp_perspective_ is not None
                       and len(self.getHeadDomain(token
-                                                 )._.vwp_perspective) > 0):
-                    token._.vwp_perspective = \
-                        self.getHeadDomain(token)._.vwp_perspective
+                                                 )._.vwp_perspective_) > 0):
+                    token._.vwp_perspective_ = \
+                        self.getHeadDomain(token)._.vwp_perspective_
                     continue
 
             # Special case: Sentence-modifying prepositional phrases
@@ -1692,9 +1772,9 @@ class ViewpointFeatureDef:
             # Prefer sentence-initial if they appear there. Only use
             # late in the sentence if no viewpoint has yet been established
             if (token.i < token.head.i
-                or token.head._.vwp_perspective is None
-                or (token.head._.vwp_perspective is not None
-                    and len(token.head._.vwp_perspective) == 0)) \
+                or token.head._.vwp_perspective_ is None
+                or (token.head._.vwp_perspective_ is not None
+                    and len(token.head._.vwp_perspective_) == 0)) \
                and (isRoot(token)
                     or token.dep_ == 'ccomp'
                     or token.dep_ == 'csubj'
@@ -1849,7 +1929,7 @@ class ViewpointFeatureDef:
                             if child.dep_ == 'poss' \
                                and child._.animate:
                                 self.registerViewpoint(hdoc, token, child)
-                                token._.governing_subject = child.i
+                                token._.governing_subject_ = child.i
                                 continue
                     continue
 
@@ -1882,7 +1962,7 @@ class ViewpointFeatureDef:
             # Viewpoint predicates that are objects of certain
             # sentence-level PPs establish viewpoint for the
             # whole clause
-            if token._.vwp_perspective is not None:
+            if token._.vwp_perspective_ is not None:
                 if token.dep_ == 'pobj' \
                    and token.head.dep_ == 'prep' \
                    and (token.head.head.dep_ is None
@@ -1891,24 +1971,24 @@ class ViewpointFeatureDef:
                                                     'csubj',
                                                     'csubjpass']):
                     if not isRoot(token.head.head):
-                        token.head._.vwp_perspective = \
-                            token.head.head.head._.vwp_perspective
-                    token.head.head._.vwp_perspective = token._.vwp_perspective
+                        token.head._.vwp_perspective_ = \
+                            token.head.head.head._.vwp_perspective_
+                    token.head.head._.vwp_perspective_ = token._.vwp_perspective_
 
             # Viewpoint predicates that are adverbial sentence-level modifiers
             # establish viewpoint for the whole clause
             while (token.head.pos_ != 'NOUN'
                    and isRoot(token)
-                   and token._.vwp_perspective is not None
+                   and token._.vwp_perspective_ is not None
                    and ((token.dep_ == 'advcl'
                          or token.dep_ == 'advmod'
                          or token.dep_ == 'acomp'
                          or token.dep_ == 'npadvmod')
                         and not tough_complement(token)
                         and not raising_complement(token))):
-                if token.head._.vwp_perspective is None \
-                   or len(token.head._.vwp_perspective) == 0:
-                    token.head._.vwp_perspective = token._.vwp_perspective
+                if token.head._.vwp_perspective_ is None \
+                   or len(token.head._.vwp_perspective_) == 0:
+                    token.head._.vwp_perspective_ = token._.vwp_perspective_
                     token = token.head
                 else:
                     break
@@ -1919,8 +1999,8 @@ class ViewpointFeatureDef:
         self.percolateViewpoint(getRoots(hdoc))
 
         for token in hdoc:
-            if token._.vwp_perspective is None:
-                token._.vwp_perspective = \
+            if token._.vwp_perspective_ is None:
+                token._.vwp_perspective_ = \
                     self.getHeadDomain(token)._.head_perspective
         return hdoc
 
@@ -1930,8 +2010,8 @@ class ViewpointFeatureDef:
          identify the understood subject of predicates.
         """
 
-        if item._.has_governing_subject:
-            return item._.governing_subject
+        if item._.has_governing_subject_:
+            return item._.governing_subject_
 
         found = False
         subj = getSubject(item)
@@ -1941,8 +2021,8 @@ class ViewpointFeatureDef:
         # default governing subject is the explicit syntactic subject     #
         ###################################################################
         if subj is not None:
-            item._.has_governing_subject = True
-            item._.governing_subject = subj.i
+            item._.has_governing_subject_ = True
+            item._.governing_subject_ = subj.i
             # We do not set found to True because this is potentially
             # overrideable
 
@@ -1957,15 +2037,15 @@ class ViewpointFeatureDef:
             # the idea that he suggested /
             if subj and subj.tag_ in ['WDT', 'WP']:
                 subj = item.head
-                item._.has_governing_subject = True
-                item._.governing_subject = subj.i
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = subj.i
                 found = True
             # the idea he gave me /
             # the idea that I like /
             # the idea I like
             elif subj:
-                item._.has_governing_subject = True
-                item._.governing_subject = subj.i
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = subj.i
                 found = True
 
         # infinitival adjectival clauses (my plan to win,
@@ -1975,20 +2055,20 @@ class ViewpointFeatureDef:
         # subject in other object constructions
         if not found and item.dep_ == 'acl' \
            and not tensed_clause(item):
-            if item.head._.has_governing_subject:
-                item._.has_governing_subject = True
-                item._.governing_subject = \
-                    item.head._.governing_subject
+            if item.head._.has_governing_subject_:
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = \
+                    item.head._.governing_subject_
                 found = True
             elif item.dep_ in ['dobj', 'pobj']:
                 if matrixobj is not None \
                    and item != matrixobj:
-                    item._has_governing_subject = True
-                    item._.governing_subject = matrixobj.i
+                    item._has_governing_subject_ = True
+                    item._.governing_subject_ = matrixobj.i
                     found = True
                 elif matrixsubj is not None:
-                    item._.has_governing_subject = True
-                    item._.governing_subject = matrixsubj.i
+                    item._.has_governing_subject_ = True
+                    item._.governing_subject_ = matrixsubj.i
                     found = True
 
         if item.dep_ == 'conj' and getSubject(item) is not None:
@@ -2008,20 +2088,20 @@ class ViewpointFeatureDef:
             matrixitem = matrixitem.head
 
         # Setup.
-        if matrixitem.head._.has_governing_subject:
-            if hdoc[matrixitem.head._.governing_subject
-                    ]._.has_governing_subject \
-               and not hdoc[matrixitem.head._.governing_subject
+        if matrixitem.head._.has_governing_subject_:
+            if hdoc[matrixitem.head._.governing_subject_
+                    ]._.has_governing_subject_ \
+               and not hdoc[matrixitem.head._.governing_subject_
                             ]._.animate \
-               and (hdoc[matrixitem.head._.governing_subject
+               and (hdoc[matrixitem.head._.governing_subject_
                          ]._.concreteness is None
-                    or hdoc[matrixitem.head._.governing_subject
+                    or hdoc[matrixitem.head._.governing_subject_
                             ]._.concreteness < 4):
                 matrixsubj = \
-                    hdoc[hdoc[matrixitem.head._.governing_subject
-                              ]._.governing_subject]
+                    hdoc[hdoc[matrixitem.head._.governing_subject_
+                              ]._.governing_subject_]
             else:
-                matrixsubj = hdoc[matrixitem.head._.governing_subject]
+                matrixsubj = hdoc[matrixitem.head._.governing_subject_]
         else:
             matrixsubj = getSubject(matrixitem.head)
 
@@ -2036,10 +2116,10 @@ class ViewpointFeatureDef:
 
         # Now inherit the governing subject from the first conjunct
         if item.dep_ == 'conj' \
-           and matrixitem._.has_governing_subject:
-            item._.has_governing_subject = True
-            item._.governing_subject = \
-                matrixitem._.governing_subject
+           and matrixitem._.has_governing_subject_:
+            item._.has_governing_subject_ = True
+            item._.governing_subject_ = \
+                matrixitem._.governing_subject_
             found = True
 
         ###################################################################
@@ -2058,7 +2138,7 @@ class ViewpointFeatureDef:
                                    'xcomp',
                                    'dep']:
 
-            if item._.has_governing_subject:
+            if item._.has_governing_subject_:
                 found = True
 
             # Matrix object is the governing subject
@@ -2072,10 +2152,10 @@ class ViewpointFeatureDef:
                 if item.dep_ != 'dobj':
                     if not containsDistinctReference(item, matrixobj, hdoc) \
                        or item.dep_ in ['ccomp', 'xcomp']:
-                        item._.has_governing_subject = True
-                        item._.governing_subject = matrixobj.i
+                        item._.has_governing_subject_ = True
+                        item._.governing_subject_ = matrixobj.i
                     else:
-                        item._.has_governing_subject = False
+                        item._.has_governing_subject_ = False
                     found = True
 
             # Otherwise, matrix subject is the governing subject
@@ -2107,16 +2187,16 @@ class ViewpointFeatureDef:
                                          or item.head.lemma_
                                          in getLightVerbs())))))):
 
-                item._.has_governing_subject = True
+                item._.has_governing_subject_ = True
                 if item.pos_ == 'ADP':
-                    item._.governing_subject = matrixitem.head.i
+                    item._.governing_subject_ = matrixitem.head.i
                 else:
                     if not containsDistinctReference(item, matrixsubj, hdoc) \
                        or item.dep_ in ['ccomp', 'xcomp']:
-                        item._.has_governing_subject = True
-                        item._.governing_subject = matrixsubj.i
+                        item._.has_governing_subject_ = True
+                        item._.governing_subject_ = matrixsubj.i
                     else:
-                        item._.has_governing_subject = False
+                        item._.has_governing_subject_ = False
                     found = True
 
             if matrixsubj is not None \
@@ -2124,8 +2204,8 @@ class ViewpointFeatureDef:
                and (matrixobj.head.lemma_ in getLightVerbs()
                     or matrixobj.head._.vwp_cognitive
                     or matrixobj.head._.vwp_emotion):
-                matrixobj._.has_governing_subject = True
-                matrixobj._.governing_subject = matrixsubj.i
+                matrixobj._.has_governing_subject_ = True
+                matrixobj._.governing_subject_ = matrixsubj.i
 
         # The governing subject of an attributive adjective
         # or a preposition or a clause modifying a noun
@@ -2133,8 +2213,8 @@ class ViewpointFeatureDef:
         if not found \
            and item.dep_ in ['amod', 'nmod', 'prep', 'acl'] \
            and item.head.pos_ in ['NOUN', 'PROPN', 'PRON', 'DET', 'CD', 'NUM']:
-            item._.has_governing_subject = True
-            item._.governing_subject = item.head.i
+            item._.has_governing_subject_ = True
+            item._.governing_subject_ = item.head.i
             found = True
 
         # The governing subject of a preposition or adverb
@@ -2147,11 +2227,11 @@ class ViewpointFeatureDef:
             if item.dep_ in ['neg'] \
                or item._.vwp_hedge \
                or item._.transition:
-                item._.has_governing_subject = True
-                item._.governing_subject = item.head.i
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = item.head.i
                 found = True
             elif (item.head.pos_ in ['VERB', 'AUX', 'MD']
-                  and item.head._.has_governing_subject
+                  and item.head._.has_governing_subject_
                   and not item._.vwp_necessity
                   and not item._.vwp_certainty
                   and not item._.vwp_probability
@@ -2161,13 +2241,13 @@ class ViewpointFeatureDef:
                   and not item._.vwp_emphasis
                   and not item._.vwp_information
                   and not item._.transition):
-                item._.has_governing_subject = True
-                item._.governing_subject = item.head._.governing_subject
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = item.head._.governing_subject_
                 found = True
             # otherwise it is the modified word
             else:
-                item._.has_governing_subject = True
-                item._.governing_subject = item.head.i
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = item.head.i
                 found = True
 
         # Prepositional and object complements that are gerunds w/o
@@ -2187,12 +2267,12 @@ class ViewpointFeatureDef:
             obj = getObject(head)
             subj = getSubject(head)
             if obj is not None and obj != last:
-                item._.has_governing_subject = True
-                item._.governing_subject = obj.i
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = obj.i
                 found = True
             elif subj is not None:
-                item._.has_governing_subject = True
-                item._.governing_subject = subj.i
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = subj.i
                 found = True
 
         # Participles also take the subject of the clause they modify
@@ -2209,19 +2289,19 @@ class ViewpointFeatureDef:
                 head = head.head
             obj = getObject(head)
             subj = getSubject(head)
-            if obj is not None and obj != last and obj._.has_governing_subject:
-                item._.has_governing_subject = True
-                item._.governing_subject = obj._.governing_subject
+            if obj is not None and obj != last and obj._.has_governing_subject_:
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = obj._.governing_subject_
                 found = True
-            elif subj is not None and subj._.has_governing_subject:
-                item._.has_governing_subject = True
-                item._.governing_subject = subj._.governing_subject
+            elif subj is not None and subj._.has_governing_subject_:
+                item._.has_governing_subject_ = True
+                item._.governing_subject_ = subj._.governing_subject_
                 found = True
 
         for child in item.children:
             self.markImplicitSubject(child, hdoc)
 
-        return item._.governing_subject
+        return item._.governing_subject_
 
     def isHeadDomain(self, node):
         """
@@ -2310,7 +2390,7 @@ class ViewpointFeatureDef:
                   and node.head.i not in barriers):
                 barriers.append(node.i)
 
-            if node._.vwp_perspective is None:
+            if node._.vwp_perspective_ is None:
                 if not isRoot(self.getHeadDomain(node)) \
                    and (node != self.getHeadDomain(node)
                         or node.dep_ not in ['det',
@@ -2324,22 +2404,22 @@ class ViewpointFeatureDef:
                                              'punct']):
 
                     if self.getHeadDomain(node).i not in barriers:
-                        node._.vwp_perspective = \
-                            self.getHeadDomain(node).head._.vwp_perspective
+                        node._.vwp_perspective_ = \
+                            self.getHeadDomain(node).head._.vwp_perspective_
                 elif node == self.getHeadDomain(node):
-                    node._.vwp_perspective = \
+                    node._.vwp_perspective_ = \
                         self.getHeadDomain(node.head)._.head_perspective
                 else:
-                    node._.vwp_perspective = \
+                    node._.vwp_perspective_ = \
                         self.getHeadDomain(node)._.head_perspective
             else:
-                if (node._.governing_subject is None
-                   or len(node._.vwp_perspective)) == 0 \
+                if (node._.governing_subject_ is None
+                   or len(node._.vwp_perspective_)) == 0 \
                    and node.head.lemma_ in getLightVerbs():
-                    node.head._.vwp_perspective = node._.vwp_perspective
+                    node.head._.vwp_perspective_ = node._.vwp_perspective_
             for child in node.children:
 
-                if child._.vwp_perspective is not None:
+                if child._.vwp_perspective_ is not None:
                     self.percolateViewpoint([child], barriers)
                     continue
 
@@ -2355,29 +2435,29 @@ class ViewpointFeatureDef:
 
                     found = False
                     if self.getHeadDomain(child).i not in barriers:
-                        if node._.vwp_perspective is not None:
-                            child._.vwp_perspective = node._.vwp_perspective
+                        if node._.vwp_perspective_ is not None:
+                            child._.vwp_perspective_ = node._.vwp_perspective_
                         elif (not found and node != self.getHeadDomain(node)
                               and node.i < self.getHeadDomain(node).i):
-                            if child._.vwp_perspective is not None \
+                            if child._.vwp_perspective_ is not None \
                                and not isRoot(self.getHeadDomain(node)) \
-                               and len(child._.vwp_perspective) == 0:
+                               and len(child._.vwp_perspective_) == 0:
 
-                                child._.vwp_perspective = \
+                                child._.vwp_perspective_ = \
                                          self.getHeadDomain(
-                                             node).head._.vwp_perspective
-                            elif child._.vwp_perspective is None:
-                                child._.vwp_perspective = \
+                                             node).head._.vwp_perspective_
+                            elif child._.vwp_perspective_ is None:
+                                child._.vwp_perspective_ = \
                                     self.getHeadDomain(child
                                                        )._.head_perspective
                         elif (child.i < node.i
                               and child.i < self.getHeadDomain(node).i):
-                            if child._.vwp_perspective is None:
-                                child._.vwp_perspective = \
+                            if child._.vwp_perspective_ is None:
+                                child._.vwp_perspective_ = \
                                     self.getHeadDomain(child
                                                        )._.head_perspective
                 else:
-                    child._.vwp_perspective = \
+                    child._.vwp_perspective_ = \
                         self.getHeadDomain(child)._.head_perspective
 
                 self.percolateViewpoint([child], barriers)
@@ -2548,7 +2628,7 @@ class ViewpointFeatureDef:
             entityInfo.append(entry)
         return entityInfo
 
-    def set_perspective_spans(self, hdoc, calculatePerspective=True):
+    def set_perspective_spans(self, hdoc):
         """
          Create structures identifying which tokens have been
          assigned to which point of view
@@ -2587,36 +2667,19 @@ class ViewpointFeatureDef:
         """
         pspans = {}
         pspans['implicit'] = {}
+        pspans['implicit_!'] = []
+        pspans['implicit_3'] = []
         pspans['explicit_1'] = []
         pspans['explicit_2'] = []
         pspans['explicit_3'] = {}
 
         stance_markers = {}
         stance_markers['implicit'] = {}
+        stance_markers['implicit_!'] = []
+        stance_markers['implicit_3'] = []
         stance_markers['explicit_1'] = []
         stance_markers['explicit_2'] = []
         stance_markers['explicit_3'] = {}
-
-        emotional_markers = {}
-        emotional_markers['explicit_1'] = []
-        emotional_markers['explicit_2'] = []
-        emotional_markers['explicit_3'] = {}
-
-        character_markers = {}
-        character_markers['explicit_1'] = []
-        character_markers['explicit_2'] = []
-        character_markers['explicit_3'] = {}
-
-        propositional_attitudes = {}
-        propositional_attitudes['implicit'] = []
-        propositional_attitudes['implicit_3'] = []
-        propositional_attitudes['explicit_1'] = []
-        propositional_attitudes['explicit_2'] = []
-        propositional_attitudes['explicit_3'] = {}
-
-        theory_of_mind_sentences = []
-
-        # print_parse_tree(hdoc)
 
         for token in hdoc:
 
@@ -2624,49 +2687,22 @@ class ViewpointFeatureDef:
             if token.i not in referentID:
                 referentID.append(token.i)
 
-            self.mark_argument_words(token, hdoc)
+            #self.mark_argument_words(token, hdoc)
             hdeps = [child.dep_ for child in token.head.children]
-            if calculatePerspective:
-                stance_markers, pspans = \
-                    self.stance_perspective(token,
-                                            hdoc,
-                                            referentID,
-                                            stance_markers,
-                                            pspans,
-                                            hdeps)
-                emotional_markers = \
-                    self.emotional_impact(token,
-                                          hdoc,
-                                          emotional_markers)
-            if token._.has_governing_subject:
-                if calculatePerspective:
-                    character_markers = \
-                        self.character_traits(token,
-                                              hdoc,
-                                              referentID,
-                                              character_markers)
-                    emotional_markers = \
-                        self.emotion_predicates(token,
-                                                hdoc,
-                                                emotional_markers)
-                    theory_of_mind_sentences = \
-                        self.theory_of_mind_sentences(token,
-                                                      hdoc,
-                                                      theory_of_mind_sentences)
-            propositional_attitudes = \
-                self.propositional_attitudes(token,
-                                             hdoc,
-                                             propositional_attitudes,
-                                             hdeps)
-        propositional_attitudes = \
-            self.cleanup_propositional_attitudes(propositional_attitudes,
-                                                 hdoc)
-        hdoc._.vwp_perspective_spans = pspans
-        hdoc._.vwp_stance_markers = stance_markers
-        hdoc._.vwp_character_traits = character_markers
-        hdoc._.vwp_emotion_states = emotional_markers
-        hdoc._.vwp_propositional_attitudes = propositional_attitudes
-        hdoc._.vwp_social_awareness = theory_of_mind_sentences
+            stance_markers, pspans = \
+                self.stance_perspective(token,
+                                        hdoc,
+                                        referentID,
+                                        stance_markers,
+                                        pspans,
+                                        hdeps)
+
+        hdoc._.vwp_perspective_spans_ = \
+            self.cleanup_propositional_attitudes(
+                pspans, hdoc, "perspective_spans")
+        hdoc._.vwp_stance_markers_ = \
+            self.cleanup_propositional_attitudes(
+                stance_markers, hdoc, "stance_markers")
 
     def mark_transition_argument_words(self, hdoc):
     
@@ -2689,11 +2725,11 @@ class ViewpointFeatureDef:
         for item in tp[3]:
             if item[4] not in ['temporal', 'PARAGRAPH']:
                 if item[2] == item[3]:
-                    hdoc[item[2]]._.vwp_argumentation = True
+                    hdoc[item[2]]._.vwp_argumentation_ = True
                     hdoc[item[2]]._.transition = True
                 else:
                     for i in range(item[2], item[3] + 1):
-                        hdoc[i]._.vwp_argumentation = True
+                        hdoc[i]._.vwp_argumentation_ = True
                         hdoc[i]._.transition = True
         if (token._.vwp_cognitive
            or token._.vwp_communication
@@ -2712,15 +2748,15 @@ class ViewpointFeatureDef:
                              or token.head.head.head.head._.vwp_possession
                              or token.head.head.head.head._.vwp_cause
                              or token.head.head.head.head._.vwp_relation))):
-                    token._.vwp_argumentation = True
-                    token.head._.vwp_argumentation = True
-                    token.head.head._.vwp_argumentation = True
-                    token.head.head.head._.vwp_argumentation = True
-                    token.head.head.head.head._.vwp_argumentation = True
+                    token._.vwp_argumentation_ = True
+                    token.head._.vwp_argumentation_ = True
+                    token.head.head._.vwp_argumentation_ = True
+                    token.head.head.head._.vwp_argumentation_ = True
+                    token.head.head.head.head._.vwp_argumentation_ = True
                     for child in token.head.head.children:
                         if child.pos_ in ['DET'] \
                            or child.tag_ in ['WP', 'WP$', 'JJR', 'JJS']:
-                            child._.vwp_argumentation = True
+                            child._.vwp_argumentation_ = True
 
             elif token.head.head.dep_ == 'dobj':
                 if (token.head.head.head._.vwp_cognitive
@@ -2734,14 +2770,14 @@ class ViewpointFeatureDef:
                              or token.head.head.head._.vwp_possession
                              or token.head.head.head._.vwp_cause
                              or token.head.head.head._.vwp_relation))):
-                    token._.vwp_argumentation = True
-                    token.head._.vwp_argumentation = True
-                    token.head.head._.vwp_argumentation = True
-                    token.head.head.head._.vwp_argumentation = True
+                    token._.vwp_argumentation_ = True
+                    token.head._.vwp_argumentation_ = True
+                    token.head.head._.vwp_argumentation_ = True
+                    token.head.head.head._.vwp_argumentation_ = True
                     for child in token.head.head.children:
                         if child.pos_ in ['DET'] \
                            or child.tag_ in ['WP', 'WP$', 'JJR', 'JJS']:
-                            child._.vwp_argumentation = True
+                            child._.vwp_argumentation_ = True
         if token.dep_ == 'pobj' \
            and token.head is not None \
            and token.head.dep_ == 'prep' \
@@ -2765,10 +2801,10 @@ class ViewpointFeatureDef:
                          or token._.vwp_possession
                          or token._.vwp_cause
                          or token._.vwp_relation))):
-                token._.vwp_argumentation = True
-            token.head._.vwp_argumentation = True
-            token.head.head._.vwp_argumentation = True
-            token.head.head.head._.vwp_argumentation = True
+                token._.vwp_argumentation_ = True
+            token.head._.vwp_argumentation_ = True
+            token.head.head._.vwp_argumentation_ = True
+            token.head.head.head._.vwp_argumentation_ = True
 
         if token.dep_ == 'pobj' \
            and token.head is not None \
@@ -2795,9 +2831,9 @@ class ViewpointFeatureDef:
                                  or token._.vwp_possession
                                  or token._.vwp_cause
                                  or token._.vwp_relation))):
-                        token._.vwp_argumentation = True
-                        token.head._.vwp_argumentation = True
-                        child._.vwp_argumentation = True
+                        token._.vwp_argumentation_ = True
+                        token.head._.vwp_argumentation_ = True
+                        child._.vwp_argumentation_ = True
                     if token.dep_ != 'conj' \
                        and token.head.dep_ != 'conj' \
                        and (token._.vwp_cognitive
@@ -2811,8 +2847,8 @@ class ViewpointFeatureDef:
                                      or token.head.head._.vwp_possession
                                      or token.head.head._.vwp_cause
                                      or token.head.head._.vwp_relation))):
-                        token.head.head._.vwp_argumentation = True
-                        child._.vwp_argumentation = True
+                        token.head.head._.vwp_argumentation_ = True
+                        child._.vwp_argumentation_ = True
 
         if token.dep_ in ['pobj', 'advmod'] \
            and isRoot(token.head.head) \
@@ -2835,23 +2871,23 @@ class ViewpointFeatureDef:
                              or child._.vwp_possession
                              or child._.vwp_cause
                              or child._.vwp_relation))):
-                    token._.vwp_argumentation = True
-                    child._.vwp_argumentation = True
+                    token._.vwp_argumentation_ = True
+                    child._.vwp_argumentation_ = True
 
-        if token._.has_governing_subject \
+        if token._.has_governing_subject_ \
            and (token._.vwp_evaluation
                 or token._.vwp_hedge) \
-           and (hdoc[token._.governing_subject]._.vwp_argument
-                or hdoc[token._.governing_subject]._.vwp_information
-                or hdoc[token._.governing_subject]._.vwp_communication
-                or hdoc[token._.governing_subject]._.vwp_cognitive
+           and (hdoc[token._.governing_subject_]._.vwp_argument
+                or hdoc[token._.governing_subject_]._.vwp_information
+                or hdoc[token._.governing_subject_]._.vwp_communication
+                or hdoc[token._.governing_subject_]._.vwp_cognitive
                 or (token.dep_ != 'conj'
-                    and (hdoc[token._.governing_subject]._.vwp_abstract
-                         or hdoc[token._.governing_subject]._.vwp_possession
-                         or hdoc[token._.governing_subject]._.vwp_relation))):
-            token._.vwp_argumentation = True
-            hdoc[token._.governing_subject]._.vwp_argumentation = True
-            for child in hdoc[token._.governing_subject].children:
+                    and (hdoc[token._.governing_subject_]._.vwp_abstract
+                         or hdoc[token._.governing_subject_]._.vwp_possession
+                         or hdoc[token._.governing_subject_]._.vwp_relation))):
+            token._.vwp_argumentation_ = True
+            hdoc[token._.governing_subject_]._.vwp_argumentation_ = True
+            for child in hdoc[token._.governing_subject_].children:
                 if child.lemma_ not in core_temporal_preps \
                     and (child.pos_ in ['DET', 'AUX']
                          or child.tag_ in function_word_tags
@@ -2871,7 +2907,7 @@ class ViewpointFeatureDef:
                                   or child._.vwp_cause
                                   or child._.vwp_relation
                                   or child.dep_ in ['neg']))):
-                    child._.vwp_argumentation = True
+                    child._.vwp_argumentation_ = True
 
         if token.dep_ == 'amod' \
            and token._.vwp_evaluation \
@@ -2880,7 +2916,7 @@ class ViewpointFeatureDef:
                 or token._.vwp_argument
                 or token._.vwp_communication
                 or token._.vwp_cognitive):
-            token._.vwp_argumentation = True
+            token._.vwp_argumentation_ = True
 
         if token.dep_ in adjectival_predicates \
            and (token._.vwp_evaluation
@@ -2904,8 +2940,8 @@ class ViewpointFeatureDef:
                                 or child._.vwp_cause
                                 or child._.vwp_relation
                                 or child.dep_ in ['neg'])):
-                        token._.vwp_argumentation = True
-                        child._.vwp_argumentation = True
+                        token._.vwp_argumentation_ = True
+                        child._.vwp_argumentation_ = True
                     for grandchild in child.children:
                         if child._.vwp_information \
                            or grandchild._.vwp_communication \
@@ -2917,8 +2953,8 @@ class ViewpointFeatureDef:
                                      or grandchild._.vwp_hedge
                                      or grandchild._.vwp_possession
                                      or grandchild.dep_ in ['neg'])):
-                            token._.vwp_argumentation = True
-                            grandchild._.vwp_argumentation = True
+                            token._.vwp_argumentation_ = True
+                            grandchild._.vwp_argumentation_ = True
 
         if token.dep_ == 'amod' \
            and (token._.vwp_evaluation
@@ -2933,21 +2969,21 @@ class ViewpointFeatureDef:
                    or child._.vwp_cognitive \
                    or child._.vwp_communication \
                    or child._.vwp_argument:
-                    token._.vwp_argumentation = True
+                    token._.vwp_argumentation_ = True
                     if token.head._.vwp_evaluation \
                        or token.head._.vwp_hedge \
                        or token.head._.vwp_cognitive \
                        or token.head._.vwp_communication \
                        or token.head._.vwp_argument:
-                        token.head._.vwp_argumentation = True
-                        token.head.head._.vwp_argumentation = True
+                        token.head._.vwp_argumentation_ = True
+                        token.head.head._.vwp_argumentation_ = True
                     if token.head.head.head._.vwp_evaluation \
                        or token.head.head.head._.vwp_hedge \
                        or token.head.head.head._.vwp_cognitive \
                        or token.head.head.head._.vwp_communication \
                        or token.head.head.head._.vwp_argument:
-                        token.head.head.head._.vwp_argumentation = True
-                    child._.vwp_argumentation = True
+                        token.head.head.head._.vwp_argumentation_ = True
+                    child._.vwp_argumentation_ = True
 
         if token.dep_ == 'amod' \
            and (token._.vwp_evaluation
@@ -2963,8 +2999,8 @@ class ViewpointFeatureDef:
                          or token.head._.vwp_possession
                          or token.head._.vwp_relation))) \
            and token.head._.is_academic:
-            token._.vwp_argumentation = True
-            token.head._.vwp_argumentation = True
+            token._.vwp_argumentation_ = True
+            token.head._.vwp_argumentation_ = True
 
         if token.lemma_ in quantifying_determiners \
            and (token.head._.vwp_argument
@@ -2984,17 +3020,17 @@ class ViewpointFeatureDef:
                        or child._.vwp_argument \
                        or child._.vwp_hedge \
                        or child._.vwp_evaluation:
-                        token._.vwp_argumentation = True
-                        token.head._.vwp_argumentation = True
-                        child._.vwp_argumentation = True
+                        token._.vwp_argumentation_ = True
+                        token.head._.vwp_argumentation_ = True
+                        child._.vwp_argumentation_ = True
 
         if ((token._.vwp_evaluation or token._.vwp_hedge)
             and token.head.dep_ not in ['conj']
             and (token.head.head._.vwp_argument
                  or token.head.head._.vwp_cognitive
                  or token.head.head._.vwp_communication)):
-            token._.vwp_argumentation = True
-            token.head.head._.vwp_argumentation = True
+            token._.vwp_argumentation_ = True
+            token.head.head._.vwp_argumentation_ = True
 
         if (token._.vwp_cognitive
            or token._.vwp_communication
@@ -3004,11 +3040,11 @@ class ViewpointFeatureDef:
             if token.dep_ in subject_or_object_nom:
                 for child in token.head.children:
                     if child.dep_ in clausal_complements:
-                        token._.vwp_argumentation = True
-                        token.head._.vwp_argumentation = True
+                        token._.vwp_argumentation_ = True
+                        token.head._.vwp_argumentation_ = True
                         for grandchild in child.children:
                             if grandchild.dep_ == 'mark':
-                                grandchild._.vwp_argumentation = True
+                                grandchild._.vwp_argumentation_ = True
 
             if token.dep_ in ['aux', 'auxpass', 'advmod', 'npadvmod'] \
                and (isRoot(token.head)
@@ -3017,11 +3053,11 @@ class ViewpointFeatureDef:
                          or token.head._.vwp_argument
                          or token.head._.vwp_hedge
                          or token.head._.vwp_evaluation)):
-                token._.vwp_argumentation = True
-                token.head._.vwp_argumentation = True
+                token._.vwp_argumentation_ = True
+                token.head._.vwp_argumentation_ = True
                 for child in token.head.children:
                     if child.pos_ in ['AUX', 'ADV']:
-                        child._.vwp_argumentation = True
+                        child._.vwp_argumentation_ = True
 
             if token.dep_ in ['aux', 'auxpass', 'advmod', 'npadvmod'] \
                and (token._.vwp_evaluation or token._.vwp_hedge):
@@ -3034,8 +3070,8 @@ class ViewpointFeatureDef:
                                      or grandchild._.vwp_argument
                                      or grandchild._.vwp_hedge
                                      or grandchild._.vwp_evaluation)):
-                                token._.vwp_argumentation = True
-                                grandchild._.vwp_argumentation = True
+                                token._.vwp_argumentation_ = True
+                                grandchild._.vwp_argumentation_ = True
                             for ggrandchild in grandchild.children:
                                 if (ggrandchild.dep_ != 'conj'
                                     and (ggrandchild._.vwp_cognitive
@@ -3044,8 +3080,8 @@ class ViewpointFeatureDef:
                                          or ggrandchild._.vwp_hedge
                                          or ggrandchild._.vwp_probability
                                          or ggrandchild._.vwp_evaluation)):
-                                    token._.vwp_argumentation = True
-                                    ggrandchild._.vwp_argumentation = True
+                                    token._.vwp_argumentation_ = True
+                                    ggrandchild._.vwp_argumentation_ = True
 
             if token.dep_ in ['aux', 'auxpass', 'advmod', 'npadvmod']:
                 for child in token.children:
@@ -3055,8 +3091,8 @@ class ViewpointFeatureDef:
                             or child._.vwp_argument
                             or child._.vwp_hedge
                             or child._.vwp_evaluation):
-                        token._.vwp_argumentation = True
-                        child._.vwp_argumentation = True
+                        token._.vwp_argumentation_ = True
+                        child._.vwp_argumentation_ = True
 
             if token.dep_ is None \
                or isRoot(token) \
@@ -3069,8 +3105,8 @@ class ViewpointFeatureDef:
                or token.head._.vwp_evaluation:
                 for child in token.children:
                     if clausal_subject_or_complement(child):
-                        token._.vwp_argumentation = True
-                        token.head._.vwp_argumentation = True
+                        token._.vwp_argumentation_ = True
+                        token.head._.vwp_argumentation_ = True
                         for child in token.head.children:
                             if child.lemma_ not in core_temporal_preps \
                                and (child.pos_ in ['DET', 'AUX']
@@ -3090,12 +3126,12 @@ class ViewpointFeatureDef:
                                              or child._.vwp_relation
                                              or child._.vwp_cause
                                              or child.dep_ in ['neg']))):
-                                child._.vwp_argumentation = True
+                                child._.vwp_argumentation_ = True
 
                         if token.i + 1 < len(token.doc) \
                            and token.nbor(1) is not None \
                            and token.nbor(1).dep_ == 'mark':
-                            token.nbor(1)._.vwp_argumentation = True
+                            token.nbor(1)._.vwp_argumentation_ = True
 
         if token.dep_ == 'amod' \
            and (token._.vwp_evaluation
@@ -3107,8 +3143,8 @@ class ViewpointFeatureDef:
                 or token.head._.vwp_argument
                 or token.head._.vwp_hedge
                 or token.head._.vwp_evaluation):
-            token._.vwp_argumentation = True
-            token.head._.vwp_argumentation = True
+            token._.vwp_argumentation_ = True
+            token.head._.vwp_argumentation_ = True
 
         if token.dep_ == 'amod' \
            and (token._.vwp_evaluation
@@ -3120,8 +3156,8 @@ class ViewpointFeatureDef:
                 or token.head.head._.vwp_argument
                 or token.head.head._.vwp_hedge
                 or token.head.head._.vwp_evaluation):
-            token._.vwp_argumentation = True
-            token.head.head._.vwp_argumentation = True
+            token._.vwp_argumentation_ = True
+            token.head.head._.vwp_argumentation_ = True
 
         if token.dep_ == 'amod' \
            and (token._.vwp_evaluation
@@ -3134,8 +3170,8 @@ class ViewpointFeatureDef:
                      or token.head.head.head._.vwp_communication
                      or token.head.head.head._.vwp_argument
                      or token.head.head.head._.vwp_evaluation)):
-                token._.vwp_argumentation = True
-                token.head.head.head._.vwp_argumentation = True
+                token._.vwp_argumentation_ = True
+                token.head.head.head._.vwp_argumentation_ = True
 
         if token.dep_ == 'prep' \
            and (in_modal_scope(token.head)
@@ -3155,9 +3191,9 @@ class ViewpointFeatureDef:
                          or child._.vwp_communication
                          or child._.vwp_argument
                          or child._.vwp_evaluation)):
-                    token._.vwp_argumentation = True
-                    token.head._.vwp_argumentation = True
-                    child._.vwp_argumentation = True
+                    token._.vwp_argumentation_ = True
+                    token.head._.vwp_argumentation_ = True
+                    child._.vwp_argumentation_ = True
 
         if (token.dep_ in complements
             and (token.head._.vwp_argument
@@ -3176,9 +3212,9 @@ class ViewpointFeatureDef:
                         or child._.vwp_argument
                         or child._.vwp_hedge
                         or child._.vwp_evaluation):
-                    token._.vwp_argumentation = True
-                    token.head._.vwp_argumentation = True
-                    child._.vwp_argumentation = True
+                    token._.vwp_argumentation_ = True
+                    token.head._.vwp_argumentation_ = True
+                    child._.vwp_argumentation_ = True
 
         if (token._.vwp_cognitive
            or token._.vwp_communication
@@ -3193,9 +3229,9 @@ class ViewpointFeatureDef:
                             if child._.vwp_cognitive \
                                or child._.vwp_communication \
                                or child._.vwp_argument:
-                                token._.vwp_argumentation = True
-                                hdoc[offset]._.vwp_argumentation = True
-                                child._.vwp_argumentation = True
+                                token._.vwp_argumentation_ = True
+                                hdoc[offset]._.vwp_argumentation_ = True
+                                child._.vwp_argumentation_ = True
                     if (hdoc[offset]._.vwp_argument
                         or hdoc[offset]._.vwp_evaluation
                         or hdoc[offset]._.vwp_hedge
@@ -3210,8 +3246,8 @@ class ViewpointFeatureDef:
                                  or hdoc[offset].dep_ in complements))):
                         if token._.is_academic \
                            or hdoc[offset]._.is_academic:
-                            token._.vwp_argumentation = True
-                            hdoc[offset]._.vwp_argumentation = True
+                            token._.vwp_argumentation_ = True
+                            hdoc[offset]._.vwp_argumentation_ = True
                             for child in hdoc[offset].children:
                                 if (child._.vwp_evaluation
                                     or child._.vwp_hedge
@@ -3223,7 +3259,7 @@ class ViewpointFeatureDef:
                                              or child._.vwp_possession
                                              or child._.vwp_cause
                                              or child._.vwp_relation))):
-                                    child._.vwp_argumentation = True
+                                    child._.vwp_argumentation_ = True
                                     for grandchild in child.children:
                                         if ((grandchild.pos_ in ['DET', 'AUX']
                                              or grandchild.tag_
@@ -3236,7 +3272,7 @@ class ViewpointFeatureDef:
                                              or grandchild.lemma_
                                              in personal_or_indefinite_pronoun
                                              )):
-                                            grandchild._.vwp_argumentation\
+                                            grandchild._.vwp_argumentation_ \
                                                 = True
 
         if token._.vwp_evaluation:
@@ -3251,8 +3287,8 @@ class ViewpointFeatureDef:
                              or hdoc[offset]._.vwp_cause
                              or hdoc[offset]._.vwp_relation))):
                     if token._.is_academic or hdoc[offset]._.is_academic:
-                        token._.vwp_argumentation = True
-                        hdoc[offset]._.vwp_argumentation = True
+                        token._.vwp_argumentation_ = True
+                        hdoc[offset]._.vwp_argumentation_ = True
 
         if (token._.vwp_certainty
            or token._.vwp_probability
@@ -3264,17 +3300,17 @@ class ViewpointFeatureDef:
            or token._.vwp_generalization) \
            and token.dep_ == 'advmod' \
            and isRoot(token.head):
-            token._.vwp_argumentation = True
+            token._.vwp_argumentation_ = True
             if token.head.is_stop:
-                token.head._.vwp_argumentation = True
+                token.head._.vwp_argumentation_ = True
 
-        if token.head._.vwp_argumentation:
+        if token.head._.vwp_argumentation_:
             if token.head.head.dep_ == 'prep':
-                token.head.head._.vwp_argumentation = True
+                token.head.head._.vwp_argumentation_ = True
 
-        if token._.vwp_argumentation:
+        if token._.vwp_argumentation_:
             if token.head.dep_ == 'prep':
-                token.head._.vwp_argumentation = True
+                token.head._.vwp_argumentation_ = True
 
             if token.i + 1 < len(token.doc) \
                and token.nbor(1) is not None \
@@ -3294,7 +3330,7 @@ class ViewpointFeatureDef:
                     or token.nbor(1)._.vwp_cause
                     or token.nbor(1)._.vwp_relation
                     or token.nbor(1).dep_ in ['neg']):
-                token.nbor(1)._.vwp_argumentation = True
+                token.nbor(1)._.vwp_argumentation_ = True
 
             for child in token.children:
                 if child.lemma_ not in core_temporal_preps \
@@ -3315,7 +3351,7 @@ class ViewpointFeatureDef:
                                or child._.vwp_abstract
                                or child._.vwp_cause
                                or child.dep_ in ['neg']))):
-                    child._.vwp_argumentation = True
+                    child._.vwp_argumentation_ = True
                     for grandchild in child.children:
                         if grandchild.tag_ in ['TO',
                                                'MD',
@@ -3335,7 +3371,7 @@ class ViewpointFeatureDef:
                            or (grandchild.tag_ == 'RB'
                                and (grandchild._.vwp_evaluation
                                     or grandchild._.vwp_hedge)):
-                            grandchild._.vwp_argumentation = True
+                            grandchild._.vwp_argumentation_ = True
                             break
                     if token.tag_ == 'NOUN':
                         for grandchild in token.children:
@@ -3350,9 +3386,9 @@ class ViewpointFeatureDef:
                                          or token._.vwp_possession
                                          or token._.vwp_cause
                                          or token._.vwp_relation))):
-                                grandchild._.vwp_argumentation = True
+                                grandchild._.vwp_argumentation_ = True
 
-            if token._.vwp_argumentation \
+            if token._.vwp_argumentation_ \
                and token.tag_ in ['RB', 'MD', 'SCONJ']:
                 for child in token.head.children:
                     if child.lemma_ not in core_temporal_preps \
@@ -3371,7 +3407,7 @@ class ViewpointFeatureDef:
                                      or child._.vwp_relation
                                      or child._.vwp_cause
                                      or child.dep_ in ['neg']))):
-                        child._.vwp_argumentation = True
+                        child._.vwp_argumentation_ = True
                         if (child.i + 1 < len(child.doc) and
                             (child.nbor(1)._.vwp_argument
                              or child.nbor(1)._.vwp_information
@@ -3382,7 +3418,7 @@ class ViewpointFeatureDef:
                              or child.nbor(1)._.vwp_cause
                              or child.nbor(1)._.vwp_relation
                              or child.nbor(1).dep_ in ['neg'])):
-                            child.nbor(1)._.vwp_argumentation = True
+                            child.nbor(1)._.vwp_argumentation_ = True
                         for grandchild in child.children:
                             if grandchild._.vwp_argument \
                                or grandchild._.vwp_information \
@@ -3394,7 +3430,7 @@ class ViewpointFeatureDef:
                                         or grandchild._.vwp_relation
                                         or grandchild._.vwp_cause
                                         or grandchild.dep_ in ['neg'])):
-                                grandchild._.vwp_argumentation = True
+                                grandchild._.vwp_argumentation_ = True
 
     def stance_perspective(self,
                            token,
@@ -3410,29 +3446,29 @@ class ViewpointFeatureDef:
 
         # If the subject and the verb disagree on viewpoint, correct
         # the verb to agree with the subject
-        if token._.vwp_perspective is None \
+        if token._.vwp_perspective_ is None \
            and token.dep_ in ['nsubj', 'nsubjpass', 'csubj', 'csubjpass']:
-            if token._.vwp_perspective != token.head._.vwp_perspective:
-                token.head._.vwp_perspective = token._.vwp_perspective
+            if token._.vwp_perspective_ != token.head._.vwp_perspective_:
+                token.head._.vwp_perspective_ = token._.vwp_perspective_
 
         # Cleanup for stray cases where no viewpoint was assigned to ROOT
         if isRoot(token) \
-           and token._.vwp_perspective is None:
+           and token._.vwp_perspective_ is None:
             for child in token.children:
-                if child._.vwp_perspective is not None:
-                    token._.vwp_perspective = child._.vwp_perspective
+                if child._.vwp_perspective_ is not None:
+                    token._.vwp_perspective_ = child._.vwp_perspective_
                     break
 
         # Cleanup -- prepositions should be assigned to the same
         # viewpoint as their head
         if token.dep_ == 'prep' \
-           and token._.vwp_perspective is None:
-            token._.vwp_perspective = token.head._.vwp_perspective
+           and token._.vwp_perspective_ is None:
+            token._.vwp_perspective_ = token.head._.vwp_perspective_
 
-        if token._.vwp_perspective is not None \
-           and len(token._.vwp_perspective) == 0:
+        if token._.vwp_perspective_ is not None \
+           and len(token._.vwp_perspective_) == 0:
             controller = self.getHeadDomain(token).i
-            csubj = hdoc[controller]._.governing_subject
+            csubj = hdoc[controller]._.governing_subject_
             if (csubj is None or not hdoc[csubj]._.animate) \
                and getSubject(hdoc[controller]) is not None \
                and getSubject(hdoc[controller])._.animate:
@@ -3444,7 +3480,7 @@ class ViewpointFeatureDef:
                 csubj = getSubject(hdoc[csubj]).i
 
             if self.isHeadDomain(hdoc[controller]) \
-               and len(getRoot(hdoc[controller])._.vwp_perspective) == 0:
+               and len(getRoot(hdoc[controller])._.vwp_perspective_) == 0:
                 controller = getRoot(hdoc[controller]).i
             if csubj is not None \
                and hdoc[csubj].text.lower() in first_person_pronouns:
@@ -3461,7 +3497,8 @@ class ViewpointFeatureDef:
             if domain not in pspans:
                 pspans[domain] = {}
             if token._.transition \
-               and token._.vwp_argumentation \
+               and token._.transition_category not in ['temporal',
+                                                       'PARAGRAPH'] \
                and isRoot(token):
                 if domain in ['explicit_1', 'explicit_2']:
                     if token.i not in pspans[domain]:
@@ -3498,7 +3535,8 @@ class ViewpointFeatureDef:
                             sorted(pspans[domain][str(controller)].copy())
             deps = [child.dep_ for child in token.children]
             if token._.transition \
-               and token._.vwp_argumentation \
+               and token._.transition_category not in ['temporal',
+                                                       'PARAGRAPH'] \
                and isRoot(token):
                 if domain in ['explicit_1', 'explicit_2']:
                     if token.i not in stance_markers[domain]:
@@ -3536,11 +3574,11 @@ class ViewpointFeatureDef:
                            or 'prep' in hdeps
                            or 'acl' in hdeps))
                   or (token._.vwp_character
-                      and token._.governing_subject is not None
-                      and hdoc[token._.governing_subject]._.animate)
+                      and token._.governing_subject_ is not None
+                      and hdoc[token._.governing_subject_]._.animate)
                   or (token._.vwp_evaluated_role
-                      and token._.governing_subject is not None
-                      and hdoc[token._.governing_subject]._.animate)):
+                      and token._.governing_subject_ is not None
+                      and hdoc[token._.governing_subject_]._.animate)):
                 if token.i not in stance_markers[domain]:
                     if token.dep_ == 'amod' \
                        and (token._.vwp_evaluation
@@ -3576,8 +3614,8 @@ class ViewpointFeatureDef:
                                 stance_markers[domain][str(controller)] = \
                                     sorted(stance_markers[
                                          'implicit'][str(controller)].copy())
-        elif token is not None and token._.vwp_perspective is not None:
-            for item in token._.vwp_perspective:
+        elif token is not None and token._.vwp_perspective_ is not None:
+            for item in token._.vwp_perspective_:
                 controller = hdoc[item]
                 if controller.text.lower() in first_person_pronouns \
                    and len(list(controller.children)) == 0 \
@@ -3901,7 +3939,7 @@ class ViewpointFeatureDef:
         end = list(dom.subtree)[len(list(dom.subtree))-1].i
         return ([start, end], controller, token.i)
 
-    def cleanup_propositional_attitudes(self, propositional_attitudes, hdoc):
+    def cleanup_propositional_attitudes(self, propositional_attitudes, hdoc, name):
         for item in propositional_attitudes['implicit_3']:
             if item in propositional_attitudes['implicit']:
                 propositional_attitudes['implicit'].remove(item)
@@ -3926,15 +3964,15 @@ class ViewpointFeatureDef:
         for item in propositional_attitudes['implicit']:
             if isinstance(item, tuple):
                 for offset in range(item[0][0], item[0][1]):
-                    hdoc[offset]._.vwp_claim = True
+                    hdoc[offset]._.vwp_claim_ = True
         for item in propositional_attitudes['explicit_1']:
             if isinstance(item, tuple):
                 for offset in range(item[0][0], item[0][1]):
-                    hdoc[offset]._.vwp_claim = True
+                    hdoc[offset]._.vwp_claim_ = True
         for item in propositional_attitudes['explicit_2']:
             if isinstance(item, tuple):
                 for offset in range(item[0][0], item[0][1]):
-                    hdoc[offset]._.vwp_claim = True
+                    hdoc[offset]._.vwp_claim_ = True
         for item in propositional_attitudes['implicit_3']:
             if isinstance(item, tuple):
                 for offset in range(item[0][0], item[0][1]):
@@ -3943,53 +3981,204 @@ class ViewpointFeatureDef:
             if isinstance(item, tuple):
                 for item in propositional_attitudes['explicit_3'][domain]:
                     for offset in range(item[0][0], item[0][1]):
-                        hdoc[offset]._.vwp_discussion = True
-                        
+                        hdoc[offset]._.vwp_discussion_ = True
+
         # Now let's clean things up to put propositional attitudes
         # in the format we're standardizing to for sentence scale ranges
         reformatted = []
         for item in propositional_attitudes['implicit']:
-            [[left, right], controller, proposition] = item
-            entry = newSpanEntry('propositional attitudes',
-                                 left,
-                                 right,
-                                 hdoc,
-                                 'implicit')
-            reformatted.append(entry)
-        for item in propositional_attitudes['explicit_1']:
-            [[left, right], controller, proposition] = item
-            entry = newSpanEntry('propositional attitudes',
-                                 left,
-                                 right,
-                                 hdoc,
-                                 'explicit')
-            reformatted.append(entry)
-        for item in propositional_attitudes['explicit_2']:
-            [[left, right], controller, proposition] = item
-            entry = newSpanEntry('propositional attitudes',
-                                 left,
-                                 right,
-                                 hdoc,
-                                 'explicit_2')
-            reformatted.append(entry)
-        for domain in propositional_attitudes['explicit_3']:
-            for item in propositional_attitudes['explicit_3'][domain]:
+            if type(item) in [str,int]:
+                entry = newSpanEntry(name,
+                                     int(item),
+                                     int(item),
+                                     hdoc,
+                                     'SELF')
+            else:
                 [[left, right], controller, proposition] = item
-                entry = newSpanEntry('propositional attitudes',
+                entry = newSpanEntry(name,
                                      left,
                                      right,
                                      hdoc,
-                                     'explicit_3')
+                                     'implicit')
+            reformatted.append(entry)
+        for item in propositional_attitudes['explicit_1']:
+            if type(item) in [str,int]:
+                entry = newSpanEntry(name,
+                                     int(item),
+                                     int(item),
+                                     hdoc,
+                                     'SELF')
+            else:
+                [[left, right], controller, proposition] = item
+                entry = newSpanEntry(name,
+                                     left,
+                                     right,
+                                     hdoc,
+                                     'SELF')
+            reformatted.append(entry)
+        for item in propositional_attitudes['explicit_2']:
+            if type(item) in [str,int]:
+                entry = newSpanEntry(name,
+                                     int(item),
+                                     int(item),
+                                     hdoc,
+                                     'AUDIENCE')
+            else:
+                [[left, right], controller, proposition] = item
+                entry = newSpanEntry(name,
+                                     left,
+                                     right,
+                                     hdoc,
+                                     'AUDIENCE')
+            reformatted.append(entry)
+        for domain in propositional_attitudes['explicit_3']:
+            for item in propositional_attitudes['explicit_3'][domain]:
+                if type(item) in [str,int]:
+                    entry = newSpanEntry(name,
+                                         int(item),
+                                         int(item),
+                                         hdoc,
+                                         domain)
+                else:
+                    [[left, right], controller, proposition] = item
+                    entry = newSpanEntry(name,
+                                         left,
+                                         right,
+                                         hdoc,
+                                         controller)
                 reformatted.append(entry)
         return reformatted
 
+    def vwp_character_traits(self, hdoc):
+        character_markers = {}
+        character_markers['implicit'] = []
+        character_markers['implicit_1'] = []
+        character_markers['implicit_3'] = []
+        character_markers['explicit_1'] = []
+        character_markers['explicit_2'] = []
+        character_markers['explicit_3'] = {}
+        for token in hdoc:
+            referentID = ResolveReference(token, hdoc)
+            if token.i not in referentID:
+                referentID.append(token.i)
+            if token._.has_governing_subject:
+                character_markers = \
+                    self.character_traits(token,
+                                          hdoc,
+                                          referentID,
+                                          character_markers)
+        return self.cleanup_propositional_attitudes(
+           character_markers, hdoc, 'character_traits')
+
+    def vwp_emotion_states(self, hdoc):
+        '''
+           Identification of emotional predicates predicates of a particular
+           viewpoint-holding nominal
+        '''
+        emotional_markers = {}
+        emotional_markers['implicit'] = []
+        emotional_markers['implicit_1'] = []
+        emotional_markers['implicit_3'] = []
+        emotional_markers['explicit_1'] = []
+        emotional_markers['explicit_2'] = []
+        emotional_markers['explicit_3'] = {}
+        for token in hdoc:
+            emotional_markers = \
+                self.emotional_impact(token,
+                                      hdoc,
+                                      emotional_markers)
+            emotional_markers = \
+                self.emotion_predicates(token,
+                                        hdoc,
+                                        emotional_markers)
+        return self.cleanup_propositional_attitudes(
+           emotional_markers, hdoc, 'emotion_states')
+
+
+    def vwp_propositional_attitudes(self, hdoc):
+        '''
+           Identification of propositional attitude predicates associated
+           with specific predicates. E.g., believe or think in 'I believe
+           that this is true', or 'John thinks we are on the right track'.
+        '''
+        if hdoc._.propositional_attitudes_ is not None:
+            return hdoc._.propositional_attitudes_
+        
+        propositional_attitudes = {}
+        propositional_attitudes['implicit'] = []
+        propositional_attitudes['implicit_3'] = []
+        propositional_attitudes['explicit_1'] = []
+        propositional_attitudes['explicit_2'] = []
+        propositional_attitudes['explicit_3'] = {}
+        for token in hdoc:
+            hdeps = [child.dep_ for child in token.head.children]
+            propositional_attitudes = \
+                self.propositional_attitudes(
+                    token, hdoc, propositional_attitudes, hdeps)
+        hdoc._.propositional_attitudes_ = self.cleanup_propositional_attitudes(
+           propositional_attitudes, hdoc, 'propositional attitudes')
+        return hdoc._.propositional_attitudes_
+
+    def vwp_perspective_spans(self, hdoc):
+        self.markPerspectiveSpan(hdoc)
+        return hdoc._.vwp_perspective_spans_
+
+    def vwp_stance_markers(self, hdoc):
+        self.markPerspectiveSpan(hdoc)
+        return hdoc._.vwp_stance_markers_
+
+    def vwp_attribution(self, token):
+        '''
+           Store information about whether a predicate
+           is a claim predicate
+        '''
+        self.directSpeech(token.doc)
+        return token._.vwp_attribution_
+
+    def vwp_source(self, token):
+        '''
+           Store information about whether a predicate
+           is a claim predicate
+        '''
+        self.directSpeech(token.doc)
+        return token._.vwp_source_
+
+    def vwp_cite(self, token):
+        '''
+           Store information about whether a predicate
+           is a claim predicate
+        '''
+        self.directSpeech(token.doc)
+        return token._.vwp_cite_
+
+
+    def vwp_claim(self, token):
+        '''
+           Store information about whether a predicate
+           is a claim predicate
+        '''
+        self.vwp_propositional_attitudes(token.doc)
+        return token._.vwp_claim_
+
+    def vwp_discussion(self, token):
+        '''
+           Store information about whether a predicate
+           is a discussion predicate (propositional
+           attitude predicate for a third person point of
+           view, e.g., his statement that he supported me
+        '''
+        self.vwp_propositional_attitudes(token.doc)
+        return token._.vwp_discussion_
 
     def propositional_attitudes(self,
                                 token,
                                 hdoc,
                                 propositional_attitudes,
                                 hdeps):
-
+        '''
+           Calculate whether tokens define a propositional attitude
+           (claim + proposition)
+        '''
         if ((token.head._.vwp_say
             or token.head._.vwp_think
             or token.head._.vwp_perceive
@@ -4605,6 +4794,18 @@ class ViewpointFeatureDef:
 
         return propositional_attitudes
 
+    def vwp_social_awareness(self, doc):
+        '''
+            Sentence structures that indicate that one viewpoint-taker
+            is aware of another viewpoint (I think that he knows ...)
+        '''
+        theory_of_mind_sentences = []
+        for token in doc:
+            theory_of_mind_sentences =\
+                self.theory_of_mind_sentences(token,
+                    doc, theory_of_mind_sentences)
+        return theory_of_mind_sentences
+
     def theory_of_mind_sentences(self, token, hdoc, theory_of_mind_sentences):
         if token._.vwp_cognitive or token._.vwp_communication \
            or token._.vwp_emotion or token._.vwp_emotional_impact:
@@ -4618,6 +4819,7 @@ class ViewpointFeatureDef:
                    or 'xcomp' == child.dep_
                    or 'acomp' == child.dep_
                    or 'prep' == child.dep_) \
+                   and token._.has_governing_subject \
                    and not child._.vwp_quoted:
                     controllers = ResolveReference(
                         hdoc[token._.governing_subject], hdoc)
@@ -4692,7 +4894,7 @@ class ViewpointFeatureDef:
         """
         negation_tokens = []
         for tok in doc:
-            tok._.vwp_sentiment = tok._.sentiword
+            tok._.vwp_sentiment_ = tok._.sentiword
             # we combine data from the sentiword and polarity ratings
             # to come up with a more reliable estimate of tone, positive
             # or negative. We trust those estimates a lot more for words
@@ -4706,13 +4908,13 @@ class ViewpointFeatureDef:
                or tok._.vwp_hedge \
                or tok.text in doc._.assessments:
                 if tok._.polarity < 0 or tok._.sentiword < 0:
-                    tok._.vwp_tone = min(tok._.polarity, tok._.sentiword)
+                    tok._.vwp_tone_ = min(tok._.polarity, tok._.sentiword)
                 elif tok._.polarity > 0 and tok._.sentiword > 0:
-                    tok._.vwp_tone = max(tok._.polarity, tok._.sentiword)
+                    tok._.vwp_tone_ = max(tok._.polarity, tok._.sentiword)
                 else:
-                    tok._.vwp_tone = (tok._.polarity + tok._.sentiword) / 2
+                    tok._.vwp_tone_ = (tok._.polarity + tok._.sentiword) / 2
             else:
-                tok._.vwp_tone = min(tok._.polarity, tok._.sentiword)
+                tok._.vwp_tone_ = min(tok._.polarity, tok._.sentiword)
 
             # rule order fixes to the tone variable are generally a bad idea,
             # but these are so common that fixing them gets rid of a lot of
@@ -4722,21 +4924,21 @@ class ViewpointFeatureDef:
                and tok.i + 1 < len(doc) \
                and tok.nbor(1) is not None \
                and tok.nbor(1).text.lower() == 'to':
-                tok._.vwp_tone = 0.0
+                tok._.vwp_tone_ = 0.0
             elif (tok.text.lower() == 'fun'
                   and tok.i + 1 < len(doc)
                   and tok.nbor(1) is not None
                   and tok.nbor(1).text.lower() == 'of'):
-                tok._.vwp_tone = -1*tok._.vwp_tone
-                tok.nbor(1)._.vwp_tone = tok._.vwp_tone
+                tok._.vwp_tone_ = -1*tok._.vwp_tone_
+                tok.nbor(1)._.vwp_tone_ = tok._.vwp_tone_
             elif tok.text.lower() == 'certain' and tok.i < tok.head.i:
-                tok._.vwp_tone = 0.0
+                tok._.vwp_tone_ = 0.0
             elif tok.text.lower() == 'pretty' and tok.pos_ == 'ADV':
-                tok._.vwp_tone = 0.0
+                tok._.vwp_tone_ = 0.0
             elif tok.text.lower() in ['kind', 'right'] and tok.pos_ == 'NOUN':
-                tok._.vwp_tone = 0.0
+                tok._.vwp_tone_ = 0.0
             elif tok.text.lower() == 'mean' and tok.pos_ == 'VERB':
-                tok._.vwp_tone = 0.0
+                tok._.vwp_tone_ = 0.0
 
             penultimate = None
             antepenultimate = None
@@ -4836,11 +5038,11 @@ class ViewpointFeatureDef:
 
         if token.pos_ in ['ADJ', 'ADV'] \
            and token.text.lower() in pos_degree_mod \
-           and token._.vwp_tone is not None \
-           and token.head._.vwp_tone is not None \
-           and token._.vwp_tone > 0 \
-           and token.head._.vwp_tone < 0:
-            token._.vwp_tone = -1 * token._.vwp_tone
+           and token._.vwp_tone_ is not None \
+           and token.head._.vwp_tone_ is not None \
+           and token._.vwp_tone_ > 0 \
+           and token.head._.vwp_tone_ < 0:
+            token._.vwp_tone_ = -1 * token._.vwp_tone_
 
         # negation takes scope over everything it governs, i.e., its
         # children and its sister nodes and their children
@@ -4872,7 +5074,7 @@ class ViewpointFeatureDef:
         """
 
         # negate the node
-        tok._.vwp_sentiment = -1 * tok._.vwp_sentiment
+        tok._.vwp_sentiment_ = -1 * tok._.vwp_sentiment_
 
         lastChild = None
 
