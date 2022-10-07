@@ -4683,7 +4683,6 @@ class ViewpointFeatureDef:
             elif (token.dep_ in ['ccomp',
                                  'csubj',
                                  'csubjpass',
-                                 'advcl',
                                  'acl']
                   and token.head._.vwp_evaluation):
                 if domHead not in propositional_attitudes['implicit']:
