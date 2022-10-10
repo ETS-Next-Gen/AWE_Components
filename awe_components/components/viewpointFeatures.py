@@ -1498,9 +1498,12 @@ class ViewpointFeatureDef:
 
                         # direct speech should be treated as quoted even if
                         # it isn't in quotation marks, as in 'This is good,
-                        # I thought'
-                        for descendant in tok.subtree:
-                            descendant._.vwp_quoted = True
+                        # I thought'. We only treat it as a quote if the
+                        # tag is immediately adjacent to the punctuation mark.
+                        if tok.right_edge.i + 2 == getSubject(tok.head).i \
+                           or tok.right_edge.i + 2 == target.i:
+                            for descendant in tok.subtree:
+                                descendant._.vwp_quoted = True
 
                         for descendant in tok.subtree:
                             if descendant._.vwp_quoted:
