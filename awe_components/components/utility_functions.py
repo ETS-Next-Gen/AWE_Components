@@ -2770,6 +2770,35 @@ def createSpanInfo(indicator, document):
 
     return baseInfo
 
+def applySpanFilters(token, entry, filters):
+    '''
+        Given an entry in the format used to describe
+        indicator values for spans by the AWE_Info function,
+        check if that entry passes the specified filters.
+    '''
+    filterEntry = False
+    for (function, returnValues) in filters:
+        if type(filters) == list and len(filters)>0:
+            for (function, returnValues) in filters:
+                for returnValue in returnValues:
+                    comparers = {
+                        "==": lambda x, y: x==y,
+                        "<": lambda x, y: x<y,
+                        ">": lambda x, y: x>y,
+                        "<=": lambda x, y: x<=y,
+                        ">=": lambda x, y: x>=y,
+                        "!=": lambda x, y: x!=y
+                    }
+                    # Direct comparison with the returnValue
+                    if function in comparers and entry['value'] is None:
+                        return True
+                    if function in comparers \
+                       and type(entry['value']) \
+                          in [int, float, str]:
+                        if not comparers[function](entry['value'], returnValue):
+                            return True
+    return False
+
 def applyTokenFilters(token, entry, filters):
     '''
         Given an entry in the format used to describe
@@ -2789,22 +2818,28 @@ def applyTokenFilters(token, entry, filters):
                         ">=": lambda x, y: x>=y,
                         "!=": lambda x, y: x!=y
                     }
-
                     # Direct comparison with the returnValue
+                    if function in comparers and entry['value'] is None:
+                        return True
+
                     if function in comparers \
                        and type(entry['value']) \
                           in [int, float, str]:
-                        if not comparer[function](entry['value'], returnValue):
+                        if not comparers[function](entry['value'], returnValue):
                             return True
 
                     # The returnValue specifies a boolean value
+                    elif returnValue in [True, False, 'True', 'False'] \
+                       and entry['value'] is None:
+                        return True
+                    
                     elif type(entry['value']) == bool \
-                       and returnValue == 'True':
+                       and returnValue in [True, 'True']:
                         if not entry['value']:
                             return True
 
                     elif type(entry['value']) == bool \
-                       and returnValue == 'False':
+                       and returnValue in [False, 'False']:
                          if entry['value']:
                              return True
 
@@ -2816,10 +2851,10 @@ def applyTokenFilters(token, entry, filters):
 
                     # Spacy built-in boolean token flags
                     elif function in built_in_flags:
-                        if returnValue == 'True':
+                        if returnValue in [True, 'True']:
                             if not getattr(token, function):
                                 return True
-                        elif returnValue == 'False':
+                        elif returnValue in ['False', False]:
                             if getattr(token, function):
                                 return True
                         else:
@@ -2839,12 +2874,12 @@ def applyTokenFilters(token, entry, filters):
                     elif token.has_extension(function):
                         if getattr(token._, function) is not None \
                            and getattr(token._, function) \
-                              in [True, False]:
-                             if returnValue == 'True':
+                              in [True, False, 'True', 'False']:
+                             if returnValue in [True, 'True']:
                                  if not getattr(token._,
                                                 function):
                                      return False
-                             elif returnValue == 'False':
+                             elif returnValue in [False, 'False']:
                                  if getattr(token._,
                                             function):
                                      return False
@@ -2877,6 +2912,11 @@ def applySpanTransformations(transformations, baseInfo):
             if transformation == 'text':
                  newEntry['value'] = entry['text']
                  newEntry['name'] = 'text_' \
+                     + entry['name']
+
+            elif transformation == 'lower':
+                 newEntry['value'] = entry['text'].lower()
+                 newEntry['name'] = 'lower_' \
                      + entry['name']
 
             elif transformation == 'len' \
@@ -2913,7 +2953,19 @@ def applyTokenTransformations(entry, token, transformations):
                 + transformation)                   
 
         if transformation == 'text':
-            entry['value'] = entry['text']
+            entry['value'] = entry['text'].strip()
+            entry['name'] = 'text_' + entry['name']                  
+
+        elif transformation == 'lower':
+            entry['value'] = gettr(token, 'lower_').strip()
+            entry['name'] = 'lower_' + entry['name']                  
+
+        elif transformation == 'root':
+            entry['value'] = getattr(token._, 'root')
+            entry['name'] = 'text_' + entry['name']                  
+
+        elif transformation == 'lemma':
+            entry['value'] = getattr(token, 'lemma_')
             entry['name'] = 'text_' + entry['name']                  
 
         elif transformation == 'len' \
@@ -2927,7 +2979,7 @@ def applyTokenTransformations(entry, token, transformations):
             entry['name'] = transformation \
                 + '_' + entry['name']
 
-        elif transformation in ['log', 'sqrt']:
+        elif transformation in ['log', 'sqrt', 'neg']:
             if entry['value'] is not None \
                and is_float(entry['value']) \
                and not (transformation == 'sqrt'
@@ -2941,6 +2993,10 @@ def applyTokenTransformations(entry, token, transformations):
                     entry['value'] = math.sqrt(entry['value'])
                     entry['name'] = 'sqrt_' + entry['name']
 
+
+                elif transformation == 'neg':
+                    entry['value'] = -1 * entry['value']
+
                 elif transformation == 'log' \
                    and entry['value'] is not None:                
                     raise AWE_Workbench_Error(
@@ -2951,6 +3007,12 @@ def applyTokenTransformations(entry, token, transformations):
                      raise AWE_Workbench_Error(
                          'Cannot take the square'
                          + ' root of non numeric data')
+
+                elif transformation == 'neg' \
+                   and entry['value'] is not None:                
+                    raise AWE_Workbench_Error(
+                        'Cannot take negative of non numeric data')
+
     return entry
 
 
@@ -3005,7 +3067,7 @@ def applySummaryFunction(info, baseInfo, summaryType, document):
                 category = json.dumps(summary.index[i])
             if category not in output:
                 output.append(category)
-        return output
+        return json.dumps(output)
 
     # Total number of unique values
     elif summaryType == "totaluniq":
@@ -3026,9 +3088,13 @@ def applySummaryFunction(info, baseInfo, summaryType, document):
         if len(info)==0:
             return None
         total = 0
-        for index, row in info.iterrows():
-            if row['value']:
-                total += 1
+        if 'tokenIdx' in info.keys():
+            for index, row in info.iterrows():
+                if row['value']:
+                    total += 1
+        elif 'startToken' in info.keys():
+            for index, row in info.iterrows():
+                total += 1 + row['endToken'] - row['startToken']       
         if len(info) > 0:
             if summaryType == "proportion":
                 return total/len(document)
@@ -3121,11 +3187,42 @@ def AWE_Info(document: Doc,
         if infoType == 'Doc':
             baseInfo = createSpanInfo(indicator,
                                       document)
+            newInfo = []
+            filterEntry = False
+            for entry in baseInfo:
+                if type(filters) == list and len(filters)>0:
+                    filterEntry = applySpanFilters(document[entry['startToken']],
+                                                            entry,
+                                                            filters)
+                elif filters != []:
+                    raise AWE_Workbench_Error('Invalid filter '
+                        + str(filters))                   
+                if filterEntry:
+                    continue
+                newInfo.append(entry)
             baseInfo = applySpanTransformations(transformations,
-                                                baseInfo)
+                                                newInfo)
         elif infoType == 'Token' \
            and indicator in summary_functions:
             baseInfo = getattr(document._, indicator)
+            newInfo = []
+            filterEntry = False
+            for entry in baseInfo:
+                if type(filters) == list and len(filters)>0:
+                    filterEntry = applyTokenFilters(document[entry['tokenIdx']],
+                                                    entry,
+                                                    filters)
+                elif filters != []:
+                    raise AWE_Workbench_Error('Invalid filter '
+                        + str(filters))                   
+                if filterEntry:
+                    continue
+                entry = \
+                    applyTokenTransformations(entry,
+                                              document[entry['tokenIdx']],
+                                              transformations)
+                newInfo.append(entry)
+            baseInfo = newInfo
 
         elif infoType == 'Token':
             for token in document:
@@ -3150,7 +3247,6 @@ def AWE_Info(document: Doc,
         else:
             raise AWE_Workbench_Error('Invalid indicator type '
                 + infoType)                   
-        
         info = pd.DataFrame.from_dict(baseInfo)
         return applySummaryFunction(info,
                                     baseInfo,
