@@ -2749,7 +2749,7 @@ def createSpanInfo(indicator, document):
                 entry = \
                     newSpanEntry(indicator,
                         currentStart,
-                        currentEnd,
+                        currentEnd-1,
                         document,
                         delimiter)
                 baseInfo.append(entry)
@@ -3048,7 +3048,7 @@ def applySummaryFunction(info, baseInfo, summaryType, document):
                 category = summary.index[i]
             if type(category) == list:
                 category = json.dumps(category)
-            output[category] = int(value)
+            output[str(category)] = int(value)
         return json.dumps(output)
 
     # total number of entries in info

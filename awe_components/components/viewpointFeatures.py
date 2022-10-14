@@ -1157,6 +1157,16 @@ class ViewpointFeatureDef:
         token._.vwp_perspective_ = [subj.i]
 
     def markAttribution(self, tok, hdoc):
+        if tok.dep_ == 'pobj' \
+           and tok.head.lemma_ in ['to', 'for'] \
+           and tok.i < self.getHeadDomain(tok).i \
+           and tok._.vwp_perspective is not None \
+           and tok.i in tok._.vwp_perspective:
+            tok._.vwp_source_ = True
+            tok._.vwp_attribution_ = True
+            tok.head._.vwp_attribution_ = True
+            if tok.head.head.lemma_ == 'accord':
+                tok.head.head._.vwp_attribution_ = True        
         if (tok.dep_ == 'nsubj'
             and tok.head.dep_ == 'conj'
             and tok.head.head._.vwp_attribution_
@@ -1783,6 +1793,7 @@ class ViewpointFeatureDef:
                     or token.dep_ == 'csubj'
                     or token.dep_ == 'csubjpass'
                     or token.dep_ == 'dep'
+                    or token.dep_ == 'prep'
                     or token.dep_ == 'nsubj'):
                 subj = getPrepObject(token, ['accord', 'to', 'for'])
                 if token.dep_ != 'dep' \
@@ -1965,6 +1976,7 @@ class ViewpointFeatureDef:
             # Viewpoint predicates that are objects of certain
             # sentence-level PPs establish viewpoint for the
             # whole clause
+            
             if token._.vwp_perspective_ is not None:
                 if token.dep_ == 'pobj' \
                    and token.head.dep_ == 'prep' \
