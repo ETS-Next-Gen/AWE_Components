@@ -8,30 +8,28 @@ from spacy.tokens import Token, Doc
 from spacy.language import Language
 import wordfreq
 
-def setExtensions():
-    Doc.set_extension("prompt", default=None, force=True)
-    Doc.set_extension("prompt_language", default=None, force=True)
-    Doc.set_extension("prompt_related", default=None, force=True)
-    Doc.set_extension("main_ideas", default=None, force=True)
-    Doc.set_extension("supporting_ideas", default=None, force=True)
-    Doc.set_extension("supporting_details", default=None, force=True)
-
-
 @Language.component("contentsegmentation")
 def contentsegmentation(doc):
+
+    # If we haven't run it yet, don't.
+    # We'll reset main_ideas_ to a non None
+    # value when we want to process the doc
+    # for content segments
+    if doc._.main_ideas_ is None:
+        return doc
+
     if doc._.clusterInfo is not None:
-        setExtensions()
         core_sentences, \
             extended_core_sentences, \
             elaboration_sentences, \
             pclusters, \
             plemmas = extract_content_segments(None, doc)
 
-        doc._.main_ideas = core_sentences
-        doc._.supporting_ideas = extended_core_sentences
-        doc._.supporting_details = elaboration_sentences
-        doc._.prompt_related = pclusters
-        doc._.prompt_language = plemmas
+        doc._.main_ideas_ = core_sentences
+        doc._.supporting_ideas_ = extended_core_sentences
+        doc._.supporting_details_ = elaboration_sentences
+        doc._.prompt_related_ = pclusters
+        doc._.prompt_language_ = plemmas
     return doc
 
 
@@ -579,3 +577,111 @@ def extract_content_segments(prompt, doc):
 
     return core_sentences, extended_core_sentences, \
         final_elaboration, pclusters, plemmas
+
+
+def prompt(self, doc):
+     if doc._.prompt_ is None:
+         # Flag that we need to process the doc
+         # for content segments
+         doc._.main_ideas_ = []
+         contentsegmentation(doc)     
+     return doc._.prompt_
+
+
+def prompt_language(doc):
+     if doc._.prompt_language_ is None:
+         # Flag that we need to process the doc
+         # for content segments
+         doc._.main_ideas_ = []
+         contentsegmentation(doc)     
+     return doc._.prompt_language_
+
+
+def prompt_related(doc):
+     if doc._.prompt_related_ is None:
+         # Flag that we need to process the doc
+         # for content segments
+         doc._.main_ideas_ = []
+         contentsegmentation(doc)     
+     return doc._.prompt_related_
+
+
+def main_ideas(doc):
+     if doc._.main_ideas_ is None:
+         # Flag that we need to process the doc
+         # for content segments
+         doc._.main_ideas_ = []
+         contentsegmentation(doc)     
+     return doc._.main_ideas_
+
+
+def supporting_ideas(doc):
+     if doc._.supporting_ideas_ is None:
+         # Flag that we need to process the doc
+         # for content segments
+         doc._.main_ideas_ = []
+         contentsegmentation(doc)     
+     return doc._.supporting_ideas_
+
+
+def supporting_details(doc):
+     if doc._.supporting_details_ is None:
+         # Flag that we need to process the doc
+         # for content segments
+         doc._.main_ideas_ = []
+         contentsegmentation(doc)     
+     return doc._.supporting_details_
+
+# set AWE_Info if this is the first
+# component to call for it
+if not Doc.has_extension('AWE_Info'):
+    Doc.set_extension('AWE_Info',
+                      method=AWE_Info)
+
+Doc.set_extension("prompt_",
+                  default=None,
+                  force=True)
+
+Doc.set_extension("prompt_language_",
+                  default=None,
+                  force=True)
+
+Doc.set_extension("prompt_related_",
+                  default=None,
+                  force=True)
+
+Doc.set_extension("main_ideas_",
+                  default=None,
+                  force=True)
+
+Doc.set_extension("supporting_ideas_",
+                  default=None,
+                  force=True)
+
+Doc.set_extension("supporting_details_",
+                  default=None,
+                  force=True)
+
+Doc.set_extension("prompt",
+                  getter=prompt,
+                  force=True)
+
+Doc.set_extension("prompt_language",
+                  getter=prompt_language,
+                  force=True)
+
+Doc.set_extension("prompt_related",
+                  getter=prompt_related,
+                  force=True)
+
+Doc.set_extension("main_ideas",
+                  getter=main_ideas,
+                  force=True)
+
+Doc.set_extension("supporting_ideas",
+                  getter=supporting_ideas,
+                  force=True)
+
+Doc.set_extension("supporting_details",
+                  getter=supporting_details,
+                  force=True)

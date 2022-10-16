@@ -177,16 +177,16 @@ class LexicalFeatureDef(object):
         # We're using this component as a wrapper to add access
         # to the lexical features. There is no actual processing of the
         # sentences.
-        
+
         return doc
 
     def __init__(self, lang="en"):
         super().__init__()
         self.package_check(lang)
 
-    #####################
+    ######################
     # Define extensions  #
-    #####################
+    ######################
 
     def add_extensions(self):
 
@@ -194,136 +194,33 @@ class LexicalFeatureDef(object):
          Funcion to add extensions that allow us to access the various
          lexicons this module is designed to support.
         """
-        extensions = [
-            {"name": "AWE_Info",
-             "method": self.AWE_Info,
-             "type": "docspan"},
-            {"name": "token_vectors",
-             "getter": self.token_vectors,
-             "type": "docspan"},
-            {"name": "root",
-             "getter": self.root,
-             "type": "token"},
-            {"name": "nSyll",
-             "getter": self.nSyll,
-             "type": "token"},
-            {"name": "sqrtNChars",
-             "getter": self.sqrtNChars,
-             "type": "token"},
-            {"name": "is_latinate",
-             "getter": self.is_latinate,
-             "type": "token"},
-            {"name": "is_academic",
-             "getter": self.is_academic,
-             "type": "token"},
-            {"name": "family_size",
-             "getter": self.family_size,
-             "type": "token"},
-            {"name": "nSenses",
-             "getter": self.nSenses,
-             "type": "token"},
-            {"name": "logNSenses",
-             "getter": self.logNSenses,
-             "type": "token"},
-            {"name": "morphology",
-             "getter": self.morphology,
-             "type": "token"},
-            {"name": "morpholexsegm",
-             "getter": self.morpholexsegm,
-             "type": "token"},
-            {"name": "nMorph",
-             "getter": self.nMorph,
-             "type": "token"},
-            {"name": "root1_freq_HAL",
-             "getter": self.root1_freq_HAL,
-             "type": "token"},
-            {"name": "root2_freq_HAL",
-             "getter": self.root2_freq_HAL,
-             "type": "token"},
-            {"name": "root3_freq_HAL",
-             "getter": self.root3_freq_HAL,
-             "type": "token"},
-            {"name": "root_famSize",
-             "getter": self.root_famSize,
-             "type": "token"},
-            {"name": "root_pfmf",
-             "getter": self.root_pfmf,
-             "type": "token"},
-            {"name": "token_freq",
-             "getter": self.token_freq,
-             "type": "token"},
-            {"name": "lemma_freq",
-             "getter": self.lemma_freq,
-             "type": "token"},
-            {"name": "root_freq",
-             "getter": self.root_freq,
-             "type": "token"},
-            {"name": "min_root_freq",
-             "getter": self.min_root_freq,
-             "type": "token"},
-            {"name": "max_freq",
-             "getter": self.max_freq,
-             "type": "token"},
-            {"name": "concreteness",
-             "getter": self.concreteness,
-             "type": "token"},
-            {"name": "sentiword",
-             "getter": self.sentiword,
-             "type": "token"},
-            {"name": "abstract_trait",
-             "getter": self.abstract_trait,
-             "type": "token"},
-            {"name": "deictic",
-             "getter": self.deictic,
-             "type": "token"},
-            {"name": "animate",
-             "getter": self.is_animate,
-             "type": "token"},
-            {"name": "location",
-             "getter": self.is_location,
-             "type": "token"}
-        ]
+        method_extensions = [self.AWE_Info]
+        docspan_extensions = [self.token_vectors]
+        token_extensions = [self.root, self.nSyll, self.sqrtNChars,
+                            self.is_latinate, self.is_academic,
+                            self.family_size, self.nSenses,
+                            self.logNSenses, self.morphology,
+                            self.morpholexsegm, self.nMorph,
+                            self.root1_freq_HAL, self.root2_freq_HAL,
+                            self.root3_freq_HAL, self.root_famSize,
+                            self.root_pfmf, self.token_freq,
+                            self.lemma_freq, self.root_freq,
+                            self.min_root_freq, self.max_freq,
+                            self.concreteness, self.sentiword,
+                            self.abstract_trait, self.deictic,
+                            self.animate, self.location,
+                            self.antecedents, self.usage]
 
-        for extension in extensions:
-            if extension['type'] == 'docspan':
-                if not Doc.has_extension(extension['name']):
-                    if 'getter' in extension:
-                        Doc.set_extension(extension['name'],
-                                          getter=extension['getter'])
+        setExtensionFunctions(method_extensions, 
+                              docspan_extensions,
+                              token_extensions)
 
-                    elif 'method' in extension:
-                        Doc.set_extension(extension['name'],
-                                          method=extension['method'])
-                    else:
-                        raise AWE_Workbench_Error('Invalid extension specification ')
+        if not Token.has_extension('antecedents_'):
+            Token.set_extension('antecedents_', default=None, force=True)
 
-                if not Span.has_extension(extension['name']):
-                    if 'getter' in extension:
-                        Span.set_extension(extension['name'],
-                                           getter=extension['getter'])
+        if not Token.has_extension('usage_'):
+            Token.set_extension('usage_', default=None, force=True)
 
-                    elif 'method' in extension:
-                        Span.set_extension(extension['name'],
-                                           method=extension['method'])
-
-                    else:
-                        raise AWE_Workbench_Error('Invalid extension specification ')
-
-            elif extension['type'] == 'token':
-
-                if 'getter' in extension:
-                    if not Token.has_extension(extension['name']):
-                        Token.set_extension(extension['name'],
-                                            getter=extension['getter'])
-
-                elif 'method' in extension:
-                    if not Token.has_extension(extension['name']):
-                        Token.set_extension(extension['name'],
-                                            method=extension['method'])
-                else:
-                    raise AWE_Workbench_Error('Invalid extension specification ')
-            else:
-                raise AWE_Workbench_Error('Invalid extension specification ')
 
     ###############################################
     # Block where we define getter functions used #
@@ -412,7 +309,6 @@ class LexicalFeatureDef(object):
                     token.text.lower()]]
         else:
             return None
-
 
     def morpholexsegm(self, token):
         ''' Access a string that identifies roots, prefixes, and
@@ -587,7 +483,6 @@ class LexicalFeatureDef(object):
         else:
             return 0
 
-
     def token_vectors(self, document):
         ''' Extensions to allow us to get vectors for tokens in a spacy
             doc or span
@@ -598,7 +493,50 @@ class LexicalFeatureDef(object):
                 and not token.is_stop
                 and token.tag_ in content_tags]
 
-    def AWE_Info(self, 
+    def antecedents(self, token):
+        if token.pos_ == 'PRON' \
+           and token._.antecedents_ is None:
+            for token in token.doc:
+                # Add corrected antecedents to the parse tree
+                if token.pos_ == 'PRON':
+                    antecedents = ResolveReference(token, token.doc)
+                    token._.antecedents_ = antecedents
+        else:
+            return token._.antecedents_
+
+    def usage(self, token):
+        if token._.usage_ is None:
+            self.markSlang(token)
+        return token._.usage_
+
+    def markSlang(self, inputtoken):
+        for token in inputtoken.doc:
+            token._.usage_ = False
+            # Use of slang or colloquial expressions
+            # If the first sense of the word in WordNet
+            # is classified as slang, colloquialism,
+            # vulgarism, ethnic slur, or disparagement,
+            # classify the word as spoken/interactive
+            try:
+                s = wordnet.synsets(token.orth_)
+                for synset in s:
+                    domains = synset.usage_domains()
+                    for dom in domains:
+                        if dom.lemma_names()[0] == 'slang' \
+                           or dom.lemma_names()[0] == 'colloquialism' \
+                           or dom.lemma_names()[0] == 'vulgarism' \
+                           or dom.lemma_names()[0] == 'ethnic_slur' \
+                           or dom.lemma_names()[0] == 'disparagement':
+                            # special cases where the colloquial label doesn't
+                            # apply to the dominant sense of the word
+                            if token.text.lower() not in ['think']:
+                                token._.usage_ = True
+                        break
+                    break
+            except Exception as e:
+                print('No Wordnet synset found for ', token, e)
+
+    def AWE_Info(self,
                  document: Doc,
                  infoType='Token',
                  indicator='pos_',
@@ -607,13 +545,13 @@ class LexicalFeatureDef(object):
                  summaryType=None):
         ''' This function provides a general-purpose API for
             obtaining information about indicators reported in
-            the AWE Workbench Spacy parse tree. 
-           
+            the AWE Workbench Spacy parse tree.
+
             This is a general-purpose utility. Cloning inside
             the class to simplify the add_extensions class
         '''
         return AWE_Info(document, infoType, indicator, filters,
-                 transformations, summaryType)
+                        transformations, summaryType)
 
     attribute = wordnet.synsets('attribute')[1]
     attribute2 = wordnet.synsets('attribute')[2]
@@ -690,7 +628,7 @@ class LexicalFeatureDef(object):
     mind = wordnet.synsets("mind")
     thought = wordnet.synsets("thought")
 
-    def is_animate(self, token):
+    def animate(self, token):
         """
          It's useful to measure which NPs in a text are animate.
          A text with a high degree of references to animates may,
@@ -737,7 +675,7 @@ class LexicalFeatureDef(object):
                 if antecedents is not None:
                     for antecedent in antecedents:
                         if antecedent.i != token.i:
-                            return self.is_animate(antecedent)
+                            return self.animate(antecedent)
             except Exception as e:
                 print('animacy exception', e)
                 if token.text.lower() in personal_or_indefinite_pronoun:
@@ -861,7 +799,7 @@ class LexicalFeatureDef(object):
             return True
         return False
 
-    def is_location(self, token):
+    def location(self, token):
         """
          It's useful to measure which NPs in a text are
          location references.
@@ -877,7 +815,7 @@ class LexicalFeatureDef(object):
            and self.concreteness(token) < 3.5:
             return False
 
-        if self.is_animate(token):
+        if self.animate(token):
             return False
 
         if self.abstract_trait(token):
@@ -1005,7 +943,6 @@ class LexicalFeatureDef(object):
                            checking synsets for ', token, e)
                     return False
         return False
-
 
     def deictic(self, token):
         """

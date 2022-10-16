@@ -2625,7 +2625,7 @@ docspan_extensions = ['sentence_types',
                       'vwp_emotion_states',
                       'vwp_character_traits',
                       'vwp_statements_of_fact',
-                      'vwp_direct_speech_spans',
+                      'vwp_direct_speech',
                       'vwp_social_awareness',
                       'vwp_perspective_spans',
                       'vwp_stance_markers',
@@ -2638,7 +2638,7 @@ docspan_extensions = ['sentence_types',
 
 summary_functions = ['vwp_egocentric',
                      'vwp_allocentric',
-                     'concrete_detail',
+                     'concrete_details',
                      'vwp_interactive'
                     ]
 def newSpanEntry(name, left, right, hdoc, value):
@@ -3256,3 +3256,29 @@ def AWE_Info(document: Doc,
     except Exception as e:
             print(e)
             raise AWE_Workbench_Error('error in code')
+            
+def setExtensionFunctions(method_extensions, docspan_extensions, token_extensions):
+    for extension in method_extensions:
+        name = extension.__name__
+        if not Doc.has_extension(name):
+            Doc.set_extension(name,
+                              method=extension)
+        if not Span.has_extension(name):
+            Span.set_extension(name,
+                               method=extension)
+    for extension in docspan_extensions:
+        name = extension.__name__
+        if not Doc.has_extension(name):
+            Doc.set_extension(name,
+                              getter=extension)
+        if not Span.has_extension(name):
+            Span.set_extension(name,
+                               getter=extension)
+
+    for extension in token_extensions:
+        name = extension.__name__
+        if not Token.has_extension(name):
+            Token.set_extension(name,
+                                getter=extension)
+
+

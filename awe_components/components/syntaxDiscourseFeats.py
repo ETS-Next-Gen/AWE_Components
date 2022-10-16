@@ -62,10 +62,7 @@ class SyntaxAndDiscourseFeatDef(object):
     def __call__(self, doc):
         # We're using this component as a wrapper to add access
         # to the syntactic features. There is no actual parsing of the
-        # sentences, except for a scan to label transition terms.
-
-        self.quotedText(doc)
-        doc._.transition_word_profile = self.transitionProfile(doc)
+        # sentences
 
         return doc
 
@@ -74,78 +71,41 @@ class SyntaxAndDiscourseFeatDef(object):
          Funcion to add extensions with getter functions that allow us
          to access the various lexicons this module is designed to support.
         """
-        extensions = [
-            {"name": "AWE_Info",
-             "getter": self.AWE_Info,
-             "type": "docspan"},
-            {"name": "sentence_types",
-             "getter": self.sentence_types,
-             "type": "docspan"},
-            {"name": "transitions",
-             "getter": self.transitions,
-             "type": "docspan"},
-            {"name": "transition_word_profile",
-             "getter": self.transitionProfile,
-             "type": "docspan"},
-            {"name": "transition_distances",
-             "getter": self.transition_distances,
-             "type": "docspan"},
-            {"name": "intersentence_cohesions",
-             "getter": self.interSentenceCohesions,
-             "type": "docspan"},
-            {"name": "sliding_window_cohesions",
-             "getter": self.slidingWindowCohesions,
-             "type": "docspan"},
-            {"name": "corefChainInfo",
-             "getter": self.corefChainInfo,
-             "type": "docspan"},
-            {"name": "sentenceThemes",
-             "getter": self.sentenceThemes,
-             "type": "docspan"},
-            {"name": "syntacticDepthsOfRhemes",
-             "getter": self.syntacticDepthsOfRhemes,
-             "type": "docspan"},
-            {"name": "syntacticDepthsOfThemes",
-             "getter": self.syntacticDepthsOfThemes,
-             "type": "docspan"},
-            {"name": "syntacticProfile",
-             "getter": self.syntacticProfile,
-             "type": "docspan"},
-            {"name": "syntacticProfileNormed",
-             "getter": self.syntacticProfileNormed,
-             "type": "docspan"},
-            {"name": "syntacticVariety",
-             "getter": self.syntacticVariety,
-             "type": "docspan"},
-            {"name": "in_past_tense_scope",
-             "getter": self.in_past_tense_scope,
-             "type": "token"},
-            {"name": "subjectVerbInversion",
-             "getter": self.sv_inversion,
-             "type": "token"},
-            {"name": "weightedSyntacticDepth",
-             "getter": self.weightedSyntacticDepth,
-             "type": "token"},
-            {"name": "weightedSyntacticBreadth",
-             "getter": self.weightedSyntacticBreadth,
-             "type": "token"},
-            {"name": "syntacticDepth",
-             "getter": self.syntacticDepth,
-             "type": "token"}
-        ]
 
-        for extension in extensions:
-            if extension['type'] == 'docspan':
-                if not Doc.has_extension(extension['name']):
-                    Doc.set_extension(extension['name'],
-                                      getter=extension['getter'])
-                if not Span.has_extension(extension['name']):
-                    Span.set_extension(extension['name'],
-                                      getter=extension['getter'])
-            if extension['type'] == 'token':
-                if not Token.has_extension(extension['name']):
-                    Token.set_extension(extension['name'],
-                                        getter=extension['getter'])
+        method_extensions = [self.AWE_Info]
+
+        docspan_extensions = \
+            [self.sentence_types,
+             self.transitions,
+             self.transition_word_profile,
+             self.transition_distances,
+             self.interSentenceCohesions,
+             self.slidingWindowCohesions,
+             self.corefChainInfo,
+             self.sentenceThemes,
+             self.syntacticDepthsOfRhemes,
+             self.syntacticDepthsOfThemes,
+             self.syntacticProfile,
+             self.syntacticProfileNormed,
+             self.syntacticVariety]
+
+        token_extensions = [self.in_past_tense_scope,
+                            self.subjectVerbInversion,
+                            self.weightedSyntacticDepth,
+                            self.weightedSyntacticBreadth,
+                            self.syntacticDepth,
+                            self.vwp_quoted]
+
+        setExtensionFunctions(method_extensions,
+                              docspan_extensions,
+                              token_extensions)
+
+        if not Doc.has_extension('transition_word_profile_'):
+            Doc.set_extension('transition_word_profile_', default=None)
+
+        if not Doc.has_extension('vwp_quoted'):
+            Doc.set_extension('vwp_quoted', default=False)
+
         # By default, we do not classify words as transition terms
         # We set the flag true when we identif them later
         if not Token.has_extension('transition'):
@@ -154,8 +114,7 @@ class SyntaxAndDiscourseFeatDef(object):
         if not Token.has_extension('transition_category'):
             Token.set_extension('transition_category', default=None)
 
-        Token.set_extension('vwp_quoted', default=False, force=True)
-
+        Token.set_extension('vwp_quoted_', default=False, force=True)
 
     def __init__(self, lang="en"):
         super().__init__()
@@ -167,7 +126,7 @@ class SyntaxAndDiscourseFeatDef(object):
     # Define getter functions for attributes #
     ##########################################
 
-    def AWE_Info(self, 
+    def AWE_Info(self,
                  document: Doc,
                  infoType='Token',
                  indicator='pos_',
@@ -176,8 +135,8 @@ class SyntaxAndDiscourseFeatDef(object):
                  summaryType=None):
         ''' This function provides a general-purpose API for
             obtaining information about indicators reported in
-            the AWE Workbench Spacy parse tree. 
-           
+            the AWE Workbench Spacy parse tree.
+
             This is a general-purpose utility. Cloning inside
             the class to simplify the add_extensions class
         '''
@@ -197,7 +156,7 @@ class SyntaxAndDiscourseFeatDef(object):
         '''
         return in_past_tense_scope(tok)
 
-    def sv_inversion(self, tok: Token):
+    def subjectVerbInversion(self, tok: Token):
         if (tok.lemma_ in ['be', 'have', 'do']
            or tok.tag_ == 'MD'):
             for child in tok.children:
@@ -219,6 +178,9 @@ class SyntaxAndDiscourseFeatDef(object):
          of caution.
         """
 
+        if hdoc._.vwp_quoted:
+            return
+        hdoc._.vwp_quoted = True
         inQuote = False
         for token in hdoc:
             if token.tag_ not in ['-LRB-', '-RRB-']:
@@ -235,13 +197,18 @@ class SyntaxAndDiscourseFeatDef(object):
                 elif '\n' in token.text:
                     inQuote = False
                 if inQuote:
-                    token._.vwp_quoted = True
+                    token._.vwp_quoted_ = True
                 if token.text == '\'' \
                    and hdoc[token.head.left_edge.i - 1].text == '\'':
-                    token.head._.vwp_quoted = True
+                    token.head._.vwp_quoted_ = True
                     for child in token.head.subtree:
                         if child.i < token.i:
-                            child._.vwp_quoted = True
+                            child._.vwp_quoted_ = True
+
+    def vwp_quoted(self, token: Token):
+        if not token.doc._.vwp_quoted:
+            self.quotedText(token.doc)
+        return token._.vwp_quoted_
 
     def transitions(self, document: Doc):
         """
@@ -294,10 +261,10 @@ class SyntaxAndDiscourseFeatDef(object):
                         document[loc]._.transition_category = 'temporal'
                         newEntry = \
                             newSpanEntry('transition',
-                            tok.left_edge.i,
-                            tok.right_edge.i,
-                            tok.doc,
-                            'temporal')
+                                         tok.left_edge.i,
+                                         tok.right_edge.i,
+                                         tok.doc,
+                                         'temporal')
                         transitionList.append(newEntry)
 
                     i = i + len(trans)
@@ -385,9 +352,10 @@ class SyntaxAndDiscourseFeatDef(object):
                         self.transition_categories[
                             self.transition_terms[gram2]]
 
-                entry = self.newTransitionEntry(tok, 3,
-                    self.transition_categories[
-                        self.transition_terms[gram2]])
+                entry = \
+                    self.newTransitionEntry(
+                        tok, 3, self.transition_categories[
+                            self.transition_terms[gram2]])
                 entry = \
                     newSpanEntry('transition',
                                  tok.i,
@@ -413,7 +381,6 @@ class SyntaxAndDiscourseFeatDef(object):
                                      self.transition_terms[gram1]])
                 transitionList.append(entry)
 
-
             elif (gram0 in self.transition_terms
                   and (document[i].tag_ not in adj_noun_or_verb
                        or document[i].tag_ == 'NNP')):
@@ -423,7 +390,7 @@ class SyntaxAndDiscourseFeatDef(object):
                 # transition words proper nouns
                 document[i]._.transition = True
                 if gram0 in '?!':
-                    
+
                     document[i]._.transition_category = \
                         self.transition_categories[
                             self.transition_terms[gram0]]
@@ -482,7 +449,7 @@ class SyntaxAndDiscourseFeatDef(object):
                             self.transition_categories[
                                 self.transition_terms[gram0]]
                         break
-    
+
                     entry = \
                         newSpanEntry('transition',
                                      tok.i,
@@ -494,7 +461,6 @@ class SyntaxAndDiscourseFeatDef(object):
 
             if document[i].pos_ == 'SPACE' and '\n' in document[i].text:
                 # we treat paragraph breaks as another type of transition cue
-
 
                 document[i]._.transition_category = \
                     self.transition_categories[-1]
@@ -510,14 +476,17 @@ class SyntaxAndDiscourseFeatDef(object):
             i += 1
         return transitionList
 
-    def transitionProfile(self, document: Doc):
+    def transition_word_profile(self, document: Doc):
         """
          Output a summary of the frequency of transition words overall,
          by category, and by individual expression (plus the base transition
          list that gives the offsets and categories for each detected
          transition word.)
         """
-        transitionList = self.transitions(document)	
+
+        if document._.transition_word_profile_ is not None:
+            return document._.transition_word_profile_
+        transitionList = self.transitions(document)
         total = 0
         catProfile = {}
         detProfile = {}
@@ -542,7 +511,9 @@ class SyntaxAndDiscourseFeatDef(object):
                             document[item['startToken']].i,
                             document[item['endToken']].i,
                             category])
-        return [total, catProfile, detProfile, newList]
+        document._.transition_word_profile_ = \
+            [total, catProfile, detProfile, newList]
+        return document._.transition_word_profile_
 
     def transition_distances(self, Document: Doc):
         """
@@ -566,7 +537,7 @@ class SyntaxAndDiscourseFeatDef(object):
                                  int(item[3]),
                                  Document,
                                  0)
-           
+
             start = item[2]
             end = item[3]
             left = []
@@ -713,7 +684,7 @@ class SyntaxAndDiscourseFeatDef(object):
                                  references[len(references)-1],
                                  Document,
                                  references)
-            chainInfo.append(entry)       
+            chainInfo.append(entry)
         return chainInfo
 
     def interSentenceCohesions(self, Document: Doc):

@@ -99,31 +99,6 @@ class ViewpointFeatureDef:
                 self.is_nominalization[token] = True
         self.morpholex = None
 
-    def markSlang(self, token):
-        # Use of slang or colloquial expressions
-        # If the first sense of the word in WordNet
-        # is classified as slang, colloquialism,
-        # vulgarism, ethnic slur, or disparagement,
-        # classify the word as spoken/interactive
-        try:
-            s = wordnet.synsets(token.orth_)
-            for synset in s:
-                domains = synset.usage_domains()
-                for dom in domains:
-                    if dom.lemma_names()[0] == 'slang' \
-                       or dom.lemma_names()[0] == 'colloquialism' \
-                       or dom.lemma_names()[0] == 'vulgarism' \
-                       or dom.lemma_names()[0] == 'ethnic_slur' \
-                       or dom.lemma_names()[0] == 'disparagement':
-                        # special cases where the colloquial label doesn't
-                        # apply to the dominant sense of the word
-                        if token.text.lower() not in ['think']:
-                            token._.usage = dom.lemma_names()[0]
-                    break
-                break
-        except Exception as e:
-            print('No Wordnet synset found for ', token, e)
-
     def markPerspectiveSpan(self, doc):
        
         if doc._.vwp_perspective_spans_ is not None:
@@ -138,44 +113,133 @@ class ViewpointFeatureDef:
 
     def __call__(self, doc):
         """
-         Call the spacy component and process the document to register
-         viewpoint and stance elements
+            Pass the document through unchanged. We will calculate
+            (and if necessary, store) extended attribute values upon
+            request
         """
-        for token in doc:
-
-            # Mark slang, colloquialisms, etc.
-            self.markSlang(token)
-
-            # Add attributes specified in the stance lexicon
-            self.setLexiconAttributes(token, doc)
-
-            # rule-based expansion of vwp_evaluation is better
-            # stored once than calculated every time we check
-            # vwp_evaluation in later calls
-            if emphatic_adverb(token) \
-               or emphatic_adjective(token) \
-               or elliptical_verb(token) \
-               or token.pos_ == 'INTJ':
-                token._.vwp_evaluation = True
-
-            # Mark implicit subject relationships within each clause
-            if isRoot(token):
-                self.markImplicitSubject(token, doc)
-
-            # Add corrected antecedents to the parse tree
-            if token.pos_ == 'PRON':
-                antecedents = ResolveReference(token, doc)
-                token._.antecedents = antecedents
-                
-        # treat most transition words as also being argument words
-        self.mark_transition_argument_words(doc)
-
         return doc
+
+    def AWE_Info(self,
+                 document: Doc,
+                 infoType='Token',
+                 indicator='pos_',
+                 filters=[],
+                 transformations=[],
+                 summaryType=None):
+        ''' This function provides a general-purpose API for
+            obtaining information about indicators reported in
+            the AWE Workbench Spacy parse tree.
+
+            This is a general-purpose utility. Cloning inside
+            the class to simplify the add_extensions class
+        '''
+        return AWE_Info(document, infoType, indicator, filters,
+                        transformations, summaryType)
+
+    def lexEval(self, token: Token, attribute: str):
+        pos = token.pos_
+        lemma = token.lemma_
+        if lemma in self.stancePerspectiveVoc:
+            if pos in self.stancePerspectiveVoc[lemma]:
+                if attribute in self.stancePerspectiveVoc[lemma][pos]:
+                    return True
+                else:
+                    return False
+            else:
+                return False
+        else:
+            return False
+
+    # Override definition for vwp_evaluation --
+    # using lexicon data if rules given here
+    # are not satisfied
+    def vwp_evaluation(self, token):
+        if emphatic_adverb(token) \
+           or emphatic_adjective(token) \
+           or elliptical_verb(token) \
+           or token.pos_ == 'INTJ' \
+           or token._.vwp_evaluated_role:
+            return True
+
+        if token._.vwp_evaluation_ is None \
+           and token.dep_ == 'amod' \
+           and token.text.lower() == 'certain':
+            token._.vwp_evaluation_ = False
+
+        # modal have to
+        if token._.vwp_evaluation_ is None \
+           and token.text.lower() in ['have',
+                                  'has',
+                                  'dare',
+                                  'dares',
+                                  'ought',
+                                  'going',
+                                  'need',
+                                  'needs'] \
+           and token.i+1 < len(doc) \
+           and token.nbor().tag_ == 'TO':
+            token._.vwp_evaluation_ = True
+
+        # plan words with modal complements
+        if token._.vwp_evaluation_ is None \
+           and token.tag_ == 'TO' \
+           and token.head.pos_ in ['NOUN', 'VERB', 'ADJ'] \
+           and token.head.head._.vwp_plan:
+            token._.vwp_evaluation_ = True
+
+        # plan words asserted as a predicate
+        if token._.vwp_evaluation_ is None \
+           and token._.vwp_plan \
+           and token.dep_ in ['attr', 'oprd']:
+            token.head._.vwp_evaluation_ = True
+
+        if token._.vwp_evaluation_ is not None:
+            return token._.vwp_evaluation_
+
+        if self.check_ngrams(token, 'evaluation'):
+            return True
+            
+        return self.lexEval(token, 'evaluation')
+
+    # Override definition for vwp_likelihood --
+    # using lexicon data if rules given here
+    # are not satisfied
+    def vwp_likelihood(self, token):
+        if token._.vwp_likelihood_ is not None:
+            return token._.vwp_likelihood_
+        if self.check_ngrams(token, 'likelihood'):
+            return True
+        return self.lexEval(token, 'likelihood')
+
+    # Override definition for vwp_probability --
+    # using lexicon data if rules given here
+    # are not satisfied
+    def vwp_probability(self, token):
+        if token._.vwp_probability_ is not None:
+            return token._.vwp_probability_
+        if self.check_ngrams(token, 'probability'):
+            return True
+        return self.lexEval(token, 'probability')
+
+    # Override definition for vwp_argument --
+    # using lexicon data if rules given here
+    # are not satisfied
+    def vwp_argument(self, token):
+        if token._.transition \
+           and '\n' not in token.text \
+           and token._.transition_category != 'temporal':
+            return True
+        if token._.vwp_argument_ is not None:
+            return token._.vwp_argument_
+        if self.check_ngrams(token, 'argument'):
+            return True
+        return self.lexEval(token, 'argument')
 
     def has_governing_subject(self, token):
         if not token.doc._.has_governing_subject:
             for item in token.doc:
-                self.markImplicitSubject(item, token.doc)
+                if isRoot(item):
+                    self.markImplicitSubject(item, token.doc)
             token.doc._.has_governing_subject = True
         return token._.has_governing_subject_
 
@@ -219,10 +283,10 @@ class ViewpointFeatureDef:
             return True
         return False
 
-    def s_o_f(self, tokens):
-        return self.statements_of_fact(tokens, lambda x: x==0)
+    def vwp_statements_of_fact(self, tokens):
+        return self.statements_of_fact_prep(tokens, lambda x: x==0)
 
-    def statements_of_fact(self, tokens, relation):
+    def statements_of_fact_prep(self, tokens, relation):
         factList = []
         j = 0
         nextRoot = 0
@@ -370,8 +434,8 @@ class ViewpointFeatureDef:
                     numSubjective = 0
         return factList
 
-    def statements_of_opinion(self, tokens):
-        theList = self.statements_of_fact(tokens, lambda x: x>0)
+    def vwp_statements_of_opinion(self, tokens):
+        theList = self.statements_of_fact_prep(tokens, lambda x: x>0)
         opinionList = []
         for item in theList:
              newItem = item
@@ -482,42 +546,42 @@ class ViewpointFeatureDef:
             return True
 
     # This set of attributes are dependent upon having called the
-    # directSpeech function which calculates direct speech spans.
+    # vwp_direct_speech function which calculates direct speech spans.
     # So we record the flag information on attributes with an extra
     # underscore on them, and then define the function without the
-    # underscore in such a way that it makes sure directSpeech has
+    # underscore in such a way that it makes sure vwp_direct_speech has
     # been called before we check the underscore attribute. This
     # enables us to call all of the direct speech attributes in a 
     # 'just in time' fashion w/o having to do the relatively costly
-    # directSpeech calculations as part of the main parse.
+    # vwp_direct_speech calculations as part of the main parse.
     def vwp_direct_speech_verb(self, token):
           # make sure direct speech info has been set
-          self.directSpeech(token.doc)
+          self.vwp_direct_speech(token.doc)
           return token._.vwp_direct_speech_verb_
 
     def vwp_in_direct_speech(self, token):
           # make sure direct speech info has been set
-          self.directSpeech(token.doc)
+          self.vwp_direct_speech(token.doc)
           return token._.vwp_in_direct_speech_
 
     def vwp_speaker(self, token):
           # make sure direct speech info has been set
-          self.directSpeech(token.doc)
+          self.vwp_direct_speech(token.doc)
           return token._.vwp_speaker_
 
     def vwp_speaker_refs(self, token):
           # make sure direct speech info has been set
-          self.directSpeech(token.doc)
+          self.vwp_direct_speech(token.doc)
           return token._.vwp_speaker_refs_
 
     def vwp_addressee(self, token):
           # make sure direct speech info has been set
-          self.directSpeech(token.doc)
+          self.vwp_direct_speech(token.doc)
           return token._.vwp_addressee_
 
     def vwp_addressee_refs(self, token):
           # make sure direct speech info has been set
-          self.directSpeech(token.doc)
+          self.vwp_direct_speech(token.doc)
           return token._.vwp_addressee_refs_
 
     def vwp_abstract(self, token):
@@ -551,153 +615,132 @@ class ViewpointFeatureDef:
             token.doc._.negation_tokens = negation_tokens
         return token._.vwp_tone_
 
+    def check_ngrams(self, token, attribute):
+        if token.i+1 < len(token.doc):
+            bigram = token.text.lower() + '_' \
+                + token.doc[token.i+1].text.lower()
+            if bigram in self.stancePerspectiveVoc:
+                for pos in self.stancePerspectiveVoc[bigram]:
+                    if attribute in self.stancePerspectiveVoc[bigram][pos]:
+                        return True
+
+            if token.i + 2 < len(token.doc):
+                trigram = token.text.lower() + '_' \
+                    + token.doc[token.i+1].text.lower()  + '_' \
+                    + token.doc[token.i+2].text.lower()
+                if trigram in self.stancePerspectiveVoc:
+                    for pos in self.stancePerspectiveVoc[trigram]:
+                        if attribute in self.stancePerspectiveVoc[trigram][pos]:
+                            return True
+
+        if token.i > 0:
+            
+            bigram = token.doc[token.i - 1].text.lower() \
+                + '_' + token.text.lower() 
+            if bigram in self.stancePerspectiveVoc:
+                for pos in self.stancePerspectiveVoc[bigram]:
+                    if attribute in self.stancePerspectiveVoc[bigram][pos]:
+                        return True
+            if token.i+1 < len(token.doc):
+                trigram = token.doc[token.i - 1].text.lower() + '_' \
+                    + token.text.lower() + '_' \
+                    + token.doc[token.i + 1].text.lower() 
+                if trigram in self.stancePerspectiveVoc:
+                    for pos in self.stancePerspectiveVoc[trigram]:
+                        if attribute in self.stancePerspectiveVoc[trigram][pos]:
+                            return True
+
+        if token.i > 1:
+            trigram = token.doc[token.i - 2].text.lower() + '_' \
+                + token.doc[token.i - 1].text.lower() + '_' \
+                + token.text.lower()
+            if trigram in self.stancePerspectiveVoc:
+                for pos in self.stancePerspectiveVoc[trigram]:
+                    if attribute in self.stancePerspectiveVoc[trigram][pos]:
+                        return True
+
+        return False
+
     def add_extensions(self):
         """
          Funcion to add extensions with getter functions that allow us
          to access the various viewpoint/argumentation functions built
          into viewpointFeatures
         """
-        extensions = [
-            {"name": "vwp_perspective_spans",
-             "getter": self.vwp_perspective_spans,
-             "type": "docspan"},
-            {"name": "vwp_stance_markers",
-             "getter": self.vwp_stance_markers,
-             "type": "docspan"},
-            {"name": "vwp_direct_speech_spans",
-             "getter": self.directSpeech,
-             "type": "docspan"},
-            {"name": "vwp_statements_of_fact",
-             "getter": self.s_o_f,
-             "type": "docspan"},
-            {"name": "vwp_social_awareness",
-             "getter": self.vwp_social_awareness,
-             "type": "docspan"},
-            {"name": "vwp_propositional_attitudes",
-             "getter": self.vwp_propositional_attitudes,
-             "type": "docspan"},
-            {"name": "vwp_emotion_states",
-             "getter": self.vwp_emotion_states,
-             "type": "docspan"},
-            {"name": "vwp_character_traits",
-             "getter": self.vwp_character_traits,
-             "type": "docspan"},
-            {"name": "vwp_statements_of_opinion",
-             "getter": self.statements_of_opinion,
-             "type": "docspan"},
-            {"name": "vwp_egocentric",
-             "getter": self.egocentric,
-             "type": "docspan"},
-            {"name": "vwp_allocentric",
-             "getter": self.allocentric,
-             "type": "docspan"},
-            {"name": "concrete_detail",
-             "getter": self.concreteDetails,
-             "type": "docspan"},
-            {"name": "vwp_interactive",
-             "getter": self.spoken_register_markers,
-             "type": "docspan"},
-            {"name": "vwp_tense_changes",
-             "getter": self.tenseChanges,
-             "type": "docspan"},
-            {"name": "nominalReferences",
-             "getter": self.nominalReferences,
-             "type": "docspan"},
-            {"name": "has_governing_subject",
-             "getter": self.has_governing_subject,
-             "type": "token"},
-            {"name": "governing_subject",
-             "getter": self.governing_subject,
-             "type": "token"},
-            {"name": "vwp_perspective",
-             "getter": self.vwp_perspective,
-             "type": "token"},
-            {"name": "vwp_abstract",
-             "getter": self.vwp_abstract,
-             "type": "token"},
-            {"name": "vwp_direct_speech_verb",
-             "getter": self.vwp_direct_speech_verb,
-             "type": "token"},
-            {"name": "vwp_in_direct_speech",
-             "getter": self.vwp_in_direct_speech,
-             "type": "token"},
-            {"name": "vwp_speaker",
-             "getter": self.vwp_speaker,
-             "type": "token"},
-            {"name": "vwp_speaker_refs",
-             "getter": self.vwp_speaker_refs,
-             "type": "token"},
-            {"name": "vwp_addressee",
-             "getter": self.vwp_addressee,
-             "type": "token"},
-            {"name": "vwp_addressee_refs",
-             "getter": self.vwp_addressee_refs,
-             "type": "token"},
-            {"name": "vwp_cite",
-             "getter": self.vwp_cite,
-             "type": "token"},
-            {"name": "vwp_attribution",
-             "getter": self.vwp_attribution,
-             "type": "token"},
-            {"name": "vwp_source",
-             "getter": self.vwp_source,
-             "type": "token"},
-            {"name": "vwp_argumentation",
-             "getter": self.vwp_argumentation,
-             "type": "token"},
-            {"name": "vwp_explicit_argument",
-             "getter": self.vwp_explicit_argument,
-             "type": "token"},
-            {"name": "vwp_emotionword",
-             "getter": self.vwp_emotionword,
-             "type": "token"},
-            {"name": "vwp_sentiment",
-             "getter": self.vwp_sentiment,
-             "type": "token"},
-            {"name": "vwp_tone",
-             "getter": self.vwp_tone,
-             "type": "token"},
-            {"name": "vwp_claim",
-             "getter": self.vwp_claim,
-             "type": "token"},
-            {"name": "vwp_discussion",
-             "getter": self.vwp_discussion,
-             "type": "token"},
-            {"name": "vwp_argumentword",
-             "getter": self.vwp_argumentword,
-             "type": "token"}
-        ]
+        method_extensions = [self.AWE_Info]      
+        docspan_extensions = [self.vwp_perspective_spans,
+                              self.vwp_stance_markers,
+                              self.vwp_direct_speech,
+                              self.vwp_statements_of_fact,
+                              self.vwp_social_awareness,
+                              self.vwp_propositional_attitudes,
+                              self.vwp_emotion_states,
+                              self.vwp_character_traits,
+                              self.vwp_statements_of_opinion,
+                              self.vwp_egocentric,
+                              self.vwp_allocentric,
+                              self.vwp_interactive,
+                              self.tense_changes,
+                              self.concrete_details,
+                              self.nominalReferences]
+        token_extensions = [self.vwp_evaluation,
+                            self.vwp_argument,
+                            self.has_governing_subject,
+                            self.governing_subject,
+                            self.vwp_perspective,
+                            self.vwp_abstract,
+                            self.vwp_direct_speech_verb,
+                            self.vwp_in_direct_speech,
+                            self.vwp_speaker,
+                            self.vwp_speaker_refs,
+                            self.vwp_addressee,
+                            self.vwp_addressee_refs,
+                            self.vwp_cite,
+                            self.vwp_attribution,
+                            self.vwp_source,
+                            self.vwp_argumentation,
+                            self.vwp_explicit_argument,
+                            self.vwp_emotionword,
+                            self.vwp_sentiment,
+                            self.vwp_tone,
+                            self.vwp_claim,
+                            self.vwp_discussion,
+                            self.vwp_argumentword]
+        setExtensionFunctions(method_extensions, 
+                              docspan_extensions,
+                              token_extensions)
 
         ##################################################
         # Register extensions for all the categories in  #
         # the stance lexicon                             #
         ##################################################
-        for wrd in self.stancePerspectiveVoc:
-            for tg in self.stancePerspectiveVoc[wrd]:
-                for item in self.stancePerspectiveVoc[wrd][tg]:
-                    Token.set_extension('vwp_' + item,
-                                        default=False,
-                                        force=True)
+        vwp_extensions = []
+        for entry in self.stancePerspectiveVoc:
+            for pos in self.stancePerspectiveVoc[entry]:
+                for attribute in self.stancePerspectiveVoc[entry][pos]:
+                    if attribute not in vwp_extensions:
+                        vwp_extensions.append(attribute)
+        for attribute in vwp_extensions:
+            def makeExtension(attribute):
+                def getterFunc(token: Token):
+                    pos = token.pos_
+                    lemma = token.lemma_
+                    if lemma in self.stancePerspectiveVoc:
+                        if pos in self.stancePerspectiveVoc[lemma]:
+                            if attribute in self.stancePerspectiveVoc[lemma][pos]:
+                                return True
+                    if self.check_ngrams(token, attribute):
+                        return True
+                    return False
+                return getterFunc
+            getterFunc = makeExtension(attribute)
+            if not Token.has_extension('vwp_' + attribute):
+                Token.set_extension('vwp_' + attribute, getter=getterFunc)
 
-        #####################################################
-        # Register all the extensions in the extension list #
-        #####################################################
-        for extension in extensions:
-            if extension['type'] == 'docspan':
-                if not Doc.has_extension(extension['name']):
-                    Doc.set_extension(extension['name'],
-                                      getter=extension['getter'])
-                if not Span.has_extension(extension['name']):
-                    Span.set_extension(extension['name'],
-                                       getter=extension['getter'])
-            if extension['type'] == 'token':
-                if not Token.has_extension(extension['name']):
-                    Token.set_extension(extension['name'],
-                                        getter=extension['getter'])
-
-        ########################
-        # Viewpoint and stance #
-        ########################
+        #########################################################
+        # Bookkeeping extensions to store data we don't want to #
+        # recalculate once it has been calculated once.         #
+        #########################################################
 
         # Index to the word that identifies the perspective that applies
         # to this token
@@ -732,8 +775,21 @@ class ViewpointFeatureDef:
                                 default=False,
                                 force=True)
 
-        if not Token.has_extension('antecedents'):
-            Token.set_extension('antecedents', default=None, force=True)
+        if not Token.has_extension('vwp_evaluation_'):
+            Token.set_extension('vwp_evaluation_',
+                default=False, force=True)
+
+        if not Token.has_extension('vwp_likelihood_'):
+            Token.set_extension('vwp_likelihood_',
+                default=False, force=True)
+
+        if not Token.has_extension('vwp_probability_'):
+            Token.set_extension('vwp_probability_',
+                default=False, force=True)
+
+        if not Token.has_extension('vwp_argument_'):
+            Token.set_extension('vwp_argument_',
+                default=False, force=True)
 
         # Mapping of tokens to viewpoints for the whole document
         #
@@ -866,6 +922,7 @@ class ViewpointFeatureDef:
         self.package_check(lang)
         self.load_lexicon(lang)
         self.calculatePerspective = not fast
+        vwp_extensions = []
         self.add_extensions()
 
     def synsets(self, token):
@@ -885,13 +942,13 @@ class ViewpointFeatureDef:
                 # Rules and special cases. TBD: introduce mechanism
                 # for specifying these kinds of exceptions
                 if token._.vwp_evaluated_role:
-                    token._.vwp_evaluation = True
+                    token._.vwp_evaluation_ = True
 
                 if token.dep_ == 'amod' \
                    and token.text.lower() == 'certain':
-                    token._.vwp_evaluation = False
-                    token._.vwp_likelihood = False
-                    token._.vwp_probability = False
+                    token._.vwp_evaluation_ = False
+                    token._.vwp_likelihood_ = False
+                    token._.vwp_probability_ = False
 
                 # modal have to
                 if token.text.lower() in ['have',
@@ -904,18 +961,18 @@ class ViewpointFeatureDef:
                                           'needs'] \
                    and token.i+1 < len(doc) \
                    and token.nbor().tag_ == 'TO':
-                    token._.vwp_evaluation = True
+                    token._.vwp_evaluation_ = True
 
                 # plan words with modal complements
                 if token.tag_ == 'TO' \
                    and token.head.pos_ in ['NOUN', 'VERB', 'ADJ'] \
                    and token.head.head._.vwp_plan:
-                    token._.vwp_evaluation = True
+                    token._.vwp_evaluation_ = True
 
                 # plan words asserted as a predicate
                 if token._.vwp_plan \
                    and token.dep_ in ['attr', 'oprd']:
-                    token.head._.vwp_evaluation = True
+                    token.head._.vwp_evaluation_ = True
 
         # for now only requiring string match for bigram or trigram
         # entries. TO-DO: use dep_ of head of matched phrase to pick
@@ -1280,7 +1337,7 @@ class ViewpointFeatureDef:
                     break
         return addressee_refs
 
-    def directSpeech(self, hdoc):
+    def vwp_direct_speech(self, hdoc):
         """
          Scan through the document and find verbs that control
          complement clauses AND contain an immediately dpeendent
@@ -2587,7 +2644,7 @@ class ViewpointFeatureDef:
                     item._.vwp_in_direct_speech_ = True
         return hdoc._.direct_speech_spans
 
-    def egocentric(self, hdoc):
+    def vwp_egocentric(self, hdoc):
         """
          Viewpoint domains that contain evaluation language like should
          or perhaps with explicit or implicit first-person viewpoint
@@ -2619,7 +2676,7 @@ class ViewpointFeatureDef:
             entityInfo.append(entry)
         return entityInfo
 
-    def allocentric(self, doc):
+    def vwp_allocentric(self, doc):
         count = 0
         domainList = []
         entityInfo = []
@@ -2718,21 +2775,6 @@ class ViewpointFeatureDef:
         hdoc._.vwp_stance_markers_ = \
             self.cleanup_propositional_attitudes(
                 stance_markers, hdoc, "stance_markers")
-
-    def mark_transition_argument_words(self, hdoc):
-    
-        tp = hdoc._.transition_word_profile
-        for item in tp[3]:
-            if item[4] not in ['temporal', 'PARAGRAPH']:
-                if item[2] == item[3]:
-                    hdoc[item[2]]._.vwp_argument = True
-                    hdoc[item[2]]._.transition = True
-                else:
-                    for i in range(item[2], item[3] + 1):
-                        if i >= len(hdoc):
-                            break
-                        hdoc[i]._.vwp_argument = True
-                        hdoc[i]._.transition = True
 
     def mark_argument_words(self, token, hdoc):
 
@@ -4147,7 +4189,7 @@ class ViewpointFeatureDef:
            Store information about whether a predicate
            is a claim predicate
         '''
-        self.directSpeech(token.doc)
+        self.vwp_direct_speech(token.doc)
         return token._.vwp_attribution_
 
     def vwp_source(self, token):
@@ -4155,7 +4197,7 @@ class ViewpointFeatureDef:
            Store information about whether a predicate
            is a claim predicate
         '''
-        self.directSpeech(token.doc)
+        self.vwp_direct_speech(token.doc)
         return token._.vwp_source_
 
     def vwp_cite(self, token):
@@ -4163,7 +4205,7 @@ class ViewpointFeatureDef:
            Store information about whether a predicate
            is a claim predicate
         '''
-        self.directSpeech(token.doc)
+        self.vwp_direct_speech(token.doc)
         return token._.vwp_cite_
 
 
@@ -5096,9 +5138,7 @@ class ViewpointFeatureDef:
                 self.spread_reverse_polarity(child)
                 lastChild = child
 
-    def spoken_register_markers(self, doc: Doc):
-        # TBD: develop a parallel marker of formal/written
-        # register
+    def vwp_interactive(self, doc: Doc):
         interactiveStatus = []
         for token in doc:
             entry = newTokenEntry('interactive', token)
@@ -5106,7 +5146,7 @@ class ViewpointFeatureDef:
             entry2 = None
 
             # colloquial usage/slang
-            if token._.usage is not None:
+            if token._.usage:
                 entry['value'] = True               
 
             if token.text.lower() in first_person_pronouns:
@@ -5156,11 +5196,9 @@ class ViewpointFeatureDef:
 
             elif emphatic_adverb(token):
                 entry['value'] = True               
-                token._.vwp_interactive = True
 
             elif emphatic_adjective(token):
                 entry['value'] = True               
-                token._.vwp_interactive = True
 
             elif common_evaluation_adjective(token):
                 entry['value'] = True               
@@ -5549,7 +5587,7 @@ class ViewpointFeatureDef:
                             referenceList[
                                 antecedent[0].lemma_.capitalize()] = [token.i]
                             registered.append(token.i)
-        directspeech = self.directSpeech(doc)
+        directspeech = self.vwp_direct_speech(doc)
         for character in characterList:
             for speechevent in directspeech:
                 speaker = speechevent['value'][0]
@@ -5566,7 +5604,7 @@ class ViewpointFeatureDef:
                                 characterList[character].append(item2)
         return (characterList, referenceList)
 
-    def tenseChanges(self, document):
+    def tense_changes(self, document):
         tenseChanges = []
         currentEvent = {}
         i = 0
@@ -5575,7 +5613,7 @@ class ViewpointFeatureDef:
         # We need to call this attribute to make
         # sure that set_direct_speech spans has been
         # called before we check tense sequences
-        self.directSpeech(document)
+        self.vwp_direct_speech(document)
         
         while i < len(document):
             if i > 0 \
@@ -5675,15 +5713,15 @@ class ViewpointFeatureDef:
             i += 1
         return tenseChanges
 
-    def concreteDetails(self, doc):
+    def concrete_details(self, doc):
         characterList = None
-        characterList = doc._.nominalReferences[0]
+        (characterList, referenceList) = self.nominalReferences(doc)
         detailList = []
 
         # We need to call this attribute to make
         # sure that set_direct_speech spans has been
         # called before we check for concrete details
-        self.directSpeech(doc)
+        self.vwp_direct_speech(doc)
 
         for token in doc:
             entry = newTokenEntry('concrete_detail', token)

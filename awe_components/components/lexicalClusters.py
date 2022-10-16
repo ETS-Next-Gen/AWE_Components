@@ -23,23 +23,15 @@ from ..errors import *
 
 lang = "en"
 
-###################################
-# Register the token and document
-# extensions we need to make cluster
-# information accessible.
-###################################
-Token.set_extension("clusterID", default=None, force=True)
-Doc.set_extension("clusterInfo", default=None, force=True)
-Doc.set_extension("main_cluster_spans", default=None, force=True)
-
-
 def allClusterInfo(hdoc):
     """
     """
+    # check for clusterInfo, not clusterInfo_,
+    # to force clustering to run if it hasn't yet
     if hdoc._.clusterInfo is not None \
-       and len(hdoc._.clusterInfo) > 0:
+       and len(hdoc._.clusterInfo_) > 0:
         clusterSpans = []
-        for cluster in hdoc._.clusterInfo:
+        for cluster in hdoc._.clusterInfo_:
             offsets = cluster[3]
             spans = []
             for item in offsets:
@@ -56,15 +48,18 @@ def allClusterInfo(hdoc):
     else:
         return []
 
-
-Doc.set_extension("all_cluster_info", getter=allClusterInfo, force=True)
-
 @Language.component("lexicalclusters")
 def assignClusterIDs(hdoc):
     '''
         Use agglomerative clustering to group the words inside a document
         into clusters of related words
     '''
+    # By default we don't assign cluster IDs
+    # so it will just pass the document through
+    # unless we have made clusterInfo_ non None first.
+    if hdoc._.clusterInfo_ is None:
+        return hdoc
+
     filteredVecs = []
     filteredToks = []
     skippedVecs = []
@@ -160,19 +155,19 @@ def assignClusterIDs(hdoc):
                 lemma = line[1]
                 locus = line[2]
                 clusterID = line[3]
-                hdoc[int(locus)]._.clusterID = clusterID
+                hdoc[int(locus)]._.clusterID_ = clusterID
 
             ###########################################################
             # restructure the data into a form that can be associated #
             # with the document as a whole and associate that record  #
             # with the spacy document                                 #
             ###########################################################
-            hdoc._.clusterInfo = calculateClusterProfile(hdoc)
+            hdoc._.clusterInfo_ = calculateClusterProfile(hdoc)
             mainClusterSpans(hdoc)
 
     except Exception as e:
         print('clustering error\n', e)
-        hdoc._.clusterInfo = None
+        hdoc._.clusterInfo_ = None
 
     return hdoc
 
@@ -338,42 +333,42 @@ def calculateClusterProfile(hdoc):
     clustersByLemma = {}
     for token in hdoc:
 
-        if hdoc[token.i]._.clusterID is None:
+        if hdoc[token.i]._.clusterID_ is None:
             continue
 
         #######################################################
         # track the word frequency of the words in the cluster
         #######################################################
 
-        if hdoc[token.i]._.clusterID not in sumClusterFreqs:
-            sumClusterFreqs[hdoc[token.i]._.clusterID] = \
+        if hdoc[token.i]._.clusterID_ not in sumClusterFreqs:
+            sumClusterFreqs[hdoc[token.i]._.clusterID_] = \
                 wordfreq.zipf_frequency(token.text.lower(), 'en')
         else:
-            sumClusterFreqs[hdoc[token.i]._.clusterID] += \
+            sumClusterFreqs[hdoc[token.i]._.clusterID_] += \
                 wordfreq.zipf_frequency(token.text.lower(), 'en')
 
         ################################################
         # create a list of offsets to cluster tokens   #
         ################################################
-        if hdoc[token.i]._.clusterID not in clusterLocs:
-            clusterLocs[hdoc[token.i]._.clusterID] = [token.i]
+        if hdoc[token.i]._.clusterID_ not in clusterLocs:
+            clusterLocs[hdoc[token.i]._.clusterID_] = [token.i]
         else:
-            clusterLocs[hdoc[token.i]._.clusterID].append(token.i)
+            clusterLocs[hdoc[token.i]._.clusterID_].append(token.i)
 
         ##################################################################
         # Count the frequencies of clusters and track the distinct lemmas
         # in a cluster
         ##################################################################
-        if hdoc[token.i]._.clusterID not in clusters:
-            clusters[hdoc[token.i]._.clusterID] = 1
-            clustersByLemma[hdoc[token.i]._.clusterID] = {}
-            clustersByLemma[hdoc[token.i]._.clusterID][token.lemma_] = 1
+        if hdoc[token.i]._.clusterID_ not in clusters:
+            clusters[hdoc[token.i]._.clusterID_] = 1
+            clustersByLemma[hdoc[token.i]._.clusterID_] = {}
+            clustersByLemma[hdoc[token.i]._.clusterID_][token.lemma_] = 1
         else:
-            clusters[hdoc[token.i]._.clusterID] += 1
-            if token.lemma_ not in clustersByLemma[hdoc[token.i]._.clusterID]:
-                clustersByLemma[hdoc[token.i]._.clusterID][token.lemma_] = 1
+            clusters[hdoc[token.i]._.clusterID_] += 1
+            if token.lemma_ not in clustersByLemma[hdoc[token.i]._.clusterID_]:
+                clustersByLemma[hdoc[token.i]._.clusterID_][token.lemma_] = 1
             else:
-                clustersByLemma[hdoc[token.i]._.clusterID][token.lemma_] += 1
+                clustersByLemma[hdoc[token.i]._.clusterID_][token.lemma_] += 1
 
     ######################################################################
     # upweight the clusters by number off tokens assigned to the cluster,
@@ -421,12 +416,12 @@ def mainClusterSpans(hdoc):
      pronominal referents clustered using the vectors of their antecedents.)
     """
 
-    if hdoc._.clusterInfo is not None \
-       and len(hdoc._.clusterInfo) > 0:
-        offsets = hdoc._.clusterInfo[0][3]
+    if hdoc._.clusterInfo_ is not None \
+       and len(hdoc._.clusterInfo_) > 0:
+        offsets = hdoc._.clusterInfo_[0][3]
         start = 0
         spans = []
-        hdoc._.main_cluster_spans = []
+        hdoc._.main_cluster_spans_ = []
         for item in offsets:
             entry={}
             entry['name'] = 'clusterspan'
@@ -441,7 +436,7 @@ def mainClusterSpans(hdoc):
                               - hdoc[start].idx
             spans.append(span)
             start = span
-        hdoc._.main_cluster_spans.append(entry)
+        hdoc._.main_cluster_spans_.append(entry)
         return spans
     else:
         return []
@@ -456,10 +451,10 @@ def developmentContentWords(hdoc):
      words associated with the four strongest clusters.
     """
     wordlist = []
-    if hdoc._.clusterInfo is not None \
-       and len(hdoc._.clusterInfo) > 0:
+    if hdoc._.clusterInfo_ is not None \
+       and len(hdoc._.clusterInfo_) > 0:
         topClusters = []
-        for i, clinfo in enumerate(hdoc._.clusterInfo):
+        for i, clinfo in enumerate(hdoc._.clusterInfo_):
             if i < 5:
                 topClusters.append(clinfo[0])
             else:
@@ -470,8 +465,9 @@ def developmentContentWords(hdoc):
                and not re.match('[-.,;:"\'?/><{})(!`~_]+', token.text) \
                and not wordfreq.zipf_frequency(token.text.lower(),
                                                'en') > 5.7 \
-               and token.pos_ in ['NOUN', 'PROPN', 'VERB', 'ADJ', 'ADV'] \
-               and token._.clusterID not in topClusters:
+               and token.pos_ \
+                   in ['NOUN', 'PROPN', 'VERB', 'ADJ', 'ADV'] \
+               and token._.clusterID_ not in topClusters:
                 wordlist.append(token)
     return wordlist
 
@@ -480,11 +476,83 @@ def devword(token):
        Return list of content words that do not appear in the 4 strongest
        in-document content clusters
     '''
-    devlist = [token.text for token in developmentContentWords(token.doc)]
+    if token.doc.clusterInfo_ is None:
+        # flag assignClusterIDs to run
+        # by setting it to a non None value
+        token.doc._.clusterInfo_ = []
+        self.assignClusterIDs(token.doc)
+    devlist = [token.text \
+               for token \
+               in developmentContentWords(token.doc)]
     if token.text in devlist:
         return True
     else:
         return False    
 
+###################################
+# Register the token and document
+# extensions we need to make cluster
+# information accessible.
+###################################
 Token.set_extension("devword", getter=devword, force=True)
 
+# Storage locations for precalculated data
+Token.set_extension("clusterID_",
+                    default=None,
+                    force=True)
+
+Doc.set_extension("clusterInfo_",
+                  default=None,
+                  force=True)
+
+Doc.set_extension("main_cluster_spans_",
+                  default=None,
+                  force=True)
+
+# Getter functions for attributes used externally
+
+# set AWE_Info if this is the first
+# component to call for it
+if not Doc.has_extension('AWE_Info'):
+    Doc.set_extension('AWE_Info',
+                      method=AWE_Info)
+
+def clusterID(token):
+    if token.doc.clusterInfo_ is None:
+        # flag assignClusterIDs to run
+        # by setting it to a non None value
+        token.doc._.clusterInfo_ = []
+        assignClusterIDs(token.doc)
+    return token._.clusterID_
+
+Token.set_extension('clusterID',
+                    getter=clusterID,
+                    force=True)
+
+def clusterInfo(doc):
+    if doc._.clusterInfo_ is None:
+        # flag assignClusterIDs to run
+        # by setting it to a non None value
+        doc._.clusterInfo_ = []
+        assignClusterIDs(doc)
+    return doc._.clusterInfo_
+
+Doc.set_extension('clusterInfo',
+                  getter=clusterInfo,
+                  force=True)
+
+def main_cluster_spans(doc):
+    if doc._.clusterInfo_ is None:
+        # flag assignClusterIDs to run
+        # by setting it to a non None value
+        doc._.clusterInfo_ = []
+        assignClusterIDs(doc)
+    return doc._.main_cluster_spans_
+
+Doc.set_extension('main_cluster_spans',
+                  getter=main_cluster_spans,
+                  force=True)
+
+Doc.set_extension("all_cluster_info",
+                  getter=allClusterInfo,
+                  force=True)
