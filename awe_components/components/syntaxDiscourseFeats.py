@@ -278,25 +278,25 @@ class SyntaxAndDiscourseFeatDef(object):
             gram5 = None
 
             if i + 5 < len(document):
-                gram5 = document[i].text.lower()
+                gram5 = document[i].lower_
                 for j in range(i + 1, i + 5):
-                    gram5 += ' ' + document[j].text.lower()
+                    gram5 += ' ' + document[j].lower_
             if i + 4 < len(document):
-                gram4 = document[i].text.lower()
+                gram4 = document[i].lower_
                 for j in range(i + 1, i + 4):
-                    gram4 += ' ' + document[j].text.lower()
+                    gram4 += ' ' + document[j].lower_
             if i + 3 < len(document):
-                gram3 = document[i].text.lower()
+                gram3 = document[i].lower_
                 for j in range(i + 1, i + 3):
-                    gram3 += ' ' + document[j].text.lower()
+                    gram3 += ' ' + document[j].lower_
             if i + 2 < len(document):
-                gram2 = document[i].text.lower()
+                gram2 = document[i].lower_
                 for j in range(i + 1, i + 3):
-                    gram2 += ' ' + document[j].text.lower()
+                    gram2 += ' ' + document[j].lower_
             if i + 1 < len(document):
-                gram1 = document[i].text.lower() \
-                    + ' ' + document[i+1].text.lower()
-            gram0 = document[i].text.lower()
+                gram1 = document[i].lower_ \
+                    + ' ' + document[i+1].lower_
+            gram0 = document[i].lower_
             if gram5 in self.transition_terms:
                 for loc in range(i, i + 6):
                     document[loc]._.transition = True

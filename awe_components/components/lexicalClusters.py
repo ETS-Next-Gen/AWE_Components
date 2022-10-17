@@ -65,7 +65,7 @@ def assignClusterIDs(hdoc):
     skippedVecs = []
     skippedToks = []
     for i, token in enumerate(hdoc):
-        word = token.text.lower().replace('_', ' ')
+        word = token.lower_.replace('_', ' ')
 
         #################################################
         # Resolve coreference so we can cluster pronouns
@@ -82,7 +82,7 @@ def assignClusterIDs(hdoc):
                     word + '_'
                     + token.lemma_.replace('_', ' ')
                     + '('
-                    + ''.join([x.text.lower() for x in referents])
+                    + ''.join([x.lower_ for x in referents])
                     + ')_'
                     + str(token.i))
 
@@ -92,7 +92,7 @@ def assignClusterIDs(hdoc):
         #######################################################
         if not token.is_stop and word != '.' \
            and not re.match('[-,;:"\'?/><{})(!`~_]+', word) \
-           and not wordfreq.zipf_frequency(token.text.lower(), 'en') > 5.7 \
+           and not wordfreq.zipf_frequency(token.lower_, 'en') > 5.7 \
            and token.pos_ in ['NOUN', 'PROPN', 'VERB', 'ADJ', 'ADV']:
             if token.has_vector and not all_zeros(token.vector):
                 filteredVecs.append(token.vector)
@@ -342,10 +342,10 @@ def calculateClusterProfile(hdoc):
 
         if hdoc[token.i]._.clusterID_ not in sumClusterFreqs:
             sumClusterFreqs[hdoc[token.i]._.clusterID_] = \
-                wordfreq.zipf_frequency(token.text.lower(), 'en')
+                wordfreq.zipf_frequency(token.lower_, 'en')
         else:
             sumClusterFreqs[hdoc[token.i]._.clusterID_] += \
-                wordfreq.zipf_frequency(token.text.lower(), 'en')
+                wordfreq.zipf_frequency(token.lower_, 'en')
 
         ################################################
         # create a list of offsets to cluster tokens   #
@@ -463,7 +463,7 @@ def developmentContentWords(hdoc):
             if not token.is_stop \
                and token.text != '.' \
                and not re.match('[-.,;:"\'?/><{})(!`~_]+', token.text) \
-               and not wordfreq.zipf_frequency(token.text.lower(),
+               and not wordfreq.zipf_frequency(token.lower_,
                                                'en') > 5.7 \
                and token.pos_ \
                    in ['NOUN', 'PROPN', 'VERB', 'ADJ', 'ADV'] \

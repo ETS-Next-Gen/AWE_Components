@@ -301,7 +301,8 @@ def print_parse_tree(sent):
         print(line,
               'ant:', token._.antecedents,
               'gsubj:', token._.governing_subject,
-              'vp:', token._.vwp_perspective)
+              'vp:', token._.vwp_perspective,
+              'sm:', token._.vwp_evaluation_)
 
         lastToken = token
         if head is not None:
@@ -399,7 +400,7 @@ def firstLeftSister(tokenA: Token, tokenB: Token):
           and tokenB is not None):
         if tokenA.dep_ == 'prep' \
            and tokenB.tag_.startswith('R') \
-           and tokenB.text.lower().endswith('ly'):
+           and tokenB.lower_.endswith('ly'):
             return True
         if tokenA.dep_ == 'advmod' \
            and tokenA.tag_.startswith('R') \
@@ -515,6 +516,67 @@ def getFirstChild(token: Token):
         return None
 
 
+subject_or_object_nom = ['nsubj',
+                         'nsubjpass',
+                         'dobj']
+
+underlying_object_dependencies = ['dobj', 'nsubjpass']
+
+clausal_complements = ['csubj',
+                       'csubjpass',
+                       'ccomp',
+                       'xcomp',
+                       'pcomp',
+                       'acl',
+                       'oprd']
+
+complements = ['csubj',
+               'ccomp',
+               'nsubj',
+               'nsubjpass',
+               'dobj',
+               'xcomp',
+               'acl',
+               'oprd',
+               'attr',
+               'acomp']
+
+clausal_modifier_dependencies = ['relcl',
+                                 'advcl',
+                                 'prep']
+
+adjectival_predicates = ['attr', 'oprd', 'acomp', 'amod']
+
+adjectival_mod_dependencies = ['amod', 'nmod', 'prep', 'acl']
+
+verbal_mod_dependencies = ['prep', 'advmod', 'neg', 'prt']
+
+adjectival_complement_dependencies = ['attr', 'oprd', 'acomp']
+
+object_predicate_dependencies = ['attr', 'oprd']
+
+loose_clausal_dependencies = ['CC',
+                              '_SP',
+                              'para',
+                              'parapara']
+
+general_complements_and_modifiers = ['acomp',
+                                    'ccomp',
+                                    'xcomp',
+                                    'advcl',
+                                    'advmod',
+                                    'appos',
+                                    'attr',
+                                    'dep',
+                                    'conj',
+                                    'infmod',
+                                    'npadvmod',
+                                    'oprd',
+                                    'partmod',
+                                    'prep',
+                                    'parataxis',
+                                    'acl']
+
 def takesBareInfinitive(item: Token):
     """
      This function exists because spaCY uses the same dependency
@@ -550,6 +612,14 @@ def takesBareInfinitive(item: Token):
         return True
     return False
 
+be_verbs = ['am',
+            'are',
+            'is',
+            'was',
+            'were',
+            'be',
+            'being',
+            'been']
 
 def tensed_clause(tok: Token):
     """
@@ -620,13 +690,13 @@ def tensed_clause(tok: Token):
     # Otherwise inflected verbs count as not tensed
     elif (not hasTenseMarker
           and tok.tag_ != 'VBZ'
-          and tok.text.lower() != tok.lemma_):
+          and tok.lower_ != tok.lemma_):
         return False
     # Subjects of small clauses (object + bare infinitive)
     # do not count as tensed
     elif (head is not None
           and takesBareInfinitive(head)
-          and tok.text.lower() == tok.lemma_
+          and tok.lower_ == tok.lemma_
           and hasSubj):
         return False
     return True
@@ -662,7 +732,7 @@ def past_tense_verb(tok: Token):
     if 'Tense=Past' in str(tok.morph):
         for child in tok.children:
             if child.lemma_ == 'be':
-                if child.text.lower() not in ['was', 'were']:
+                if child.lower_ not in ['was', 'were']:
                     return False
         return True
     else:
@@ -685,17 +755,17 @@ def in_past_tense_scope(tok: Token):
                                'had']:
             return True
         if item.dep_ == 'aux' \
-           and item.text.lower() in ['do',
-                                     'does',
-                                     'has',
-                                     'will',
-                                     'can',
-                                     'shall',
-                                     'may',
-                                     'must',
-                                     'am',
-                                     'are',
-                                     'is']:
+           and item.lower_ in ['do',
+                               'does',
+                               'has',
+                               'will',
+                               'can',
+                               'shall',
+                               'may',
+                               'must',
+                               'am',
+                               'are',
+                               'is']:
             return False
     for item in tok.head.subtree:
         if item.dep_ == 'aux' \
@@ -706,17 +776,17 @@ def in_past_tense_scope(tok: Token):
                                'had']:
             return True
         if item.dep_ == 'aux' \
-           and item.text.lower() in ['do',
-                                     'does',
-                                     'has',
-                                     'will',
-                                     'can',
-                                     'shall',
-                                     'may',
-                                     'must',
-                                     'am',
-                                     'are',
-                                     'is']:
+           and item.lower_ in ['do',
+                               'does',
+                               'has',
+                               'will',
+                               'can',
+                               'shall',
+                               'may',
+                               'must',
+                               'am',
+                               'are',
+                               'is']:
             return False
     if past_tense_verb(tok):
         return True
@@ -726,13 +796,13 @@ def in_past_tense_scope(tok: Token):
         elif tensed_clause(tok.head):
             for item in tok.head.subtree:
                 if item.dep_ == 'aux' \
-                   and item.text.lower() in ['did',
-                                             'had',
-                                             'was',
-                                             'were',
-                                             'could',
-                                             'would',
-                                             '\'d']:
+                   and item.lower_ in ['did',
+                                       'had',
+                                       'was',
+                                       'were',
+                                       'could',
+                                       'would',
+                                       '\'d']:
                     return True
             return False
         if tok.head is not None and tok != tok.head:
@@ -741,14 +811,14 @@ def in_past_tense_scope(tok: Token):
             return False
     for item in tok.head.subtree:
         if item.dep_ == 'aux' \
-           and item.text.lower() in ['did',
-                                     'had',
-                                     '\'d',
-                                     'was',
-                                     'were',
-                                     'could',
-                                     'would',
-                                     '’d']:
+           and item.lower_ in ['did',
+                               'had',
+                               '\'d',
+                               'was',
+                               'were',
+                               'could',
+                               'would',
+                                '’d']:
             return True
     if isRoot(tok) and 'VerbForm=Inf' in str(tok.morph):
         return False
@@ -768,15 +838,15 @@ def in_modal_scope(tok: Token):
         elif tensed_clause(tok.head):
             for item in tok.head.subtree:
                 if item.dep_ == 'aux' \
-                   and item.text.lower() in ['will',
-                                             'would',
-                                             'shall',
-                                             'should',
-                                             'can',
-                                             'could',
-                                             'may',
-                                             'might',
-                                             'must']:
+                   and item.lower_ in ['will',
+                                       'would',
+                                       'shall',
+                                       'should',
+                                       'can',
+                                       'could',
+                                       'may',
+                                       'might',
+                                       'must']:
                     return True
             return False
         if tok.head is not None \
@@ -786,15 +856,15 @@ def in_modal_scope(tok: Token):
             return False
     for item in tok.head.subtree:
         if item.dep_ == 'aux' \
-           and item.text.lower() in ['will',
-                                     'would',
-                                     'shall',
-                                     'should',
-                                     'can',
-                                     'could',
-                                     'may',
-                                     'might',
-                                     'must']:
+           and item.lower_ in ['will',
+                               'would',
+                               'shall',
+                               'should',
+                               'can',
+                               'could',
+                               'may',
+                               'might',
+                               'must']:
             return True
     if isRoot(tok) and 'VerbForm=Inf' in str(tok.morph):
         return False
@@ -938,7 +1008,7 @@ def getTensedVerbHead(token):
     if isRoot(token):
         return token
 
-    if token.text.lower() == 'be' \
+    if token.lower_ == 'be' \
        and 'MD' in [child.tag_ for child in token.children]:
         return token
 
@@ -966,57 +1036,57 @@ def getTensedVerbHead(token):
             return token
         elif 'Tense=Pres' in str(token.morph):
             return token
-        elif 'am' in [item.text.lower() for item in token.children]:
+        elif 'am' in [item.lower_ for item in token.children]:
             return token
-        elif 'are' in [item.text.lower() for item in token.children]:
+        elif 'are' in [item.lower_ for item in token.children]:
             return token
-        elif 'was' in [item.text.lower() for item in token.children]:
+        elif 'was' in [item.lower_ for item in token.children]:
             return token
-        elif 'were' in [item.text.lower() for item in token.children]:
+        elif 'were' in [item.lower_ for item in token.children]:
             return token
-        elif 'do' in [item.text.lower() for item in token.children]:
+        elif 'do' in [item.lower_ for item in token.children]:
             return token
-        elif 'does' in [item.text.lower() for item in token.children]:
+        elif 'does' in [item.lower_ for item in token.children]:
             return token
-        elif 'did' in [item.text.lower() for item in token.children]:
+        elif 'did' in [item.lower_ for item in token.children]:
             return token
-        elif 'have' in [item.text.lower() for item in token.children]:
+        elif 'have' in [item.lower_ for item in token.children]:
             return token
-        elif 'has' in [item.text.lower() for item in token.children]:
+        elif 'has' in [item.lower_ for item in token.children]:
             return token
-        elif 'had' in [item.text.lower() for item in token.children]:
+        elif 'had' in [item.lower_ for item in token.children]:
             return token
-        elif 'can' in [item.text.lower() for item in token.children]:
+        elif 'can' in [item.lower_ for item in token.children]:
             return token
-        elif 'could' in [item.text.lower() for item in token.children]:
+        elif 'could' in [item.lower_ for item in token.children]:
             return token
-        elif 'will' in [item.text.lower() for item in token.children]:
+        elif 'will' in [item.lower_ for item in token.children]:
             return token
-        elif 'would' in [item.text.lower() for item in token.children]:
+        elif 'would' in [item.lower_ for item in token.children]:
             return token
-        elif 'may' in [item.text.lower() for item in token.children]:
+        elif 'may' in [item.lower_ for item in token.children]:
             return token
-        elif 'might' in [item.text.lower() for item in token.children]:
+        elif 'might' in [item.lower_ for item in token.children]:
             return token
-        elif 'must' in [item.text.lower() for item in token.children]:
+        elif 'must' in [item.lower_ for item in token.children]:
             return token
-        elif '\'d' in [item.text.lower() for item in token.children]:
+        elif '\'d' in [item.lower_ for item in token.children]:
             return token
-        elif '\'s' in [item.text.lower() for item
+        elif '\'s' in [item.lower_ for item
                        in token.children if item.dep_ == 'aux']:
             return token
-        elif '\'ve' in [item.text.lower() for item in token.children]:
+        elif '\'ve' in [item.lower_ for item in token.children]:
             return token
-        elif '\'ll' in [item.text.lower() for item in token.children]:
+        elif '\'ll' in [item.lower_ for item in token.children]:
             return token
-        elif '’d' in [item.text.lower() for item in token.children]:
+        elif '’d' in [item.lower_ for item in token.children]:
             return token
-        elif '’s' in [item.text.lower() for item
+        elif '’s' in [item.lower_ for item
                       in token.children if item.dep_ == 'aux']:
             return token
-        elif '’ve' in [item.text.lower() for item in token.children]:
+        elif '’ve' in [item.lower_ for item in token.children]:
             return token
-        elif '’ll' in [item.text.lower() for item in token.children]:
+        elif '’ll' in [item.lower_ for item in token.children]:
             return token
         else:
             if token.head is None:
@@ -1029,15 +1099,16 @@ def getTensedVerbHead(token):
             return token
         return getTensedVerbHead(token.head)
 
+subject_dependencies = ['nsubj',
+                        'nsubjpass',
+                        'csubj',
+                        'csubjpass']
 
 def getSubject(tok: Token):
     for child in tok.children:
         if child.tag_ != '_SP':
-            if child.dep_ == 'nsubj' \
-               or child.dep_ == 'nsubjpass' \
+            if child.dep_ in subject_dependencies \
                or child.dep_ == 'poss' \
-               or child.dep_ == 'csubj' \
-               or child.dep_ == 'csubjpass' \
                or child.dep_ == 'attr':
                 return child
     return None
@@ -1121,12 +1192,21 @@ def getDative(tok: Token):
 
 def getPrepObject(tok: Token, tlist):
     for child in tok.children:
-        if child.dep_ == 'prep' and child.text.lower() in tlist:
+        if child.dep_ == 'prep' and child.lower_ in tlist:
             return getPrepObject(child, tlist)
-        elif child.dep_ == 'pobj' and tok.text.lower() in tlist:
+        elif child.dep_ == 'pobj' and tok.lower_ in tlist:
             return child
     return None
 
+third_person_pronouns = ['they',
+                         'them',
+                         'their',
+                         'theirs',
+                         'themselves']
+
+inanimate_3sg_pronouns = ['this',
+                          'that',
+                          'it']
 
 def scanForAnimatePotentialAntecedents(doc,
                                        loc,
@@ -1143,7 +1223,7 @@ def scanForAnimatePotentialAntecedents(doc,
         # are wrong
         if not doc[loc]._.animate:
             blockedLocs.append(loc)
-            blockedLex.append(doc[loc].text.lower())
+            blockedLex.append(doc[loc].lower_)
         else:
             altAntecedents.append(loc)
     while pos > 0:
@@ -1164,7 +1244,7 @@ def scanForAnimatePotentialAntecedents(doc,
                    and (getTensedVerbHead(doc[loc])
                         != getTensedVerbHead(doc[pos])) \
                    and ('Number=Plur' in str(doc[pos].morph)
-                        or doc[pos].text.lower()
+                        or doc[pos].lower_
                         in ['who', 'whom', 'whoever']):
                     return [doc[pos].i]
 
@@ -1172,7 +1252,7 @@ def scanForAnimatePotentialAntecedents(doc,
                   and doc[pos]._.animate
                   and pos not in antecedentlocs
                   and pos not in blockedLocs
-                  and doc[pos].text.lower() not in blockedLex):
+                  and doc[pos].lower_ not in blockedLex):
                 if pos not in altAntecedents:
                     altAntecedents.append(pos)
 
@@ -1228,11 +1308,7 @@ def ResolveReference(tok: Token, doc: Doc):
     Resolution = doc._.coref_chains.resolve(tok)
     doclist = []
 
-    if tok.text.lower() not in ['they',
-                                'them',
-                                'their',
-                                'theirs',
-                                'themselves']:
+    if tok.lower_ not in third_person_pronouns:
         if Resolution is not None:
             for item in Resolution:
                 doclist.append(item.i)
@@ -1253,7 +1329,7 @@ def ResolveReference(tok: Token, doc: Doc):
                         start = 0
                     if end + 1 > len(doc):
                         end = len(doc)
-                    if tok.text.lower() in ['their', 'theirs']:
+                    if tok.lower_ in ['their', 'theirs']:
                         res1 = wspc.send(['its',
                                           doc[start:tok.i].text,
                                           doc[tok.i+1:end].text])
@@ -1263,7 +1339,7 @@ def ResolveReference(tok: Token, doc: Doc):
                                           doc[start:tok.i].text,
                                           doc[tok.i+1:end].text])
 
-                    if tok.text.lower() in ['their', 'theirs']:
+                    if tok.lower_ in ['their', 'theirs']:
                         res2 = wspc.send(['his',
                                           doc[start:tok.i].text,
                                           doc[tok.i+1:end].text])
@@ -1344,7 +1420,7 @@ def getDistinctClauseReferences(tok: Token, hdoc: Doc):
                     'nsubjpass',
                     'dobj',
                     'dative'] \
-       and tok.text.lower() not in reflexives:
+       and tok.lower_ not in reflexives:
         referenceList.append(tok.i)
         references = ResolveReference(tok, hdoc)
         for reference in references:
@@ -1354,7 +1430,7 @@ def getDistinctClauseReferences(tok: Token, hdoc: Doc):
                           'nsubjpass',
                           'dobj',
                           'dative'] \
-           and child.text.lower() not in reflexives:
+           and child.lower_ not in reflexives:
             references = ResolveReference(child, hdoc)
             for reference in references:
                 if reference not in referenceList:
@@ -1362,7 +1438,7 @@ def getDistinctClauseReferences(tok: Token, hdoc: Doc):
         if child.dep_ == 'prep':
             for grandchild in child.children:
                 if grandchild.dep_ == 'pobj' \
-                   and grandchild.text.lower() not in reflexives:
+                   and grandchild.lower_ not in reflexives:
                     references = ResolveReference(grandchild, hdoc)
                     for reference in references:
                         if reference not in referenceList:
@@ -1370,7 +1446,7 @@ def getDistinctClauseReferences(tok: Token, hdoc: Doc):
                 elif grandchild.dep_ == 'prep':
                     for ggrandchild in grandchild.children:
                         if ggrandchild.dep_ == 'pobj' \
-                           and not ggrandchild.text.lower() in reflexives:
+                           and not ggrandchild.lower_ in reflexives:
                             references = ResolveReference(ggrandchild, hdoc)
                             for reference in references:
                                 if reference not in referenceList:
@@ -1382,7 +1458,7 @@ def getDistinctClauseReferences(tok: Token, hdoc: Doc):
                           'xcomp']:
             for grandchild in child.children:
                 if grandchild.dep_ in ['nsubj', 'nsubjpass'] \
-                   and grandchild.text.lower() not in reflexives:
+                   and grandchild.lower_ not in reflexives:
                     references = ResolveReference(grandchild, hdoc)
                     for reference in references:
                         if reference not in referenceList:
@@ -1416,16 +1492,20 @@ def getLinkedNodes(tok: Token):
 
 
 first_person_pronouns = ['i',
+                         'I'
                          'me',
                          'my',
+                         'My',
                          'mine',
                          'myself',
                          'we',
+                         'We',
                          'us',
                          'our',
+                         'Our',
                          'ours',
+                         'Ours',
                          'ourselves']
-
 
 def all_zeros(a):
     """
@@ -1436,16 +1516,18 @@ def all_zeros(a):
 
 
 second_person_pronouns = ['you',
+                          'You',
                           'your',
+                          'Your',
                           'yours',
+                          'Yours',
                           'yourself',
                           'yourselves',
                           'u']
 
-
 def definite(tok: Token):
     for child in tok.subtree:
-        if child.text.lower() == 'the':
+        if child.lower_ == 'the':
             return True
         if child.dep_ == 'prp$':
             return True
@@ -1520,6 +1602,7 @@ function_word_tags = ['TO',
                       'RBR',
                       'RBS']
 
+dative_preps = ['to', 'for', 'accord']
 
 def temporalPhrase(tok: Token):
 
@@ -1584,7 +1667,7 @@ def temporalPhrase(tok: Token):
             return tok.sent.start, scope
 
         if tok.dep_ in ['prep', 'mark'] \
-           and tok.text.lower() in core_temporal_preps:
+           and tok.lower_ in core_temporal_preps:
             if tok.dep_ == 'mark':
                 return tok.i, [tok.i]
 
@@ -1592,9 +1675,9 @@ def temporalPhrase(tok: Token):
                 if child.dep_ in ['pobj', 'pcomp']:
                     if is_temporal(child) \
                        or (is_event(tok)
-                           and tok.text.lower() != 'in') \
+                           and tok.lower_ != 'in') \
                        or (child.pos_ == 'VERB'
-                           and tok.text.lower() != 'in'):
+                           and tok.lower_ != 'in'):
                         scope = []
                         for sub in tok.subtree:
                             if sub.dep_ in ['mark',
@@ -1734,6 +1817,18 @@ content_tags = ['NN',
                 'CD']
 
 content_pos = ['NOUN', 'PROPN', 'VERB', 'ADJ', 'ADV', 'CD']
+
+nominal_pos = ['ADJ',
+               'NOUN',
+               'PROPN',
+               'PRON',
+               'CD',
+               'NUM']
+
+verbal_pos = ['VERB',
+              'AUX',
+              'ADP',
+              'MD']
 
 major_locative_prepositions = ['to',
                                'from',
@@ -1950,7 +2045,7 @@ def contracted_verb(token):
          or token.pos_ == 'AUX') \
         and token.i+1 < len(doc) \
         and doc[token.i + 1].pos_ == 'PART' \
-        and doc[token.i + 1].text.lower() != 'not' \
+        and doc[token.i + 1].lower_ != 'not' \
         and len([child for child in token.children]) == 0:
          return True
     else:
@@ -2034,6 +2129,20 @@ prehead_modifiers = ['mark',
                      'det',
                      'poss']
 
+prehead_modifiers2 = ['det',
+                      'aux',
+                      'auxpass',
+                      'neg',
+                      'amod',
+                      'advmod',
+                      'npadvmod',
+                      'cc',
+                      'punct']
+
+auxiliary_dependencies = ['aux', 'auxpass']
+
+auxiliary_or_adverb = ['aux', 'auxpass', 'advmod', 'npadvmod']
+
 quantifying_determiners = ['any',
                            'all',
                            'no',
@@ -2044,28 +2153,6 @@ quantifying_determiners = ['any',
                            'few',
                            'more',
                            'most']
-
-subject_or_object_nom = ['nsubj',
-                         'nsubjpass',
-                         'dobj']
-
-clausal_complements = ['csubj',
-                       'ccomp',
-                       'xcomp',
-                       'acl',
-                       'oprd']
-
-complements = ['csubj',
-               'ccomp',
-               'nsubj',
-               'nsubjpass',
-               'dobj',
-               'xcomp',
-               'acl',
-               'oprd',
-               'attr',
-               'acomp']
-
 
 def clausal_subject_or_complement(tok):
     if (tok.dep_ in ['xcomp', 'oprd', 'csubj']
@@ -2107,6 +2194,72 @@ def emphatic_adverb(token):
     else:
         return False
 
+pos_degree_mod = ['totally',
+                  'completely',
+                  'perfectly',
+                  'eminently',
+                  'fairly',
+                  'terrifically',
+                  'amazingly',
+                  'astonishingly',
+                  'breathtakingly',
+                  'genuinely',
+                  'truly',
+                  'sublimely',
+                  'marvelously',
+                  'fantastically',
+                  'pretty',
+                  'wondrously',
+                  'exquisitely',
+                  'thoroughly',
+                  'profoundly',
+                  'incredibly',
+                  'greatly',
+                  'extraordinarily',
+                  'stunningly',
+                  'incomparably',
+                  'greatly',
+                  'incomparable',
+                  'stunning',
+                  'great',
+                  'greater',
+                  'greatest',
+                  'complete',
+                  'ultimate',
+                  'absolute',
+                  'incredible',
+                  'total',
+                  'extraordinary',
+                  'perfect',
+                  'terrific',
+                  'astonishing',
+                  'breathtaking',
+                  'genuine',
+                  'true',
+                  'sublime',
+                  'fantastic',
+                  'marvelous',
+                  'wonderful',
+                  'thorough',
+                  'profound',
+                  'unsurpassed',
+                  'phenomenal',
+                  'inestimable',
+                  'prodigious',
+                  'monumental',
+                  'monumentally',
+                  'tremendous',
+                  'tremendously',
+                  'prodigiously',
+                  'inestimably',
+                  'phenomenally']
+
+def stance_adverb(token):
+    if token.tag_ == 'RB' \
+       and (token._.vwp_evaluation
+            or token._.vwp_hedge):
+        return True
+    return False
 
 def emphatic_adjective(token):
     if (token.dep_ == 'amod'
@@ -2207,7 +2360,7 @@ def elliptical_verb(token):
             or token._.vwp_communication
             or token._.vwp_cognitive)
        and token.i + 1 < len(token.doc)
-       and token.nbor().text.lower() in ['so', 'not']):
+       and token.nbor().lower_ in ['so', 'not']):
         return True
     else:
         return False
@@ -2247,7 +2400,7 @@ def illocutionary_tag(token):
 
 
 def private_mental_state_tag(token):
-    if token.text.lower() in ['i', 'you'] \
+    if token.lower_ in ['i', 'you'] \
        and token.dep_ == 'nsubj' \
        and token.head.lemma_ in ['assume',
                                  'believe',
@@ -2295,6 +2448,38 @@ def private_mental_state_tag(token):
     else:
         return False
 
+def coreViewpointPredicate(token):
+    if token._.vwp_say \
+       or token._.vwp_think \
+       or token._.vwp_perceive \
+       or token._.vwp_interpret \
+       or token._.vwp_argue \
+       or token._.vwp_argument \
+       or token._.vwp_emotion:
+        return True
+    return False
+
+def generalViewpointPredicate(token):
+    if token._.vwp_cognitive \
+       or token._.vwp_argument \
+       or token._.vwp_communication:
+        return True
+    return False
+
+def generalArgumentPredicate(token):
+    if token._.vwp_argument \
+       or token._.vwp_say \
+       or token._.vwp_argue \
+       or token._.vwp_think:
+        return True
+    return False
+
+def stancePredicate(token):
+    if generalViewpointPredicate(token) \
+       or token._.vwp_hedge \
+       or token._.vwp_evaluation:
+        return True
+    return False
 
 other_conversational_vocabulary = ['guy',
                                    'gal',
@@ -2316,6 +2501,15 @@ other_conversational_vocabulary = ['guy',
                                   'woulda',
                                   'doncha',
                                   'betcha']
+
+present_semimodals = ['have',
+                      'has',
+                      'dare',
+                      'dares',
+                      'ought',
+                      'going',
+                      'need',
+                      'needs']
 
 def other_conversational_idioms(token):
     doc = token.doc
@@ -2348,8 +2542,12 @@ def other_conversational_idioms(token):
     else:
         return False
 
-adjectival_predicates = ['attr', 'oprd', 'acomp', 'amod']
+animate_ent_type = ['PERSON',
+                    'ORG',
+                    'WORK_OF_ART',
+                    'DATE']
 
+nonhuman_ent_type = ['ORG', 'DATE', 'WORK_OF_ART']
 
 def sylco(word):
     """

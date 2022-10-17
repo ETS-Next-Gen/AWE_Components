@@ -41,13 +41,13 @@ def countDetails(start, end, doc, plemmas):
     covered = []
     while segLoc < segEnd and segLoc < end:
         if doc[segLoc].lemma_ not in plemmas \
-          and doc[segLoc].text.lower() not in covered \
+          and doc[segLoc].lower_ not in covered \
           and doc[segLoc]._.max_freq is not None \
           and doc[segLoc]._.max_freq > 1.75 \
           and doc[segLoc]._.max_freq < 5 \
           and not doc[segLoc]._.is_academic \
           and doc[segLoc].pos_ in ['NOUN', 'PROPN', 'ADJ']:
-            covered.append(doc[segLoc].text.lower())
+            covered.append(doc[segLoc].lower_)
             detailCount += 1
         elif doc[segLoc]._.transition \
             and doc[segLoc]._.transition_category in ['temporal',
@@ -132,15 +132,15 @@ def extract_content_segments(prompt, doc):
                and token._.root not in plemmas \
                and (token._.root in pwrds
                     or token.lemma_ in pwrds
-                    or token.text.lower() in pwrds
+                    or token.lower_ in pwrds
                     ) \
                and freqs[token._.root] > 1:
                 if token._.root not in plemmas:
                     plemmas.append(token._.root)
                 if token.lemma_ not in plemmas:
                     plemmas.append(token.lemma_)
-                if token.text.lower() not in plemmas:
-                    plemmas.append(token.text.lower())
+                if token.lower_ not in plemmas:
+                    plemmas.append(token.lower_)
             if token._.transition \
                and token._.transition_category not in ['illustrative',
                                                        'temporal',
@@ -152,8 +152,8 @@ def extract_content_segments(prompt, doc):
                     plemmas.append(token._.root)
                 if token.lemma_ not in plemmas:
                     plemmas.append(token.lemma_)
-                if token.text.lower() not in plemmas:
-                    plemmas.append(token.text.lower())
+                if token.lower_ not in plemmas:
+                    plemmas.append(token.lower_)
             elif (token._.vwp_argument
                   or token._.vwp_argue
                   or token._.vwp_evaluation
@@ -167,8 +167,8 @@ def extract_content_segments(prompt, doc):
                     plemmas.append(token._.root)
                 if token.lemma_ not in plemmas:
                     plemmas.append(token.lemma_)
-                if token.text.lower() not in plemmas:
-                    plemmas.append(token.text.lower())
+                if token.lower_ not in plemmas:
+                    plemmas.append(token.lower_)
     else:
 
         # If we have a prompt text, we sort out which words in the
@@ -234,13 +234,13 @@ def extract_content_segments(prompt, doc):
             # cross-sentence anaphora means that this sentence is part of
             # a local content chain and is subordinate to a previous sentence
             if tok._.coref_chains is not None \
-               and tok.text.lower() in ['he',
-                                        'him',
-                                        'she',
-                                        'her',
-                                        'it',
-                                        'they',
-                                        'them']:
+               and tok.lower_ in ['he',
+                                  'him',
+                                  'she',
+                                  'her',
+                                  'it',
+                                  'they',
+                                  'them']:
                 offset = None
                 for chain in tok._.coref_chains:
                     for mentionIndex, item in enumerate(chain):
@@ -249,7 +249,7 @@ def extract_content_segments(prompt, doc):
                             refcount += 1
                         break
             # Immediate back reference using this/that + N in main clause
-            if tok.text.lower() in ['this', 'that'] \
+            if tok.lower_ in ['this', 'that'] \
                and tok.dep_ != 'mark' \
                and (tok.head.dep_ in ['nsubj', 'dobj']
                     or tok.dep_ in ['nsubj', 'dobj']) \
@@ -433,11 +433,11 @@ def extract_content_segments(prompt, doc):
                    and (doc[loc]._.transition
                         or loc > 0 and doc[loc - 1]._.transition):
                     prons = ['it', 'he', 'she', 'they', 'him', 'her', 'them']
-                    if doc[loc + 1].text.lower() not in prons \
-                       and doc[loc + 2].text.lower() not in prons \
-                       and doc[loc + 3].text.lower() not in prons \
-                       and doc[loc + 4].text.lower() not in prons \
-                       and doc[loc + 5].text.lower() not in prons:
+                    if doc[loc + 1].lower_ not in prons \
+                       and doc[loc + 2].lower_ not in prons \
+                       and doc[loc + 3].lower_ not in prons \
+                       and doc[loc + 4].lower_ not in prons \
+                       and doc[loc + 5].lower_ not in prons:
                         break
 
             if len(newSegment) > 1:
@@ -550,14 +550,14 @@ def extract_content_segments(prompt, doc):
     # clean up to eliminate words that are not true content-focused
     # words from the plemmas display
     for token in doc:
-        if token.text.lower() in plemmas \
+        if token.lower_ in plemmas \
            and (token.is_stop
                 or token._.vwp_evaluation
                 or token._.vwp_hedge
                 or token._.transition
                 or token._.vwp_argue
                 or token._.vwp_argument):
-            plemmas.remove(token.text.lower())
+            plemmas.remove(token.lower_)
         if token.lemma_ in plemmas \
            and (token.is_stop
                 or token._.vwp_evaluation
