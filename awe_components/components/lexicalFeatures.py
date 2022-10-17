@@ -575,6 +575,12 @@ class LexicalFeatureDef(object):
     magnitude = wordnet.synsets('magnitude')[0]
     cognition = wordnet.synsets('cognition')[0]
 
+    ###############################################
+    # Block of ontological features using WordNet #
+    # to identify abstract traits, animacy, loca- #
+    # tions, etc.                                 #
+    ###############################################
+
     def abstract_trait(self, token):
 
         if token.lower_ in self.abstractTraitNouns:
@@ -649,6 +655,9 @@ class LexicalFeatureDef(object):
          hierarchy in theme position
         """
 
+        # If we already calculated a noun's animacy,
+        # we stored it off and can just use the previously
+        # calculated value
         if token.pos_ == 'NOUN' \
            and token.lower_ in self.animateNouns:
             return self.animateNouns[token.lower_]
@@ -660,6 +669,9 @@ class LexicalFeatureDef(object):
            and token.lemma_ in ['other']:
             return True
 
+        # Named entities classified as person, geopolitial
+        # entity, or nationalities or political/religous groups
+        # count as animate
         if token.ent_type_ == 'PERSON' \
            or token.ent_type_ == 'GPE' \
            or token.ent_type_ == 'NORP':
@@ -673,6 +685,7 @@ class LexicalFeatureDef(object):
             self.animateNouns[token.lower_] = True
             return True
 
+        # Use the antecedents of pronouns to calculate their animacy
         if token.pos_ == 'PRONOUN' \
            or token.tag_ in possessive_or_determiner \
            and token.doc._.coref_chains is not None:
@@ -692,9 +705,13 @@ class LexicalFeatureDef(object):
                     return True
                 return False
 
+        # Personal and indefinite pronouns on this list
+        # can be assumed to be animate
         if token.lower_ in personal_or_indefinite_pronoun:
             return True
 
+        # similarity to the vector for person or company
+        # is another fallback we can use
         person = token.doc.vocab.get_vector("person")
         company = token.doc.vocab.get_vector("company")
         try:
@@ -712,6 +729,8 @@ class LexicalFeatureDef(object):
         except Exception as e:
             print('Token vector invalid for ', token, e)
 
+        # If all other methods fail, we search the wordnet hierarchy
+        # for a list of superordinate categories we count as animate
         if token.pos_ in ['NOUN', 'PRON']:
             if token.pos_ == 'NOUN':
                 synsets = wordnet.synsets(token.lemma_)
@@ -1092,11 +1111,14 @@ class LexicalFeatureDef(object):
             return None
 
     def add_morphological_relatives(self, word, key):
+        '''
+           This function is part of setup for the sentiment lexicon.
+           We modify the sentiment estimate using word families, but only if
+           no negative prefix or suffixes are involved in the word we are
+           taking the sentiment rating from, and it's not in the very high
+           frequency band.
+        '''
         sentlist = []
-        # modify the sentiment estimate using word families, but only if
-        # no negative prefix or suffixes are involved in the word we are
-        # taking the sentiment rating from, and it's not in the very high
-        # frequency band.
         if key in self.family_idx \
            and str(self.family_idx[key]) in self.family_lists:
             for item in self.family_lists[str(self.family_idx[key])]:
