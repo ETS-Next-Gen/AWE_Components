@@ -1,199 +1,175 @@
 #!/usr/bin/env python3
-# Copyright 2022, Educational Testing Service
+'''
+This file provides access to several open-source dictionaries of
+lexical features from AWE_Lexica that provide useful features of
+words. These include things like:
 
+- Number of syllables
+- Root word
+- Frequency
+- Concrete or abstract
+- Academic
+- Latinate (using Greek or Latin prefixes)
+... and so on.
+
+This is a SpaCy component, which means it is added to the SpaCy pipeline.
+
+Copyright © 2022, Educational Testing Service
+'''
+
+import importlib.resources
 import math
 import numpy as np
 import os
 import re
-import srsly
-import wordfreq
-import statistics
-import awe_lexica
-
 from varname import nameof
-from spacy.tokens import Doc, Span, Token
-from spacy.language import Language
-from spacy.vocab import Vocab
 
-from scipy.spatial.distance import cosine
-# Standard cosine distance metric
-
-from nltk.corpus import wordnet
 # English dictionary. Contains information on senses associated with words
 # (a lot more, but that's what we're currently using it for)
-
-import wordfreq
+from nltk.corpus import wordnet
+from scipy.spatial.distance import cosine  # Standard cosine distance metric
+from spacy.language import Language
+from spacy.tokens import Doc, Span, Token
+from spacy.vocab import Vocab
+import srsly
+import statistics
 # https://github.com/rspeer/wordfreq
 # Large word frequency database. Provides Zipf frequencies
 # (log scale of frequency) for most English words, based on a
 # variety of corpora.
+import wordfreq
 
-from .utility_functions import *
-from ..errors import *
-from importlib import resources
+import awe_lexica
+
+from .utility_functions import *  # <-- Paul, import only what you need here
+from ..errors import LexiconMissingError
+
+def lexicon_path(lexicon):
+    '''
+    This should move into `AWE_Lexica`. It converts the name of a
+    lexicon to its path on disk. E.g. 'academic' will give the
+    location of the academic.json_data file from `AWE_Lexica`.
+    '''
+    with importlib.resources.path('awe_lexica.json_data', f"{lexicon}.json") as file:
+        return file
 
 
 @Language.factory("lexicalfeatures")
 def LexicalFeatures(nlp, name):
-    ldf = LexicalFeatureDef()
-    ldf.set_nlp(nlp)
-    ldf.load_lexicons()
-    ldf.add_extensions()
+    '''
+    This registers us with SpaCy, and SpaCy will call this ones at pipeline
+    definition. This loads several of the AWE_Lexica dictionaries, and so
+    is expensive to run. However, in typical usage, SpaCy should not run this
+    more than once.
+    '''
+    ldf = LexicalFeatureDef(nlp)
     return ldf
 
 
 class LexicalFeatureDef(object):
+    '''
+    This is our main system.
+    '''
+    lexica_lexicons = [
+        'academic', 'concretes', 'family_idxs', 'family_lists',
+        'family_max_freqs', 'family_sizes', 'latinate', 'morpholex',
+        'nMorph_status', 'roots', 'sentiment', 'syllables'
+    ]
 
-    with resources.path('awe_lexica.json_data',
-                        'syllables.json') as file:
-        SYLLABLES_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'roots.json') as file:
-        ROOTS_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'family_sizes.json') as file:
-        FAMILY_SIZES_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'family_max_freqs.json') as file:
-        FAMILY_MAX_FREQS_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'family_idxs.json') as file:
-        FAMILY_IDX_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'family_lists.json') as file:
-        FAMILY_LISTS_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'concretes.json') as file:
-        CONCRETES_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'morpholex.json') as file:
-        MORPHOLEX_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'latinate.json') as file:
-        LATINATE_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'academic.json') as file:
-        ACADEMIC_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'nMorph_status.json') as file:
-        NMORPH_STATUS_PATH = file
-
-    with resources.path('awe_lexica.json_data',
-                        'sentiment.json') as file:
-        SENTIMENT_PATH = file
-
-    datapaths = [{'pathname': nameof(SYLLABLES_PATH),
-                  'value': SYLLABLES_PATH},
-                 {'pathname': nameof(ROOTS_PATH),
-                  'value': ROOTS_PATH},
-                 {'pathname': nameof(FAMILY_SIZES_PATH),
-                  'value': FAMILY_SIZES_PATH},
-                 {'pathname': nameof(FAMILY_MAX_FREQS_PATH),
-                  'value': FAMILY_MAX_FREQS_PATH},
-                 {'pathname': nameof(FAMILY_IDX_PATH),
-                  'value': FAMILY_IDX_PATH},
-                 {'pathname': nameof(FAMILY_LISTS_PATH),
-                  'value': FAMILY_LISTS_PATH},
-                 {'pathname': nameof(CONCRETES_PATH),
-                  'value': CONCRETES_PATH},
-                 {'pathname': nameof(MORPHOLEX_PATH),
-                  'value': MORPHOLEX_PATH},
-                 {'pathname': nameof(LATINATE_PATH),
-                  'value': LATINATE_PATH},
-                 {'pathname': nameof(ACADEMIC_PATH),
-                  'value': ACADEMIC_PATH},
-                 {'pathname': nameof(NMORPH_STATUS_PATH),
-                  'value': NMORPH_STATUS_PATH},
-                 {'pathname': nameof(SENTIMENT_PATH),
-                  'value': SENTIMENT_PATH}
-                 ]
-    nlp = None
-
-    syllables = {}
-    roots = {}
-    family_sizes = {}
-    family_max_freqs = {}
-    family_idx = {}
-    family_lists = {}
-    concretes = {}
-    morpholex = {}
-    latinate = {}
-    nmorph_status = {}
-    sentiment = {}
+    # These will be populated with our lexicons
+    abstractTraitNouns = {}
     academic = []
     animateNouns = {}
-    abstractTraitNouns = {}
-
-    def set_nlp(self, nlpIn):
-        self.nlp = nlpIn
+    concretes = {}
+    family_idxs = {}
+    family_lists = {}
+    family_max_freqs = {}
+    family_sizes = {}
+    latinate = {}
+    morpholex = {}
+    nMorph_status = {}
+    roots = {}
+    sentiment = {}
+    syllables = {}
 
     def package_check(self, lang):
-        for path in self.datapaths:
-            if not os.path.exists(path['value']):
-                raise LexiconMissingError(
-                    "Trying to load AWE Workbench Lexicon Module \
-                    without {name} datafile".format(name=path['pathname'])
+        '''
+        Check whether all the required files exist, and if not, which ones
+        are missing.
+        '''
+        missing_files = []
+        for lexicon_name in self.lexica_lexicons:
+            path = lexicon_path(lexicon_name)
+            if not os.path.exists(path):
+                missing_files.append(path)
+        if missing_files:
+            raise LexiconMissingError(
+                "Trying to load AWE Workbench Lexica, but missing:\n{paths}".format(
+                    paths="\n".join(map(str, missing_files))
                 )
+            )
 
     def load_lexicons(self):
-        for path in self.datapaths:
-            lexicon_name = \
-                path['pathname'].replace('_PATH', '').lower()
-            lexicon = getattr(self, lexicon_name)
+        '''
+        Here, we load all of the lexicons. We might consider moving this
+        into AWE_Lexica, so these are only loaded once, even if used by
+        multiple modules.
+        '''
+        for lexicon_name in self.lexica_lexicons:
+            lexica_data = srsly.read_json(lexicon_path(lexicon_name))
 
             # To save memory, use the spacy string hash as key,
             # not the actual text string
-            temp = srsly.read_json(path['value'])
-            for word in temp:
-                if word in self.nlp.vocab.strings:
-                    key = self.nlp.vocab.strings[word]
-                else:
-                    key = self.nlp.vocab.strings.add(word)
+            lexicon = getattr(self, lexicon_name)
+
+            for word in lexica_data:
+                # Get the SpaCy word hash. Add the word if missing.
+                key = self.nlp.vocab.strings.add(word)
 
                 if lexicon_name == 'family_lists':
-                    lexicon[word] = temp[word]
+                    lexicon[word] = lexica_data[word]
                 else:
                     if type(lexicon) == list:
                         lexicon.append(key)
                     else:
-                        lexicon[key] = temp[word]
+                        lexicon[key] = lexica_data[word]
 
                 # Note: this code assumes that we already
-                # loaded the family_idx and family_list lexicons
+                # loaded the family_idxs and family_list lexicons
                 if lexicon_name == 'sentiment':
                     self.add_morphological_relatives(word, key)
 
-    def __call__(self, doc):
-        # We're using this component as a wrapper to add access
-        # to the lexical features. There is no actual processing of the
-        # sentences.
+        self.academic = set(self.academic)
 
+    def __call__(self, doc):
+        '''
+        Do nothing; just return the doc.
+
+        We're using this component as a wrapper to add access
+        to the lexical features. There is no actual processing of the
+        sentences.
+        '''
         return doc
 
-    def __init__(self, lang="en"):
+    def __init__(self, nlp, lang="en"):
+        '''
+        This is a fairly heavy call, but we expect it to only be called once.
+        '''
         super().__init__()
+        self.nlp = nlp
         self.package_check(lang)
+        self.load_lexicons()
+        self.add_extensions()
 
     ######################
     # Define extensions  #
     ######################
 
     def add_extensions(self):
-
-        """
-         Funcion to add extensions that allow us to access the various
-         lexicons this module is designed to support.
-        """
+        '''
+        Funcion to add extensions that allow us to access the various
+        lexicons this module is designed to support.
+        '''
         method_extensions = [self.AWE_Info]
         docspan_extensions = [self.token_vectors]
         token_extensions = [self.root, self.nSyll, self.sqrtNChars,
@@ -211,7 +187,7 @@ class LexicalFeatureDef(object):
                             self.animate, self.location,
                             self.antecedents, self.usage]
 
-        setExtensionFunctions(method_extensions, 
+        setExtensionFunctions(method_extensions,
                               docspan_extensions,
                               token_extensions)
 
@@ -221,14 +197,14 @@ class LexicalFeatureDef(object):
         if not Token.has_extension('usage_'):
             Token.set_extension('usage_', default=None, force=True)
 
-
     ###############################################
     # Block where we define getter functions used #
     # by spacy attribute definitions.             #
     ###############################################
 
     def root(self, token):
-        ''' Access the roots dictionary from the token instance
+        '''
+        Access the roots dictionary from the token instance
         '''
         if (token.lower_ in self.nlp.vocab.strings
             and alphanum_word(token.text)
@@ -243,9 +219,10 @@ class LexicalFeatureDef(object):
             return None
 
     def nSyll(self, token):
-        ''' Get the number of syllables for a Token
-            Number of syllables has been validated as a measure
-            of vocabulary difficulty
+        '''
+        Get the number of syllables for a Token
+        Number of syllables has been validated as a measure
+        of vocabulary difficulty
         '''
         if (token.lower_ in self.nlp.vocab.strings
             and self.nlp.vocab.strings[token.lower_]
@@ -256,18 +233,20 @@ class LexicalFeatureDef(object):
             return sylco(token.lower_)
 
     def sqrtNChars(self, token):
-        ''' Get the number of characters for a Token
+        '''
+        Get the number of characters for a Token
         '''
         return math.sqrt(len(token.text))
 
     def family_size(self, token):
-        ''' Word Family Sizes as measured by slightly modified version of #
-            Paul Nation's word family list.                               #
+        '''
+        Word Family Sizes as measured by slightly modified version oF
+        Paul Nation's word family list.
 
-          The family size flag identifies the number of morphologically
-          related words in this word's word family. Words with larger
-          word families have been shown to be, on average, easier
-          vocabulary.
+        The family size flag identifies the number of morphologically
+        related words in this word's word family. Words with larger
+        word families have been shown to be, on average, easier
+        vocabulary.
         '''
         if self.nlp.vocab.strings[token.lower_] in self.family_sizes \
            and alphanum_word(token.text):
@@ -277,10 +256,11 @@ class LexicalFeatureDef(object):
             return None
 
     def nSenses(self, token):
-        ''' Sense count measures (using WordNet)
+        '''
+        Sense count measures (using WordNet)
 
-          The number of senses associated with a word is a measure
-          of vocabulary difficulty
+        The number of senses associated with a word is a measure
+        of vocabulary difficulty
         '''
         if alphanum_word(token.text) \
            and len(wordnet.synsets(token.lemma_)) > 0:
@@ -289,8 +269,9 @@ class LexicalFeatureDef(object):
             return None
 
     def logNSenses(self, token):
-        ''' The number of senses associated with a word is a measure
-            of vocabulary difficulty
+        '''
+        The number of senses associated with a word is a measure
+        of vocabulary difficulty
         '''
         if alphanum_word(token.text) \
            and len(wordnet.synsets(token.lemma_)) > 0:
@@ -299,21 +280,23 @@ class LexicalFeatureDef(object):
             return None
 
     def morphology(self, token):
-        ''' Access the Morpholex morphological dictionary
+        '''
+        Access the Morpholex morphological dictionary
         '''
         if (token.text is not None
             and self.nlp.vocab.strings[token.lower_]
                 in self.morpholex):
             return self.morpholex[
-                self.nlp.vocab.strings[
-                    token.lower_]]
+                self.nlp.vocab.strings[token.lower_]
+            ]
         else:
             return None
 
     def morpholexsegm(self, token):
-        ''' Access a string that identifies roots, prefixes, and
-            suffixes in the word. Can be processed to identify
-            the specific morphemes in a word according to MorphoLex
+        '''
+        Access a string that identifies roots, prefixes, and
+        suffixes in the word. Can be processed to identify
+        the specific morphemes in a word according to MorphoLex
         '''
         if (token.text is not None
             and self.nlp.vocab.strings[token.lower_]
@@ -332,8 +315,8 @@ class LexicalFeatureDef(object):
            and token.lower_ in self.nlp.vocab.strings \
            and alphanum_word(token.text) \
            and self.nlp.vocab.strings[token.lower_] \
-           in self.nmorph_status:
-            return int(self.nmorph_status[
+           in self.nMorph_status:
+            return int(self.nMorph_status[
                 self.nlp.vocab.strings[token.lower_]])
         else:
             return None
@@ -645,7 +628,7 @@ class LexicalFeatureDef(object):
     thought = wordnet.synsets("thought")
 
     def animate(self, token):
-        """
+        '''
          It's useful to measure which NPs in a text are animate.
          A text with a high degree of references to animates may,
          for instance, be more likely to be a narrative. In the
@@ -653,7 +636,7 @@ class LexicalFeatureDef(object):
          prefer nominals high in an concreteness/animacy/referentiality
          hierarchy in rheme position, and nominals low in such a
          hierarchy in theme position
-        """
+        '''
 
         # If we already calculated a noun's animacy,
         # we stored it off and can just use the previously
@@ -829,10 +812,10 @@ class LexicalFeatureDef(object):
         return False
 
     def location(self, token):
-        """
+        '''
          It's useful to measure which NPs in a text are
          location references.
-        """
+        '''
 
         if token.is_stop:
             return False
@@ -974,18 +957,18 @@ class LexicalFeatureDef(object):
         return False
 
     def deictic(self, token):
-        """
-         In a concreteness/animacy/referentiality hierarchy, deictic elements
-         come highest. They are prototypical rheme elements.
-        """
+        '''
+        In a concreteness/animacy/referentiality hierarchy, deictic elements
+        come highest. They are prototypical rheme elements.
+        '''
         if token.lower_ in deictics:
             return True
         return False
 
     def deictics(self, tokens):
-        """
-         Get a list of the offset of all deictic elements in the text
-        """
+        '''
+        Get a list of the offset of all deictic elements in the text
+        '''
         deictics = []
         for token in tokens:
             if self.deictic(token):
@@ -1112,16 +1095,16 @@ class LexicalFeatureDef(object):
 
     def add_morphological_relatives(self, word, key):
         '''
-           This function is part of setup for the sentiment lexicon.
-           We modify the sentiment estimate using word families, but only if
-           no negative prefix or suffixes are involved in the word we are
-           taking the sentiment rating from, and it's not in the very high
-           frequency band.
+        This function is part of setup for the sentiment lexicon.
+        We modify the sentiment estimate using word families, but only if
+        no negative prefix or suffixes are involved in the word we are
+        taking the sentiment rating from, and it's not in the very high
+        frequency band.
         '''
-        sentlist = []
-        if key in self.family_idx \
-           and str(self.family_idx[key]) in self.family_lists:
-            for item in self.family_lists[str(self.family_idx[key])]:
+        sentiment_list = []
+        if key in self.family_idxs \
+           and str(self.family_idxs[key]) in self.family_lists:
+            for item in self.family_lists[str(self.family_idxs[key])]:
                 if item in self.nlp.vocab.strings:
                     itemkey = self.nlp.vocab.strings[item]
                 else:
@@ -1140,15 +1123,15 @@ class LexicalFeatureDef(object):
                              and not item.startswith('dis')
                              and not item.startswith('mis')
                              and not item.startswith('anti'))):
-                    sentlist.append(self.sentiment[itemkey])
+                    sentiment_list.append(self.sentiment[itemkey])
 
         if key not in self.sentiment or abs(self.sentiment[key]) <= .2:
-            if len(sentlist) > 1 and statistics.mean(sentlist) > 0:
-                self.sentiment[key] = max(sentlist)
-            elif len(sentlist) > 1 and statistics.mean(sentlist) < 0:
-                self.sentiment[key] = min(sentlist)
-            elif len(sentlist) == 1:
-                self.sentiment[key] = sentlist[0]
+            if len(sentiment_list) > 1 and statistics.mean(sentiment_list) > 0:
+                self.sentiment[key] = max(sentiment_list)
+            elif len(sentiment_list) > 1 and statistics.mean(sentiment_list) < 0:
+                self.sentiment[key] = min(sentiment_list)
+            elif len(sentiment_list) == 1:
+                self.sentiment[key] = sentiment_list[0]
 
         if abs(self.sentiment[key]) <= .2 \
            and key in self.roots \
