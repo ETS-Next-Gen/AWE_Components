@@ -679,9 +679,12 @@ class LexicalFeatureDef(object):
                                                    token.doc)]
 
                 if antecedents is not None:
-                    for antecedent in antecedents:
-                        if antecedent.i != token.i:
-                            return self.animate(antecedent)
+                    lastAntecedent = None
+                for antecedent != lastAntecedent \
+                   and antecedent in antecedents:
+                    if antecedent.i != token.i:
+                        return self.animate(antecedent)
+                    lastAntecedent = antecedent
             except Exception as e:
                 print('animacy exception', e)
                 if token.lower_ in personal_or_indefinite_pronoun:

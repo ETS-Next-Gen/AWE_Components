@@ -79,8 +79,8 @@ class SyntaxAndDiscourseFeatDef(object):
              self.transitions,
              self.transition_word_profile,
              self.transition_distances,
-             self.interSentenceCohesions,
-             self.slidingWindowCohesions,
+             self.intersentence_cohesions,
+             self.sliding_window_cohesions,
              self.corefChainInfo,
              self.sentenceThemes,
              self.syntacticDepthsOfRhemes,
@@ -687,7 +687,7 @@ class SyntaxAndDiscourseFeatDef(object):
             chainInfo.append(entry)
         return chainInfo
 
-    def interSentenceCohesions(self, Document: Doc):
+    def intersentence_cohesions(self, Document: Doc):
         """
          Calculate cohesion between adjacent sentences using vector similarity.
          High mean cosines means successive sentences tend to address the
@@ -709,7 +709,7 @@ class SyntaxAndDiscourseFeatDef(object):
             lastSentence = sentence
         return similarities
 
-    def slidingWindowCohesions(self, Document: Doc):
+    def sliding_window_cohesions(self, Document: Doc):
         """
          Compare the cosine similarity between adjacent blocks of 10 words each
          by sliding a 10-word window over the whole document. We summarize the
@@ -899,9 +899,8 @@ class SyntaxAndDiscourseFeatDef(object):
             if token.is_sent_start:
                 inTheme = True
                 currentStart = token.i
-            if depth == 1:
+            if depth == 0:
                 inTheme = False
-                break
             if inTheme:
                 entry = newSpanEntry('themeDepth',
                                      currentStart,
@@ -920,16 +919,16 @@ class SyntaxAndDiscourseFeatDef(object):
         of what is likely to be new content.
         """
         depths = []
-        inTheme = True
+        inRheme = False
         currentStart = 0
         for token in Document:
             depth = float(self.syntacticDepth(token))
             if token.is_sent_start:
-                inTheme = True
+                inRheme = False
                 currentStart = token.i
             if depth == 1:
-                inTheme = False
-            if not inTheme:
+                inRheme = True
+            if inRheme:
                 entry = newSpanEntry('rhemeDepth',
                                      currentStart,
                                      token.i,

@@ -476,7 +476,7 @@ def devword(token):
        Return list of content words that do not appear in the 4 strongest
        in-document content clusters
     '''
-    if token.doc.clusterInfo_ is None:
+    if token.doc._.clusterInfo_ is None:
         # flag assignClusterIDs to run
         # by setting it to a non None value
         token.doc._.clusterInfo_ = []
@@ -518,7 +518,7 @@ if not Doc.has_extension('AWE_Info'):
                       method=AWE_Info)
 
 def clusterID(token):
-    if token.doc.clusterInfo_ is None:
+    if token.doc._.clusterInfo_ is None:
         # flag assignClusterIDs to run
         # by setting it to a non None value
         token.doc._.clusterInfo_ = []

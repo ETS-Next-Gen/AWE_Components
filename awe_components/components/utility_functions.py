@@ -2959,7 +2959,7 @@ def createSpanInfo(indicator, document):
                     currentStart,
                     token.i,
                     document,
-                    segmentNo)
+                    segmentNo)                    
             baseInfo.append(entry)
     else:
         raise AWE_Workbench_Error(
@@ -3239,6 +3239,8 @@ def applySummaryFunction(info, baseInfo, summaryType, document):
             return json.dumps({})
         output = {}
         summary = info['value'].value_counts()
+        if len(summary) == 0:
+            return json.dumps({})
         for i, value in enumerate(summary):
             entry = {}
             category = summary.index[i]
@@ -3284,7 +3286,7 @@ def applySummaryFunction(info, baseInfo, summaryType, document):
     # Proportion or percent
     elif summaryType in ["proportion", "percent"]:
         if len(info)==0:
-            return None
+            return 0
         total = 0
         if 'tokenIdx' in info.keys():
             for index, row in info.iterrows():
@@ -3299,7 +3301,7 @@ def applySummaryFunction(info, baseInfo, summaryType, document):
             else:
                 return round(100*total/len(document))
         else:
-            return None
+            return 0
             
     # Mean
     elif summaryType == "mean":
@@ -3387,40 +3389,42 @@ def AWE_Info(document: Doc,
                                       document)
             newInfo = []
             filterEntry = False
-            for entry in baseInfo:
-                if type(filters) == list and len(filters)>0:
-                    filterEntry = applySpanFilters(document[entry['startToken']],
-                                                            entry,
-                                                            filters)
-                elif filters != []:
-                    raise AWE_Workbench_Error('Invalid filter '
-                        + str(filters))                   
-                if filterEntry:
-                    continue
-                newInfo.append(entry)
-            baseInfo = applySpanTransformations(transformations,
+            if baseInfo is not None:
+                for entry in baseInfo:
+                    if type(filters) == list and len(filters)>0:
+                        filterEntry = applySpanFilters(document[entry['startToken']],
+                                                                entry,
+                                                                filters)
+                    elif filters != []:
+                        raise AWE_Workbench_Error('Invalid filter '
+                            + str(filters))                   
+                    if filterEntry:
+                        continue
+                    newInfo.append(entry)
+                baseInfo = applySpanTransformations(transformations,
                                                 newInfo)
         elif infoType == 'Token' \
            and indicator in summary_functions:
             baseInfo = getattr(document._, indicator)
             newInfo = []
             filterEntry = False
-            for entry in baseInfo:
-                if type(filters) == list and len(filters)>0:
-                    filterEntry = applyTokenFilters(document[entry['tokenIdx']],
-                                                    entry,
-                                                    filters)
-                elif filters != []:
-                    raise AWE_Workbench_Error('Invalid filter '
-                        + str(filters))                   
-                if filterEntry:
-                    continue
-                entry = \
-                    applyTokenTransformations(entry,
-                                              document[entry['tokenIdx']],
-                                              transformations)
-                newInfo.append(entry)
-            baseInfo = newInfo
+            if baseInfo is not None:
+                for entry in baseInfo:
+                    if type(filters) == list and len(filters)>0:
+                        filterEntry = applyTokenFilters(document[entry['tokenIdx']],
+                                                        entry,
+                                                        filters)
+                    elif filters != []:
+                        raise AWE_Workbench_Error('Invalid filter '
+                            + str(filters))                   
+                    if filterEntry:
+                        continue
+                    entry = \
+                        applyTokenTransformations(entry,
+                                                  document[entry['tokenIdx']],
+                                                  transformations)
+                    newInfo.append(entry)
+                baseInfo = newInfo
 
         elif infoType == 'Token':
             for token in document:

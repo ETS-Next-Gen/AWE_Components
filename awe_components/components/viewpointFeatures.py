@@ -1398,7 +1398,8 @@ class ViewpointFeatureDef:
                             thisDom = target
                         else:
                             dom = target.head
-                            while not dom._.has_governing_subject:
+                            while not dom._.has_governing_subject \
+                               and dom != dom.head:
                                 dom = dom.head
                             thisDom = dom
                         speaker_refs = []
