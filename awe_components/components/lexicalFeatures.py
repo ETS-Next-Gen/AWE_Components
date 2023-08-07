@@ -680,9 +680,9 @@ class LexicalFeatureDef(object):
 
                 if antecedents is not None:
                     lastAntecedent = None
-                for antecedent != lastAntecedent \
-                   and antecedent in antecedents:
-                    if antecedent.i != token.i:
+                for antecedent in antecedents:
+                    if antecedent != lastAntecedent \
+                       and antecedent.i != token.i:
                         return self.animate(antecedent)
                     lastAntecedent = antecedent
             except Exception as e:
