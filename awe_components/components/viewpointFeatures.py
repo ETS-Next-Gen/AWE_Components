@@ -40,12 +40,20 @@ class ViewpointFeatureDef:
      argumentation.
     """
 
-    with resources.path('awe_lexica.json_data',
-                        'stancePerspectiveVoc.json') as filepath:
+    # with resources.path('awe_lexica.json_data',
+    #                     'stancePerspectiveVoc.json') as filepath:
+
+    with resources.as_file(
+        resources.files('awe_lexica.json_data').joinpath('stancePerspectiveVoc.json')
+    ) as filepath:
         STANCE_PERSPECTIVE_PATH = filepath
 
-    with resources.path('awe_lexica.json_data',
-                        'morpholex.json') as filepath:
+    # with resources.path('awe_lexica.json_data',
+    #                     'morpholex.json') as filepath:
+
+    with resources.as_file(
+        resources.files('awe_lexica.json_data').joinpath('morpholex.json')
+    ) as filepath:
         MORPHOLEX_PATH = filepath
 
     stancePerspectiveVoc = {}
