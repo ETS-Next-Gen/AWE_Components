@@ -44,7 +44,7 @@ class ViewpointFeatureDef:
     #                     'stancePerspectiveVoc.json') as filepath:
 
     with resources.as_file(
-        resources.files('awe_lexica.json_data').joinpath('stancePerspectiveVoc.json')
+        resources.files('awe_lexica').joinpath('json_data').joinpath('stancePerspectiveVoc.json')
     ) as filepath:
         STANCE_PERSPECTIVE_PATH = filepath
 
@@ -52,7 +52,7 @@ class ViewpointFeatureDef:
     #                     'morpholex.json') as filepath:
 
     with resources.as_file(
-        resources.files('awe_lexica.json_data').joinpath('morpholex.json')
+        resources.files('awe_lexica').joinpath('json_data').joinpath('morpholex.json')
     ) as filepath:
         MORPHOLEX_PATH = filepath
 

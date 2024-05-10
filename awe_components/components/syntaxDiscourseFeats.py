@@ -33,7 +33,7 @@ class SyntaxAndDiscourseFeatDef(object):
     #                     'transition_terms.json') as filepath:
 
     with resources.as_file(
-        resources.files('awe_lexica.json_data').joinpath('transition_terms.json')
+        resources.files('awe_lexica').joinpath('json_data').joinpath('transition_terms.json')
     ) as filepath:
         TRANSITION_TERMS_PATH = filepath
 
@@ -41,7 +41,7 @@ class SyntaxAndDiscourseFeatDef(object):
     #                     'transition_categories.json') as filepath:
         
     with resources.as_file(
-        resources.files('awe_lexica.json_data').joinpath('transition_categories.json')
+        resources.files('awe_lexica').joinpath('json_data').joinpath('transition_categories.json')
     ) as filepath:
         TRANSITION_CATEGORIES_PATH = filepath
 

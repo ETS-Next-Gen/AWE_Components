@@ -52,7 +52,7 @@ def lexicon_path(lexicon):
     '''
     # with importlib.resources.path('awe_lexica.json_data', f"{lexicon}.json") as file:
     with importlib.resources.as_file(
-        importlib.resources.files('awe_lexica.json_data').joinpath(f"{lexicon}.json")
+        importlib.resources.files('awe_lexica').joinpath('json_data').joinpath(f"{lexicon}.json")
     ) as file:
         return file
 
