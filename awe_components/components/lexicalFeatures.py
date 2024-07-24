@@ -50,7 +50,10 @@ def lexicon_path(lexicon):
     lexicon to its path on disk. E.g. 'academic' will give the
     location of the academic.json_data file from `AWE_Lexica`.
     '''
-    with importlib.resources.path('awe_lexica.json_data', f"{lexicon}.json") as file:
+    # with importlib.resources.path('awe_lexica.json_data', f"{lexicon}.json") as file:
+    with importlib.resources.as_file(
+        importlib.resources.files('awe_lexica').joinpath('json_data').joinpath(f"{lexicon}.json")
+    ) as file:
         return file
 
 

@@ -128,7 +128,7 @@ def assignClusterIDs(hdoc):
             ########################################################
             simThreshold = 0.0
             clustering = AgglomerativeClustering(
-                affinity='cosine',
+                metric='cosine',
                 compute_full_tree=True,
                 linkage='complete',
                 distance_threshold=simThreshold,
