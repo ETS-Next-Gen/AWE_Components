@@ -29,12 +29,20 @@ def SyntaxAndDiscourseFeatures(nlp, name):
 
 class SyntaxAndDiscourseFeatDef(object):
 
-    with resources.path('awe_lexica.json_data',
-                        'transition_terms.json') as filepath:
+    # with resources.path('awe_lexica.json_data',
+    #                     'transition_terms.json') as filepath:
+
+    with resources.as_file(
+        resources.files('awe_lexica').joinpath('json_data').joinpath('transition_terms.json')
+    ) as filepath:
         TRANSITION_TERMS_PATH = filepath
 
-    with resources.path('awe_lexica.json_data',
-                        'transition_categories.json') as filepath:
+    # with resources.path('awe_lexica.json_data',
+    #                     'transition_categories.json') as filepath:
+        
+    with resources.as_file(
+        resources.files('awe_lexica').joinpath('json_data').joinpath('transition_categories.json')
+    ) as filepath:
         TRANSITION_CATEGORIES_PATH = filepath
 
     datapaths = [{'pathname': nameof(TRANSITION_TERMS_PATH),

@@ -40,12 +40,20 @@ class ViewpointFeatureDef:
      argumentation.
     """
 
-    with resources.path('awe_lexica.json_data',
-                        'stancePerspectiveVoc.json') as filepath:
+    # with resources.path('awe_lexica.json_data',
+    #                     'stancePerspectiveVoc.json') as filepath:
+
+    with resources.as_file(
+        resources.files('awe_lexica').joinpath('json_data').joinpath('stancePerspectiveVoc.json')
+    ) as filepath:
         STANCE_PERSPECTIVE_PATH = filepath
 
-    with resources.path('awe_lexica.json_data',
-                        'morpholex.json') as filepath:
+    # with resources.path('awe_lexica.json_data',
+    #                     'morpholex.json') as filepath:
+
+    with resources.as_file(
+        resources.files('awe_lexica').joinpath('json_data').joinpath('morpholex.json')
+    ) as filepath:
         MORPHOLEX_PATH = filepath
 
     stancePerspectiveVoc = {}
@@ -1666,7 +1674,7 @@ class ViewpointFeatureDef:
                             speaker_refs.append(descendant.i)
                     if descendant.lower_ in second_person_pronouns \
                        or (descendant.dep_ == 'vocative'
-                           and descendent.pos_ == 'NOUN'):
+                           and descendant.pos_ == 'NOUN'):
                         descendant._.vwp_addressee_ = lastRoot._.vwp_addressee_
                         if descendant.i not in addressee_refs:
                             addressee_refs.append(descendant.i)
