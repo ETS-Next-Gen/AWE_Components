@@ -1,6 +1,4 @@
 from setuptools.command.install import install as _install
-from setuptools.command.develop import develop as _develop
-from distutils import log
 import os
 import subprocess
 import sys
@@ -16,4 +14,5 @@ class AWEInstall(_install):
     '''
     def run(self):
         _install.run(self)
-        subprocess.run(['python', 'awe_components/setup/data.py'], env=modified_env)
+        script_path = os.path.join(os.path.dirname(__file__), 'awe_components', 'setup', 'data.py')
+        subprocess.run([sys.executable, script_path], env=modified_env)
