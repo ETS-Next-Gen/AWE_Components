@@ -3384,6 +3384,16 @@ def AWE_Info(document: Doc,
             raise AWE_Workbench_Error(
                 'Invalid indicator ' + indicator)                   
 
+        # QUICK FIX: spacytextblob no longer references polarity, subjectivity, 
+        # nor assessments via doc._.X, but rather doc._.blob.X
+        # We are quickly fixing this problem in AWE_Info
+        if indicator == "polarity":
+            indicator = "blob.polarity"
+        elif indicator == "subjectivity":
+            indicator = "blob.subjectivity"
+        elif indicator == "assessments":
+            indicator = "blob.assessments"
+
         if infoType == 'Doc':
             baseInfo = createSpanInfo(indicator,
                                       document)
