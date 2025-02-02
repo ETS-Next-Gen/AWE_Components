@@ -4638,13 +4638,13 @@ class ViewpointFeatureDef:
                or tok._.vwp_hedge \
                or tok.text in doc._.blob.sentiment_assessments.assessments:
                 if tok._.blob.sentiment_assessments.polarity < 0 or tok._.sentiword < 0:
-                    tok._.vwp_tone_ = min(tok._.sentiment_assessments.polarity, tok._.sentiword)
-                elif tok._.sentiment_assessments.polarity > 0 and tok._.sentiword > 0:
-                    tok._.vwp_tone_ = max(tok._.sentiment_assessments.polarity, tok._.sentiword)
+                    tok._.vwp_tone_ = min(tok._.blob.sentiment_assessments.polarity, tok._.sentiword)
+                elif tok._.blob.sentiment_assessments.polarity > 0 and tok._.sentiword > 0:
+                    tok._.vwp_tone_ = max(tok._.blob.sentiment_assessments.polarity, tok._.sentiword)
                 else:
-                    tok._.vwp_tone_ = (tok._.sentiment_assessments.polarity + tok._.sentiword) / 2
+                    tok._.vwp_tone_ = (tok._.blob.sentiment_assessments.polarity + tok._.sentiword) / 2
             else:
-                tok._.vwp_tone_ = min(tok._.sentiment_assessments.polarity, tok._.sentiword)
+                tok._.vwp_tone_ = min(tok._.blob.sentiment_assessments.polarity, tok._.sentiword)
 
             # rule order fixes to the tone variable are generally a bad idea,
             # but these are so common that fixing them gets rid of a lot of
