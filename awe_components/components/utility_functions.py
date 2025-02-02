@@ -2899,6 +2899,9 @@ def setTokenEntry(name, token, value):
     # attribute.                          #
     # TBD: put security check in for this #
     #######################################
+    elif "blob" in name:
+        name = name.replace("blob.", "")
+        entry['value'] = getattr(token._.blob, name)
     elif token.has_extension(name):
         # TODO: Use Token.get_extension
         # https://spacy.io/api/token
