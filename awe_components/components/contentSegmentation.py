@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # Copyright 2022, Educational Testing Service
 
-from .utility_functions import *
+from .utility_functions import \
+    match_related_form, getRoot, \
+    in_past_tense_scope, newSpanEntry, \
+    AWE_Info
+
 from operator import itemgetter
 from spacy.tokens import Doc
 from spacy.language import Language

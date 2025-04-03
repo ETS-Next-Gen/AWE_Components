@@ -14,7 +14,6 @@ from spacy.tokens import Token, Doc
 from spacy.language import Language
 
 from .utility_functions import ResolveReference, all_zeros, AWE_Info
-from ..errors import *
 
 lang = "en"
 
