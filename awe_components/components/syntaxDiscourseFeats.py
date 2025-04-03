@@ -18,7 +18,9 @@ from .utility_functions import \
     adj_noun_or_verb, content_tags, \
     possessive_or_determiner, ResolveReference, \
     tensed_clause
+
 from importlib import resources
+from ..errors import LexiconMissingError
 
 @Language.factory("syntaxdiscoursefeatures")
 def SyntaxAndDiscourseFeatures(nlp, name):

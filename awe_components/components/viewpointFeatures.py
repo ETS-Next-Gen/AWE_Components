@@ -14,6 +14,7 @@ from nltk.corpus import wordnet
 # (a lot more, but that's what we're currently using it for)
 
 from .utility_functions import \
+    AWE_Info, \
     absolute_degree, \
     adjectival_complement_dependencies, \
     adjectival_mod_dependencies , \
@@ -148,13 +149,13 @@ class ViewpointFeatureDef:
     def package_check(self, lang):
         if not os.path.exists(self.STANCE_PERSPECTIVE_PATH):
             raise LexiconMissingError(
-                "Trying to load AWE Workbench Syntaxa and Discourse Feature \
-                 Module without supporting datafile {}".format(filepath)
+                "Trying to load AWE Workbench Syntax and Discourse Feature \
+                 Module without supporting datafile {}".format(self.STANCE_PERSPECTIVE_PATH)
             )
         if not os.path.exists(self.MORPHOLEX_PATH):
             raise LexiconMissingError(
-                "Trying to load AWE Workbench Syntaxa and Discourse Feature \
-                 Module without supporting datafile {}".format(filepath)
+                "Trying to load AWE Workbench Syntax and Discourse Feature \
+                 Module without supporting datafile {}".format(self.MORPHOLEX_PATH)
             )
 
     def load_lexicon(self, lang):
