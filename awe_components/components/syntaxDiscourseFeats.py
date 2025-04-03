@@ -3,7 +3,6 @@
 
 import os
 import srsly
-from varname import nameof
 
 from spacy.tokens import Doc, Token
 from spacy.language import Language
