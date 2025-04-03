@@ -45,21 +45,20 @@ class SyntaxAndDiscourseFeatDef(object):
     ) as filepath:
         TRANSITION_CATEGORIES_PATH = filepath
 
-    datapaths = [{'pathname': nameof(TRANSITION_TERMS_PATH),
-                  'value': TRANSITION_TERMS_PATH},
-                 {'pathname': nameof(TRANSITION_CATEGORIES_PATH),
-                  'value': TRANSITION_CATEGORIES_PATH}]
-
     transition_terms = {}
     transition_categories = {}
 
     def package_check(self, lang):
-        for path in self.datapaths:
-            if not os.path.exists(path['value']):
-                raise LexiconMissingError(
-                    "Trying to load AWE Workbench Lexicon Module \
-                    without {name} datafile".format(name=path['pathname'])
-                )
+        if not os.path.exists(self.TRANSITION_TERMS_PATH):
+            raise LexiconMissingError(
+                "Trying to load AWE Workbench Syntax and Discourse Feature \
+                 Module without supporting datafile {}".format(self.TRANSITION_TERMS_PATH)
+            )
+        if not os.path.exists(self.TRANSITION_CATEGORIES_PATH):
+            raise LexiconMissingError(
+                "Trying to load AWE Workbench Syntax and Discourse Feature \
+                 Module without supporting datafile {}".format(self.TRANSITION_CATEGORIES_PATH)
+            )
 
     def load_lexicons(self, lang):
         self.transition_terms = \
