@@ -3,8 +3,7 @@
 
 from .utility_functions import *
 from operator import itemgetter
-import spacy
-from spacy.tokens import Token, Doc
+from spacy.tokens import Doc
 from spacy.language import Language
 import wordfreq
 

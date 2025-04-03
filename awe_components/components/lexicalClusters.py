@@ -2,15 +2,10 @@
 # Copyright 2022, Educational Testing Service
 
 import re
-import spacy
-import srsly
+import json
 import wordfreq
 import numpy as np
-import os
 from collections import OrderedDict
-
-from scipy.spatial.distance import cosine
-# Standard cosine distance metric
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import AgglomerativeClustering
@@ -18,7 +13,7 @@ from sklearn.cluster import AgglomerativeClustering
 from spacy.tokens import Token, Doc
 from spacy.language import Language
 
-from .utility_functions import *
+from .utility_functions import ResolveReference, all_zeros, AWE_Info
 from ..errors import *
 
 lang = "en"
@@ -480,7 +475,7 @@ def devword(token):
         # flag assignClusterIDs to run
         # by setting it to a non None value
         token.doc._.clusterInfo_ = []
-        self.assignClusterIDs(token.doc)
+        assignClusterIDs(token.doc)
     devlist = [token.text \
                for token \
                in developmentContentWords(token.doc)]
