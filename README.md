@@ -6,45 +6,26 @@ which can be installed into a Spacy pipeline. They annotate the Spacy
 parse tree with additional attributes that make it easy to summarize
 information about features of student writing.
 
+Before You Install
+------------
+
+It is helpful to note that the use of AWE Components is best tested using [AWE_Workbench](https://github.com/ArgLab/AWE_Workbench), which utilizes the features defined in AWE Components. There are a series of automatic tests which can be run to verify or validate AWE Components; in addition, there are examples, a web server for parsing documents, and an interactive document highlighting tool for visualizing the document features which are derived from AWE Components.
+
+See AWE Workbench's installations steps and verify that you'd want to use it instead of installing AWE Components directly.
+
 Installation
 ------------
 
-Set up Python 3.9. 3.8 will *not* work. If you wish to use `conda`:
+Set up Python 3.11. If you wish to use `conda`:
 
-    conda create -n test_install python=3.9 pip
+    conda create -n test_install python=3.11 pip
     pip install pip --upgrade
     conda activate test_install
 
 If you wish to use plain old `pip` with `virtualenvwrapper`:
 
-    mkvirtualenv awe_components --python=/usr/bin/python3.9
+    mkvirtualenv awe_components --python=/usr/bin/python3.11
     pip install pip --upgrade
-
-Install prerequisites:
-
-[Holmes Extractor Expandable](https://github.com/ETS-Next-Gen/holmes-extractor-expandable):
-
-    git clone git@github.com:ETS-Next-Gen/holmes-extractor-expandable.git
-    cd holmes-extractor-expandable/~
-    pip install .
-
-[AWE Language Tool](https://github.com/ETS-Next-Gen/AWE_LanguageTool):
-
-    git clone git@github.com:ETS-Next-Gen/AWE_LanguageTool.git
-    cd AWE_LanguageTool/
-    pip install .
-
-[AWE Spell Correct](https://github.com/ETS-Next-Gen/AWE_SpellCorrect)
-
-    git clone git@github.com:ETS-Next-Gen/AWE_SpellCorrect.git
-    cd AWE_SpellCorrect/
-    pip install .
-
-[AWE Lexica](https://github.com/ETS-Next-Gen/AWE_Lexica)
-
-    git clone git@github.com:ETS-Next-Gen/AWE_Lexica.git
-    cd AWE_Lexica/
-    pip install .
 
 Then from the AWE Workbench Components directory:
 

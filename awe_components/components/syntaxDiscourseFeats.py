@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 # Copyright 2022, Educational Testing Service
 
-import math
 import os
 import srsly
-from varname import nameof
 
-from enum import Enum
-from spacy.tokens import Doc, Span, Token
+from spacy.tokens import Doc, Token
 from spacy.language import Language
 
 from scipy.spatial.distance import cosine
 # Standard cosine distance metric
 
-from .utility_functions import *
-from ..errors import *
+from .utility_functions import \
+    setExtensionFunctions, AWE_Info, \
+    in_past_tense_scope, getRoot, \
+    temporalPhrase, newSpanEntry, \
+    adj_noun_or_verb, content_tags, \
+    possessive_or_determiner, ResolveReference, \
+    tensed_clause
+
 from importlib import resources
-
-from nltk.corpus import wordnet
-# English dictionary. Contains information on senses associated with words
-# (a lot more, but that's what we're currently using it for)
-
+from ..errors import LexiconMissingError
 
 @Language.factory("syntaxdiscoursefeatures")
 def SyntaxAndDiscourseFeatures(nlp, name):
@@ -45,21 +44,20 @@ class SyntaxAndDiscourseFeatDef(object):
     ) as filepath:
         TRANSITION_CATEGORIES_PATH = filepath
 
-    datapaths = [{'pathname': nameof(TRANSITION_TERMS_PATH),
-                  'value': TRANSITION_TERMS_PATH},
-                 {'pathname': nameof(TRANSITION_CATEGORIES_PATH),
-                  'value': TRANSITION_CATEGORIES_PATH}]
-
     transition_terms = {}
     transition_categories = {}
 
     def package_check(self, lang):
-        for path in self.datapaths:
-            if not os.path.exists(path['value']):
-                raise LexiconMissingError(
-                    "Trying to load AWE Workbench Lexicon Module \
-                    without {name} datafile".format(name=path['pathname'])
-                )
+        if not os.path.exists(self.TRANSITION_TERMS_PATH):
+            raise LexiconMissingError(
+                "Trying to load AWE Workbench Syntax and Discourse Feature \
+                 Module without supporting datafile {}".format(self.TRANSITION_TERMS_PATH)
+            )
+        if not os.path.exists(self.TRANSITION_CATEGORIES_PATH):
+            raise LexiconMissingError(
+                "Trying to load AWE Workbench Syntax and Discourse Feature \
+                 Module without supporting datafile {}".format(self.TRANSITION_CATEGORIES_PATH)
+            )
 
     def load_lexicons(self, lang):
         self.transition_terms = \
