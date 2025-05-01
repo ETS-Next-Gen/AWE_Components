@@ -2899,6 +2899,9 @@ def setTokenEntry(name, token, value):
     # attribute.                          #
     # TBD: put security check in for this #
     #######################################
+    elif "blob" in name:
+        name = name.replace("blob.", "")
+        entry['value'] = getattr(token._.blob, name)
     elif token.has_extension(name):
         # TODO: Use Token.get_extension
         # https://spacy.io/api/token
@@ -3383,6 +3386,16 @@ def AWE_Info(document: Doc,
         if not re.match('[A-Za-z0-9_]+', indicator):
             raise AWE_Workbench_Error(
                 'Invalid indicator ' + indicator)                   
+
+        # QUICK FIX: spacytextblob no longer references polarity, subjectivity, 
+        # nor assessments via doc._.X, but rather doc._.blob.X
+        # We are quickly fixing this problem in AWE_Info
+        if indicator == "polarity":
+            indicator = "blob.polarity"
+        elif indicator == "subjectivity":
+            indicator = "blob.subjectivity"
+        elif indicator == "assessments":
+            indicator = "blob.assessments"
 
         if infoType == 'Doc':
             baseInfo = createSpanInfo(indicator,
