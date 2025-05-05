@@ -19,18 +19,14 @@ Copyright © 2022, Educational Testing Service
 
 import importlib.resources
 import math
-import numpy as np
 import os
-import re
-from varname import nameof
 
 # English dictionary. Contains information on senses associated with words
 # (a lot more, but that's what we're currently using it for)
 from nltk.corpus import wordnet
 from scipy.spatial.distance import cosine  # Standard cosine distance metric
 from spacy.language import Language
-from spacy.tokens import Doc, Span, Token
-from spacy.vocab import Vocab
+from spacy.tokens import Doc, Token
 import srsly
 import statistics
 # https://github.com/rspeer/wordfreq
@@ -41,7 +37,17 @@ import wordfreq
 
 import awe_lexica
 
-from .utility_functions import *  # <-- Paul, import only what you need here
+from .utility_functions import \
+    setExtensionFunctions, alphanum_word, \
+    sylco, content_tags, \
+    ResolveReference, AWE_Info, \
+    possessive_or_determiner, personal_or_indefinite_pronoun, \
+    all_zeros, is_temporal, \
+    locative_adverbs, existential_there, \
+    major_locative_prepositions, all_locative_prepositions, \
+    loc_sverbs, loc_overbs, \
+    deictics
+
 from ..errors import LexiconMissingError
 
 def lexicon_path(lexicon):

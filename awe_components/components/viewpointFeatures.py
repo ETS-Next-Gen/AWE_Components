@@ -3,10 +3,7 @@
 
 import os
 import srsly
-import imp
 
-from enum import Enum
-from collections import OrderedDict
 from spacy.tokens import Doc, Span, Token
 from spacy.language import Language
 
@@ -16,8 +13,95 @@ from scipy.spatial.distance import cosine
 from nltk.corpus import wordnet
 # (a lot more, but that's what we're currently using it for)
 
-from .utility_functions import *
-from ..errors import *
+from .utility_functions import \
+    AWE_Info, \
+    absolute_degree, \
+    adjectival_complement_dependencies, \
+    adjectival_mod_dependencies , \
+    adjectival_predicates, \
+    animate_ent_type , \
+    auxiliary_dependencies, \
+    auxiliary_or_adverb, \
+    be_verbs , \
+    clausal_complements , \
+    clausal_modifier_dependencies , \
+    clausal_subject_or_complement, \
+    common_evaluation_adjective, \
+    common_hedge_word, \
+    complements , \
+    containsDistinctReference, \
+    content_pos , \
+    contracted_verb, \
+    contraction, \
+    core_temporal_preps , \
+    coreViewpointPredicate, \
+    dative_preps , \
+    demonstratives , \
+    elliptical_verb, \
+    emphatic_adjective, \
+    emphatic_adjective, \
+    emphatic_adverb, \
+    first_person_pronouns , \
+    function_word_tags , \
+    generalArgumentPredicate, \
+    general_complements_and_modifiers , \
+    generalViewpointPredicate, \
+    getDative, \
+    getLightVerbs, \
+    getLinkedNodes, \
+    getLogicalObject, \
+    getObject, \
+    getPrepObject, \
+    getRoot, \
+    getRoots, \
+    getSubject, \
+    getSubject, \
+    getTensedVerbHead, \
+    illocutionary_tag, \
+    inanimate_3sg_pronouns, \
+    indefinite_comparison, \
+    indefinite_pronoun , \
+    in_modal_scope, \
+    in_past_tense_scope, \
+    is_definite_nominal, \
+    isRoot, \
+    loose_clausal_dependencies , \
+    newSpanEntry, \
+    newTokenEntry, \
+    nominal_pos , \
+    nonhuman_ent_type , \
+    object_predicate_dependencies , \
+    object_predicate_dependencies, \
+    other_conversational_idioms, \
+    other_conversational_vocabulary, \
+    personal_or_indefinite_pronoun , \
+    personal_or_indefinite_pronoun , \
+    pos_degree_mod , \
+    prehead_modifiers2 , \
+    present_semimodals , \
+    private_mental_state_tag, \
+    quantifying_determiners, \
+    quotationMark, \
+    raising_complement, \
+    ResolveReference, \
+    rootTree, \
+    scanForAnimatePotentialAntecedents, \
+    second_person_pronouns , \
+    setExtensionFunctions, \
+    stance_adverb, \
+    stancePredicate, \
+    subject_dependencies , \
+    subject_or_object_nom , \
+    takesBareInfinitive, \
+    tensed_clause, \
+    third_person_pronouns , \
+    tough_complement, \
+    underlying_object_dependencies , \
+    verbal_mod_dependencies , \
+    verbal_pos , \
+    wh_question_word
+
+from ..errors import LexiconMissingError
 from importlib import resources
 
 
@@ -65,13 +149,13 @@ class ViewpointFeatureDef:
     def package_check(self, lang):
         if not os.path.exists(self.STANCE_PERSPECTIVE_PATH):
             raise LexiconMissingError(
-                "Trying to load AWE Workbench Syntaxa and Discourse Feature \
-                 Module without supporting datafile {}".format(filepath)
+                "Trying to load AWE Workbench Syntax and Discourse Feature \
+                 Module without supporting datafile {}".format(self.STANCE_PERSPECTIVE_PATH)
             )
         if not os.path.exists(self.MORPHOLEX_PATH):
             raise LexiconMissingError(
-                "Trying to load AWE Workbench Syntaxa and Discourse Feature \
-                 Module without supporting datafile {}".format(filepath)
+                "Trying to load AWE Workbench Syntax and Discourse Feature \
+                 Module without supporting datafile {}".format(self.MORPHOLEX_PATH)
             )
 
     def load_lexicon(self, lang):
@@ -4636,15 +4720,15 @@ class ViewpointFeatureDef:
             # neutral.
             if tok._.vwp_evaluation \
                or tok._.vwp_hedge \
-               or tok.text in doc._.assessments:
-                if tok._.polarity < 0 or tok._.sentiword < 0:
-                    tok._.vwp_tone_ = min(tok._.polarity, tok._.sentiword)
-                elif tok._.polarity > 0 and tok._.sentiword > 0:
-                    tok._.vwp_tone_ = max(tok._.polarity, tok._.sentiword)
+               or tok.text in doc._.blob.sentiment_assessments.assessments:
+                if tok._.blob.sentiment_assessments.polarity < 0 or tok._.sentiword < 0:
+                    tok._.vwp_tone_ = min(tok._.blob.sentiment_assessments.polarity, tok._.sentiword)
+                elif tok._.blob.sentiment_assessments.polarity > 0 and tok._.sentiword > 0:
+                    tok._.vwp_tone_ = max(tok._.blob.sentiment_assessments.polarity, tok._.sentiword)
                 else:
-                    tok._.vwp_tone_ = (tok._.polarity + tok._.sentiword) / 2
+                    tok._.vwp_tone_ = (tok._.blob.sentiment_assessments.polarity + tok._.sentiword) / 2
             else:
-                tok._.vwp_tone_ = min(tok._.polarity, tok._.sentiword)
+                tok._.vwp_tone_ = min(tok._.blob.sentiment_assessments.polarity, tok._.sentiword)
 
             # rule order fixes to the tone variable are generally a bad idea,
             # but these are so common that fixing them gets rid of a lot of
