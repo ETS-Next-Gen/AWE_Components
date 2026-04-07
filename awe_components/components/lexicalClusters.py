@@ -23,6 +23,27 @@ from ..errors import *
 
 lang = "en"
 
+
+def _to_numpy(vector):
+    """
+    Convert vectors from CPU/GPU array backends into numpy arrays so they can
+    be consumed by scikit-learn consistently across environments.
+    """
+    if hasattr(vector, "get"):
+        vector = vector.get()
+    return np.asarray(vector)
+
+
+def _is_valid_nonzero_vector(vector, atol=1e-12):
+    """
+    Return True when vector can be used safely with cosine distance.
+    """
+    arr = _to_numpy(vector)
+    if arr.size == 0 or not np.all(np.isfinite(arr)):
+        return False
+    return np.linalg.norm(arr) > atol
+
+
 def allClusterInfo(hdoc):
     """
     """
@@ -77,14 +98,16 @@ def assignClusterIDs(hdoc):
                and not all_zeros(sum(x.vector for x in referents)):
                 # Note: we can't add zero vectors to the output, as
                 # that will cause errors in the clustering algorithm
-                filteredVecs.append(sum(x.vector for x in referents))
-                filteredToks.append(
-                    word + '_'
-                    + token.lemma_.replace('_', ' ')
-                    + '('
-                    + ''.join([x.lower_ for x in referents])
-                    + ')_'
-                    + str(token.i))
+                referent_vec = _to_numpy(sum(x.vector for x in referents))
+                if _is_valid_nonzero_vector(referent_vec):
+                    filteredVecs.append(referent_vec)
+                    filteredToks.append(
+                        word + '_'
+                        + token.lemma_.replace('_', ' ')
+                        + '('
+                        + ''.join([x.lower_ for x in referents])
+                        + ')_'
+                        + str(token.i))
 
         #######################################################
         # Filter other words so that they're only likely to be
@@ -92,15 +115,17 @@ def assignClusterIDs(hdoc):
         #######################################################
         if not token.is_stop and word != '.' \
            and not re.match('[-,;:"\'?/><{})(!`~_]+', word) \
-           and not wordfreq.zipf_frequency(token.lower_, 'en') > 5.7 \
-           and token.pos_ in ['NOUN', 'PROPN', 'VERB', 'ADJ', 'ADV']:
+            and not wordfreq.zipf_frequency(token.lower_, 'en') > 5.7 \
+            and token.pos_ in ['NOUN', 'PROPN', 'VERB', 'ADJ', 'ADV']:
             if token.has_vector and not all_zeros(token.vector):
-                filteredVecs.append(token.vector)
-                filteredToks.append(word
-                                    + '_'
-                                    + token.lemma_.replace('_', ' ')
-                                    + '_'
-                                    + str(token.i))
+                token_vec = _to_numpy(token.vector)
+                if _is_valid_nonzero_vector(token_vec):
+                    filteredVecs.append(token_vec)
+                    filteredToks.append(word
+                                        + '_'
+                                        + token.lemma_.replace('_', ' ')
+                                        + '_'
+                                        + str(token.i))
 
     #################################################
     # if the document has enough data to cluster ...
@@ -122,6 +147,14 @@ def assignClusterIDs(hdoc):
             ########################################################
             scaler = StandardScaler()
             filteredVecs = scaler.fit_transform(filteredVecs)
+            if len(filteredVecs) > 1:
+                nonzero_mask = np.linalg.norm(filteredVecs, axis=1) > 1e-12
+                filteredVecs = filteredVecs[nonzero_mask]
+                filteredToks = [tok for tok, keep in zip(filteredToks, nonzero_mask)
+                                if keep]
+            if len(filteredVecs) <= 1:
+                hdoc._.clusterInfo_ = []
+                return hdoc
 
             ########################################################
             # Run agglomerative clustering                         #
